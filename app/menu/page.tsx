@@ -1,6 +1,7 @@
 import { MenuSection } from "@/components/menu/MenuSection"
 import { MenuItemCard } from "@/components/menu/MenuItemCard"
 import { isMenuLocked } from "@/lib/menu"
+import { menu as menuData } from "@/lib/menu-data"
 
 export const dynamic = "force-dynamic"
 
@@ -22,7 +23,7 @@ type MenuSectionType = {
 
 async function getMenu() {
   return {
-    menu: [] as MenuSectionType[],
+    menu: menuData as MenuSectionType[],
     locked: isMenuLocked(),
   }
 }
