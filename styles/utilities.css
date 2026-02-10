@@ -1,0 +1,8 @@
+.text-secondary {
+  color: var(--text-secondary);
+}
+
+.focus-ring:focus {
+  outline: 2px solid var(--accent-action);
+  outline-offset: 2px;
+}

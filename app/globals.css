@@ -1,0 +1,15 @@
+@import "../styles/tokens.css";
+@import "../styles/theme.css";
+@import "../styles/utilities.css";
+
+* {
+  box-sizing: border-box;
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-family: system-ui, sans-serif;
+}

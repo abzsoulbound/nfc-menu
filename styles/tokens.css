@@ -1,0 +1,14 @@
+:root {
+  --bg-primary: #070E1A;
+  --bg-secondary: #0B1626;
+  --bg-accent: #101F36;
+
+  --text-primary: #E6ECF3;
+  --text-secondary: #A9B4C6;
+
+  --chip-inactive: #141F33;
+  --chip-active: #1E4BFF;
+
+  --accent-action: #3B82F6;
+  --border: #1A2740;
+}
