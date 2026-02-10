@@ -1,6 +1,6 @@
 import { MenuSection } from "@/components/menu/MenuSection"
 import { MenuItemCard } from "@/components/menu/MenuItemCard"
-import { prisma } from "@/lib/prisma"
+import { isMenuLocked } from "@/lib/menu"
 
 export const dynamic = "force-dynamic"
 
@@ -21,21 +21,10 @@ type MenuSectionType = {
 }
 
 async function getMenu() {
-  const [menuRow, flagsRow] = await Promise.all([
-    prisma.history.findUnique({
-      where: { id: "menu:current" },
-    }),
-    prisma.history.findUnique({
-      where: { id: "system:flags" },
-    }),
-  ])
-
-  const menu = Array.isArray((menuRow?.data as any)?.menu)
-    ? (menuRow?.data as any).menu
-    : []
-  const locked = (flagsRow?.data as any)?.serviceActive === true
-
-  return { menu, locked }
+  return {
+    menu: [] as MenuSectionType[],
+    locked: isMenuLocked(),
+  }
 }
 
 export default async function PublicMenuPage() {

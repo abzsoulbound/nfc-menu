@@ -38,7 +38,7 @@ export default function CartPage({ params }: { params: { tagId: string } }) {
     await fetch('/api/cart/update', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ itemId: id, quantity })
+      body: JSON.stringify({ sessionId, itemId: id, quantity })
     })
     load()
   }
@@ -47,7 +47,7 @@ export default function CartPage({ params }: { params: { tagId: string } }) {
     await fetch('/api/cart/remove', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ itemId: id })
+      body: JSON.stringify({ sessionId, itemId: id })
     })
     load()
   }
@@ -58,7 +58,13 @@ export default function CartPage({ params }: { params: { tagId: string } }) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ sessionId })
     })
-    if (res.ok) router.push(`/t/${params.tagId}/table`)
+    if (res.ok) {
+      const payload = await res.json()
+      if (payload.tableId) {
+        localStorage.setItem('tableId', payload.tableId)
+      }
+      router.push(`/t/${params.tagId}/table`)
+    }
   }
 
   return (

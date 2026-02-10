@@ -15,12 +15,15 @@ export async function POST(req: Request) {
   if (!session || !session.tag.assignment) {
     return NextResponse.json({ error: 'TABLE_NOT_ASSIGNED' }, { status: 400 })
   }
+  if (!session.cart) {
+    return NextResponse.json({ error: 'CART_NOT_FOUND' }, { status: 404 })
+  }
 
   const draft = await prisma.tableDraft.create({
     data: {
       tableId: session.tag.assignment.id,
       items: {
-        create: session.cart!.items.map(i => ({
+        create: session.cart.items.map(i => ({
           memberId: 0,
           name: i.name,
           quantity: i.quantity
@@ -30,8 +33,8 @@ export async function POST(req: Request) {
   })
 
   await prisma.cartItem.deleteMany({
-    where: { cartId: session.cart!.id }
+    where: { cartId: session.cart.id }
   })
 
-  return NextResponse.json({ draftId: draft.id })
+  return NextResponse.json({ draftId: draft.id, tableId: session.tag.assignment.id })
 }

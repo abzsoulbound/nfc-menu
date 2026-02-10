@@ -23,7 +23,7 @@ export default function NotFound() {
           return to a valid screen or contact staff.
         </div>
 
-        <Link href="/">
+        <Link href="/menu">
           <Button className="w-full" variant="secondary">
             Go back
           </Button>
