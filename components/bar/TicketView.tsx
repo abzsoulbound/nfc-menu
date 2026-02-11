@@ -5,6 +5,7 @@ import { Divider } from "@/components/ui/Divider"
 import { Button } from "@/components/ui/Button"
 
 type BarItem = {
+  orderItemId?: string
   name: string
   quantity: number
   edits: any
@@ -16,12 +17,14 @@ export function TicketView({
   onBack,
   onReprint,
   onComplete,
+  onCompleteItem,
 }: {
   tableNumber: number
   items: BarItem[]
   onBack: () => void
   onReprint: () => void
   onComplete: () => void
+  onCompleteItem?: (orderItemId: string) => void
 }) {
   return (
     <div className="p-4 space-y-4">
@@ -50,6 +53,15 @@ export function TicketView({
                   </div>
                 )}
               </div>
+
+              {item.orderItemId && onCompleteItem && (
+                <Button
+                  variant="secondary"
+                  onClick={() => onCompleteItem(item.orderItemId!)}
+                >
+                  Done
+                </Button>
+              )}
             </div>
           </Card>
         ))}

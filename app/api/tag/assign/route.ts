@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { requireStaff } from '@/lib/auth'
+import { appendSystemEvent } from '@/lib/events'
 
 export async function POST(req: Request) {
   try {
@@ -19,6 +20,19 @@ export async function POST(req: Request) {
     update: { tableNo },
     create: { tagId, tableNo }
   })
+
+  await appendSystemEvent(
+    'tag_assigned',
+    {
+      tagId,
+      tableNo,
+      tableId: assignment.id
+    },
+    {
+      req,
+      tableId: assignment.id
+    }
+  )
 
   return NextResponse.json(assignment)
 }

@@ -6,9 +6,11 @@ import { StationQueue } from "@/components/kitchen/StationQueue"
 import { TicketView } from "@/components/kitchen/TicketView"
 import { Card } from "@/components/ui/Card"
 import { Badge } from "@/components/ui/Badge"
+import { StaffAuthGate } from "@/components/staff/StaffAuthGate"
 
 type KitchenItem = {
   orderId: string
+  orderItemId: string
   tableNumber: number
   name: string
   quantity: number
@@ -26,11 +28,25 @@ export default function KitchenDashboard() {
   const [tables, setTables] = useState<TableGroup[]>([])
   const [activeTable, setActiveTable] = useState<number | null>(null)
 
+  async function parseArrayResponse<T>(
+    res: Response
+  ): Promise<T[]> {
+    const raw = await res.text()
+    if (!raw) return []
+
+    try {
+      const parsed = JSON.parse(raw) as unknown
+      return Array.isArray(parsed) ? (parsed as T[]) : []
+    } catch {
+      return []
+    }
+  }
+
   async function fetchQueue() {
     const res = await fetch("/api/orders?station=KITCHEN", {
       cache: "no-store",
     })
-    const data: KitchenItem[] = await res.json()
+    const data = await parseArrayResponse<KitchenItem>(res)
 
     const grouped: Record<number, TableGroup> = {}
 
@@ -75,6 +91,15 @@ export default function KitchenDashboard() {
     fetchQueue()
   }
 
+  async function completeKitchenItem(orderItemId: string) {
+    await fetch("/api/orders", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ orderItemId }),
+    })
+    fetchQueue()
+  }
+
   async function reprintTicket(tableNumber: number) {
     await fetch("/api/orders", {
       method: "PUT",
@@ -88,55 +113,60 @@ export default function KitchenDashboard() {
     if (!table) return null
 
     return (
-      <TicketView
-        tableNumber={table.tableNumber}
-        items={table.items}
-        onBack={() => setActiveTable(null)}
-        onReprint={() => reprintTicket(table.tableNumber)}
-        onComplete={() => markKitchenSent(table.tableNumber)}
-      />
+      <StaffAuthGate>
+        <TicketView
+          tableNumber={table.tableNumber}
+          items={table.items}
+          onBack={() => setActiveTable(null)}
+          onReprint={() => reprintTicket(table.tableNumber)}
+          onComplete={() => markKitchenSent(table.tableNumber)}
+          onCompleteItem={completeKitchenItem}
+        />
+      </StaffAuthGate>
     )
   }
 
   return (
-    <div className="p-4 space-y-4">
-      {tables.map(table => (
-        <Card
-          key={table.tableNumber}
-          onClick={() => setActiveTable(table.tableNumber)}
-          onContextMenu={(e: MouseEvent<HTMLDivElement>) => {
-            e.preventDefault()
-            reprintTicket(table.tableNumber)
-          }}
-          className="cursor-pointer"
-        >
-          <div className="flex justify-between items-center">
-            <div>
-              <div className="text-lg font-semibold">
-                Table {table.tableNumber}
+    <StaffAuthGate>
+      <div className="p-4 space-y-4">
+        {tables.map(table => (
+          <Card
+            key={table.tableNumber}
+            onClick={() => setActiveTable(table.tableNumber)}
+            onContextMenu={(e: MouseEvent<HTMLDivElement>) => {
+              e.preventDefault()
+              reprintTicket(table.tableNumber)
+            }}
+            className="cursor-pointer"
+          >
+            <div className="flex justify-between items-center">
+              <div>
+                <div className="text-lg font-semibold">
+                  Table {table.tableNumber}
+                </div>
+                <div className="text-sm opacity-70">
+                  {table.items.length} kitchen item(s)
+                </div>
               </div>
-              <div className="text-sm opacity-70">
-                {table.items.length} kitchen item(s)
-              </div>
+
+              <Badge>
+                {Math.floor(
+                  (Date.now() -
+                    new Date(table.submittedAt).getTime()) /
+                    60000
+                )}
+                m
+              </Badge>
             </div>
+          </Card>
+        ))}
 
-            <Badge>
-              {Math.floor(
-                (Date.now() -
-                  new Date(table.submittedAt).getTime()) /
-                  60000
-              )}
-              m
-            </Badge>
+        {tables.length === 0 && (
+          <div className="opacity-60 text-center">
+            No kitchen items waiting
           </div>
-        </Card>
-      ))}
-
-      {tables.length === 0 && (
-        <div className="opacity-60 text-center">
-          No kitchen items waiting
-        </div>
-      )}
-    </div>
+        )}
+      </div>
+    </StaffAuthGate>
   )
 }

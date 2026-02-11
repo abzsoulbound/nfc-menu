@@ -34,16 +34,40 @@ export default function StaffDashboard() {
   const [tables, setTables] = useState<Table[]>([])
   const [sessions, setSessions] = useState<Session[]>([])
 
-  async function fetchAll() {
-    const [tagsRes, tablesRes, sessionsRes] = await Promise.all([
-      fetch("/api/tags", { cache: "no-store" }),
-      fetch("/api/tables", { cache: "no-store" }),
-      fetch("/api/sessions", { cache: "no-store" }),
-    ])
+  async function parseArrayResponse<T>(
+    res: Response
+  ): Promise<T[]> {
+    const raw = await res.text()
+    if (!raw) return []
 
-    setTags(await tagsRes.json())
-    setTables(await tablesRes.json())
-    setSessions(await sessionsRes.json())
+    try {
+      const parsed = JSON.parse(raw) as unknown
+      return Array.isArray(parsed) ? (parsed as T[]) : []
+    } catch {
+      return []
+    }
+  }
+
+  async function fetchAll() {
+    try {
+      const [tagsRes, tablesRes, sessionsRes] = await Promise.all([
+        fetch("/api/tags", { cache: "no-store" }),
+        fetch("/api/tables", { cache: "no-store" }),
+        fetch("/api/sessions", { cache: "no-store" }),
+      ])
+
+      const [nextTags, nextTables, nextSessions] = await Promise.all([
+        parseArrayResponse<Tag>(tagsRes),
+        parseArrayResponse<Table>(tablesRes),
+        parseArrayResponse<Session>(sessionsRes),
+      ])
+
+      setTags(nextTags)
+      setTables(nextTables)
+      setSessions(nextSessions)
+    } catch {
+      // keep existing values on transient fetch/parsing failures
+    }
   }
 
   useEffect(() => {
@@ -91,6 +115,14 @@ export default function StaffDashboard() {
           </Card>
         </Link>
       </div>
+
+      {sessions.length === 0 && (
+        <Card className="text-sm opacity-70">
+          No active sessions yet. Opening <code>/menu</code> does not create a
+          table session. Sessions appear when guests open a tag URL like{" "}
+          <code>/t/&lt;tagId&gt;</code>.
+        </Card>
+      )}
 
       <Divider />
 

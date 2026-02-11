@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { requireStaff } from "@/lib/auth"
+import { appendSystemEvent } from "@/lib/events"
 
 export async function GET(req: Request) {
   try {
@@ -13,8 +14,10 @@ export async function GET(req: Request) {
     include: {
       assignment: true,
       sessions: {
-        orderBy: { createdAt: "desc" },
-        take: 1,
+        where: {
+          status: "ACTIVE",
+        },
+        orderBy: { lastActivityAt: "desc" },
       },
       _count: {
         select: { sessions: true },
@@ -26,10 +29,13 @@ export async function GET(req: Request) {
   return NextResponse.json(
     tags.map(t => ({
       id: t.id,
-      active: t._count.sessions > 0,
+      active: t.sessions.length > 0,
       tableNumber: t.assignment?.tableNo ?? null,
-      activeSessionCount: t._count.sessions,
-      lastSeenAt: (t.sessions[0]?.createdAt ?? t.createdAt).toISOString(),
+      activeSessionCount: t.sessions.length,
+      totalSessionCount: t._count.sessions,
+      lastSeenAt: (
+        t.sessions[0]?.lastActivityAt ?? t.createdAt
+      ).toISOString(),
     }))
   )
 }
@@ -60,6 +66,11 @@ export async function PATCH(req: Request) {
     await prisma.tableAssignment.deleteMany({
       where: { tagId },
     })
+    await appendSystemEvent(
+      "tag_unassigned",
+      { tagId },
+      { req }
+    )
     return NextResponse.json({ ok: true, unassigned: true })
   }
 
@@ -76,6 +87,17 @@ export async function PATCH(req: Request) {
     update: { tableNo: table.tableNo },
     create: { tagId, tableNo: table.tableNo },
   })
+
+  await appendSystemEvent(
+    "tag_assigned",
+    {
+      tagId,
+      tableId,
+      tableNo: table.tableNo,
+      assignmentId: assignment.id,
+    },
+    { req, tableId: assignment.id }
+  )
 
   return NextResponse.json(assignment)
 }

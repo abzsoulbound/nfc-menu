@@ -9,16 +9,12 @@ export function MenuSection({
   children: ReactNode
 }) {
   return (
-    <section className="space-y-3">
-      <div className="text-lg font-semibold">
-        {title}
+    <section className="menu-section">
+      <div className="menu-section-head">
+        <h2 className="menu-section-title">{title}</h2>
+        <Divider />
       </div>
-
-      <Divider />
-
-      <div className="space-y-3">
-        {children}
-      </div>
+      <div className="menu-section-grid">{children}</div>
     </section>
   )
 }

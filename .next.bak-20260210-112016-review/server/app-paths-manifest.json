@@ -1,0 +1,9 @@
+{
+  "/t/[tagId]/page": "app/t/[tagId]/page.js",
+  "/api/cart/get/route": "app/api/cart/get/route.js",
+  "/api/cart/add/route": "app/api/cart/add/route.js",
+  "/api/cart/update/route": "app/api/cart/update/route.js",
+  "/t/[tagId]/review/page": "app/t/[tagId]/review/page.js",
+  "/staff/login/page": "app/staff/login/page.js",
+  "/_not-found/page": "app/_not-found/page.js"
+}

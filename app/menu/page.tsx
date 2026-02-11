@@ -1,10 +1,9 @@
 'use client'
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { MenuSection } from "@/components/menu/MenuSection"
 import { MenuItemCard } from "@/components/menu/MenuItemCard"
-import { isMenuLocked } from "@/lib/menu"
-import { menu as menuData } from "@/lib/menu-data"
+import { menu as bootstrapMenu } from "@/lib/menu-data"
 
 export const dynamic = "force-dynamic"
 
@@ -16,6 +15,7 @@ type MenuItem = {
   basePrice: number
   vatRate: number
   allergens: string[]
+  available?: boolean
 }
 
 type MenuSectionType = {
@@ -25,26 +25,166 @@ type MenuSectionType = {
 }
 
 export default function PublicMenuPage() {
-  const locked = isMenuLocked()
-  const menu = menuData as MenuSectionType[]
+  const menuCacheKey = "nfc-pos.menu-cache.v1"
+  const [menu, setMenu] = useState<MenuSectionType[]>([])
+  const [locked, setLocked] = useState(false)
+  const [loading, setLoading] = useState(true)
 
   const [selectedCategoryId, setSelectedCategoryId] = useState(
-    menu.length > 0 ? menu[0].id : null
+    null as string | null
   )
+
+  useEffect(() => {
+    let cancelled = false
+
+    const bootstrapVisibleMenu = () =>
+      bootstrapMenu.map(section => ({
+        id: section.id,
+        name: section.name,
+        items: section.items,
+      }))
+
+    const readCache = () => {
+      try {
+        const cached = localStorage.getItem(menuCacheKey)
+        if (!cached) return null
+        const parsed = JSON.parse(cached) as {
+          menu?: MenuSectionType[]
+          locked?: boolean
+        }
+        return {
+          menu: Array.isArray(parsed.menu) ? parsed.menu : [],
+          locked: Boolean(parsed.locked),
+        }
+      } catch {
+        return null
+      }
+    }
+
+    const writeCache = (value: {
+      menu: MenuSectionType[]
+      locked: boolean
+    }) => {
+      try {
+        localStorage.setItem(
+          menuCacheKey,
+          JSON.stringify({
+            menu: value.menu,
+            locked: value.locked,
+            ts: Date.now(),
+          })
+        )
+      } catch {
+        // best-effort cache only
+      }
+    }
+
+    async function loadMenu() {
+      try {
+        const res = await fetch("/api/menu", {
+          cache: "no-store",
+        })
+        if (!res.ok) throw new Error("menu_fetch_failed")
+        const payload = await res.json()
+        const nextMenu = (Array.isArray(payload?.menu)
+          ? payload.menu
+          : []) as MenuSectionType[]
+        const visibleMenu =
+          nextMenu.length > 0
+            ? nextMenu.map(section => ({
+                ...section,
+                items: section.items.filter(item => item.available !== false),
+              }))
+            : bootstrapVisibleMenu()
+
+        if (cancelled) return
+
+        setMenu(visibleMenu)
+        setLocked(Boolean(payload?.locked))
+        setSelectedCategoryId(current => {
+          if (current && visibleMenu.some(s => s.id === current)) {
+            return current
+          }
+          return visibleMenu[0]?.id ?? null
+        })
+        writeCache({
+          menu: visibleMenu,
+          locked: Boolean(payload?.locked),
+        })
+        setLoading(false)
+      } catch {
+        const cached = readCache()
+        if (!cached) {
+          const visibleMenu = bootstrapVisibleMenu()
+          setMenu(visibleMenu)
+          setLocked(false)
+          setSelectedCategoryId(current => {
+            if (current && visibleMenu.some(s => s.id === current)) {
+              return current
+            }
+            return visibleMenu[0]?.id ?? null
+          })
+          setLoading(false)
+          return
+        }
+        setMenu(cached.menu)
+        setLocked(cached.locked)
+        setSelectedCategoryId(current => {
+          if (current && cached.menu.some(s => s.id === current)) {
+            return current
+          }
+          return cached.menu[0]?.id ?? null
+        })
+        setLoading(false)
+      }
+    }
+
+    loadMenu()
+    const interval = setInterval(loadMenu, 5000)
+    return () => {
+      cancelled = true
+      clearInterval(interval)
+    }
+  }, [])
 
   const activeSection = menu.find(
     section => section.id === selectedCategoryId
   )
 
+  if (loading) {
+    return (
+      <div className="menu-page">
+        <div className="menu-empty-state">Loading menu...</div>
+      </div>
+    )
+  }
+
   return (
-    <div className="px-4 py-6 space-y-6">
+    <div className="menu-page">
+      <div className="menu-hero">
+        <div className="menu-logo-wrap">
+          <img
+            src="/images/marlos-logo.png"
+            alt="Marlo's Brasserie"
+            className="menu-logo"
+            loading="eager"
+            decoding="async"
+            onError={(event) => {
+              event.currentTarget.style.display = "none"
+              const fallback = event.currentTarget.nextElementSibling as HTMLElement | null
+              if (fallback) fallback.style.display = "block"
+            }}
+          />
+          <div className="menu-logo-fallback">Marlo&apos;s Brasserie</div>
+        </div>
+      </div>
+
       {locked && (
-        <div className="text-sm opacity-70">
+        <div className="menu-lock-banner">
           Menu is currently locked during service.
         </div>
       )}
 
-      {/* CATEGORY BAR */}
       <div className="category-bar">
         {menu.map(section => (
           <button
@@ -61,7 +201,6 @@ export default function PublicMenuPage() {
         ))}
       </div>
 
-      {/* ITEMS */}
       {activeSection && (
         <MenuSection title={activeSection.name}>
           {activeSection.items.map(item => (
@@ -73,14 +212,13 @@ export default function PublicMenuPage() {
               price={item.basePrice}
               vatRate={item.vatRate}
               allergens={item.allergens}
-              readOnly
             />
           ))}
         </MenuSection>
       )}
 
       {menu.length === 0 && (
-        <div className="opacity-60 text-center">
+        <div className="menu-empty-state">
           Menu unavailable
         </div>
       )}

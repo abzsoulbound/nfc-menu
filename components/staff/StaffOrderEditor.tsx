@@ -40,6 +40,7 @@ export function StaffOrderEditor({
         return (
           <MenuItemCard
             key={item.id}
+            mode="editor"
             name={item.name}
             description={item.description}
             price={item.basePrice}

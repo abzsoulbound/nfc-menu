@@ -5,29 +5,28 @@ import { MouseEventHandler, ReactNode } from "react"
 export function Button({
   children,
   onClick,
+  type = "button",
   disabled,
   variant = "primary",
   className = "",
 }: {
   children: ReactNode
   onClick?: MouseEventHandler<HTMLButtonElement>
+  type?: "button" | "submit" | "reset"
   disabled?: boolean
   variant?: "primary" | "secondary" | "destructive"
   className?: string
 }) {
-  const base =
-    "px-3 py-2 rounded text-sm font-medium focus-ring"
+  const base = "px-3 py-2 rounded text-sm font-medium focus-ring"
   const variants: Record<string, string> = {
-    primary:
-      "bg-[var(--accent-action)] text-primary",
-    secondary:
-      "bg-[var(--bg-accent)] text-primary",
-    destructive:
-      "bg-[var(--chip-active)] text-primary",
+    primary: "btn-primary",
+    secondary: "btn-secondary",
+    destructive: "btn-destructive",
   }
 
   return (
     <button
+      type={type}
       onClick={onClick}
       disabled={disabled}
       className={`${base} ${variants[variant]} ${

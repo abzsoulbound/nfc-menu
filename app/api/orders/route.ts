@@ -1,15 +1,189 @@
 import { NextResponse } from "next/server"
+import { OrderStatus, Prisma, Station } from "@prisma/client"
 import { prisma } from "@/lib/prisma"
 import { requireStaff } from "@/lib/auth"
+import { appendSystemEvent } from "@/lib/events"
+import { SESSION_IDLE_TIMEOUT_MS } from "@/lib/constants"
+import {
+  getEditClientKey,
+  isEditConfirmed,
+  stripInternalEditMeta,
+  withEditClientKey,
+} from "@/lib/itemEdits"
 
-function toStation(value: string) {
-  return value.toLowerCase() === "bar" ? "bar" : "kitchen"
+type SubmitItem = {
+  itemId?: string
+  menuItemId?: string
+  name?: string
+  quantity?: number
+  edits?: unknown
+  allergens?: string[]
+  unitPrice?: number
+  vatRate?: number
+  station?: "KITCHEN" | "BAR" | "kitchen" | "bar"
+}
+
+function toStation(value: string | undefined | null): Station {
+  return String(value ?? "").toUpperCase() === "BAR"
+    ? "BAR"
+    : "KITCHEN"
+}
+
+function asJson(value: unknown): Prisma.InputJsonValue {
+  if (value === undefined || value === null) {
+    return [] as unknown as Prisma.InputJsonValue
+  }
+  return value as Prisma.InputJsonValue
+}
+
+function normalizeClientKey(value: unknown): string | null {
+  if (typeof value !== "string") return null
+  const trimmed = value.trim()
+  return trimmed.length > 0 ? trimmed : null
+}
+
+function editsToInputJson(
+  edits: unknown,
+  clientKey?: string | null
+): Prisma.InputJsonValue | Prisma.NullTypes.JsonNull | undefined {
+  const editsWithMeta = withEditClientKey(edits, clientKey)
+  if (editsWithMeta === undefined) return undefined
+  if (editsWithMeta === null) return Prisma.JsonNull
+  return editsWithMeta as Prisma.InputJsonValue
+}
+
+async function resolveCustomerSession({
+  sessionId,
+  tagId,
+}: {
+  sessionId?: string | null
+  tagId?: string | null
+}) {
+  const normalizedSessionId =
+    typeof sessionId === "string" &&
+    sessionId.length > 0 &&
+    !sessionId.startsWith("local:")
+      ? sessionId
+      : null
+  const normalizedTagId =
+    typeof tagId === "string" && tagId.length > 0
+      ? tagId
+      : null
+
+  let session = normalizedSessionId
+    ? await prisma.session.findUnique({
+        where: { id: normalizedSessionId },
+      })
+    : null
+
+  if (!session && normalizedTagId) {
+    session = await prisma.session.findFirst({
+      where: {
+        tagId: normalizedTagId,
+        status: "ACTIVE",
+      },
+      orderBy: { lastActivityAt: "desc" },
+    })
+  }
+
+  if (!session) return null
+  if (normalizedTagId && session.tagId !== normalizedTagId) {
+    return null
+  }
+
+  return session
+}
+
+async function syncOrderStatus(orderId: string) {
+  const items = await prisma.orderItem.findMany({
+    where: { orderId },
+    select: { status: true },
+  })
+
+  const hasOpen = items.some(i => i.status !== "COMPLETED")
+  const nextStatus: OrderStatus = hasOpen ? "IN_PROGRESS" : "COMPLETED"
+
+  return prisma.order.update({
+    where: { id: orderId },
+    data: {
+      status: nextStatus,
+      completedAt: hasOpen ? null : new Date(),
+    },
+  })
 }
 
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url)
   const station = searchParams.get("station")
   const tableNumberRaw = searchParams.get("tableNumber")
+  const sessionIdRaw = searchParams.get("sessionId")
+  const tagIdRaw = searchParams.get("tagId")
+  const clientKeyRaw = searchParams.get("clientKey")
+  const requesterClientKey = normalizeClientKey(clientKeyRaw)
+
+  if (sessionIdRaw || tagIdRaw) {
+    const session = await resolveCustomerSession({
+      sessionId: sessionIdRaw,
+      tagId: tagIdRaw,
+    })
+    if (!session) {
+      return NextResponse.json({ items: [] })
+    }
+
+    const orderWhere: Prisma.OrderWhereInput = session.tableId
+      ? {
+          tableId: session.tableId,
+          status: { in: ["PENDING", "IN_PROGRESS"] },
+        }
+      : {
+          sessionId: session.id,
+          status: { in: ["PENDING", "IN_PROGRESS"] },
+        }
+
+    const orders = await prisma.order.findMany({
+      where: orderWhere,
+      include: {
+        items: {
+          where: { status: { in: ["PENDING", "IN_PROGRESS"] } },
+          orderBy: { createdAt: "asc" },
+        },
+      },
+      orderBy: { createdAt: "asc" },
+    })
+
+    const items = orders.flatMap(order =>
+      order.items.map(i => {
+        const ownerClientKey = getEditClientKey(i.edits)
+        const isMine = Boolean(
+          requesterClientKey &&
+            ownerClientKey === requesterClientKey
+        )
+
+        return {
+          orderId: order.id,
+          orderItemId: i.id,
+          status: i.status.toLowerCase(),
+          submittedAt: order.createdAt.toISOString(),
+          menuItemId: i.menuItemId,
+          name: i.name,
+          quantity: i.quantity,
+          edits: stripInternalEditMeta(i.edits),
+          allergens: i.allergens,
+          unitPrice: i.unitPrice,
+          vatRate: i.vatRate,
+          station: i.station,
+          isMine,
+        }
+      })
+    )
+
+    return NextResponse.json({
+      sessionId: session.id,
+      tableId: session.tableId,
+      firstSubmittedAt: orders[0]?.createdAt.toISOString() ?? null,
+      items,
+    })
+  }
 
   if (station) {
     try {
@@ -19,22 +193,32 @@ export async function GET(req: Request) {
     }
 
     const targetStation = toStation(station)
-    const tickets = await prisma.kitchenTicket.findMany({
-      where: { readyAt: null },
-      include: { items: true, table: true },
+    const orders = await prisma.order.findMany({
+      where: {
+        targetStation,
+        status: { in: ["PENDING", "IN_PROGRESS"] },
+      },
+      include: {
+        table: true,
+        items: {
+          where: { status: { in: ["PENDING", "IN_PROGRESS"] } },
+          orderBy: { createdAt: "asc" },
+        },
+      },
       orderBy: { createdAt: "asc" },
     })
 
-    const rows = tickets.flatMap(ticket =>
-      ticket.items
-        .filter(i => i.station.toLowerCase() === targetStation)
+    const rows = orders.flatMap(order =>
+      order.items
+        .filter(i => i.station === targetStation)
         .map(i => ({
-          orderId: ticket.id,
-          tableNumber: ticket.table.tableNo,
+          orderId: order.id,
+          orderItemId: i.id,
+          tableNumber: order.table.tableNo,
           name: i.name,
           quantity: i.quantity,
-          edits: null,
-          submittedAt: ticket.createdAt.toISOString(),
+          edits: stripInternalEditMeta(i.edits),
+          submittedAt: order.createdAt.toISOString(),
         }))
     )
 
@@ -61,20 +245,27 @@ export async function GET(req: Request) {
       return NextResponse.json({ error: "TABLE_NOT_FOUND" }, { status: 404 })
     }
 
-    const tickets = await prisma.kitchenTicket.findMany({
+    const orders = await prisma.order.findMany({
       where: { tableId: { in: assignments.map(a => a.id) } },
-      include: { items: true },
+      include: {
+        items: {
+          orderBy: { createdAt: "asc" },
+        },
+      },
       orderBy: { createdAt: "asc" },
     })
 
-    const groups = tickets.map(t => ({
-      orderId: t.id,
-      submittedAt: t.createdAt.toISOString(),
-      items: t.items.map(i => ({
+    const groups = orders.map(order => ({
+      orderId: order.id,
+      status: order.status.toLowerCase(),
+      submittedAt: order.createdAt.toISOString(),
+      items: order.items.map(i => ({
+        orderItemId: i.id,
+        status: i.status.toLowerCase(),
         name: i.name,
         quantity: i.quantity,
-        edits: null,
-        submittedAt: t.createdAt.toISOString(),
+        edits: stripInternalEditMeta(i.edits),
+        submittedAt: order.createdAt.toISOString(),
       })),
     }))
 
@@ -90,46 +281,640 @@ export async function GET(req: Request) {
 }
 
 export async function POST(req: Request) {
-  const { tagId, items } = await req.json()
-  if (!tagId || !Array.isArray(items) || items.length === 0) {
-    return NextResponse.json({ error: "BAD_REQUEST" }, { status: 400 })
-  }
+  try {
+    const { sessionId, tagId, items, clientKey } =
+      await req.json()
+    const requesterClientKey = normalizeClientKey(clientKey)
 
-  const tag = await prisma.nfcTag.findUnique({
-    where: { id: tagId },
-    include: { assignment: true },
-  })
-  if (!tag?.assignment) {
-    return NextResponse.json({ error: "TABLE_NOT_ASSIGNED" }, { status: 400 })
-  }
+    const resolvedSessionId =
+      typeof sessionId === "string" && sessionId.length > 0
+        ? sessionId
+        : null
 
-  const ticket = await prisma.kitchenTicket.create({
-    data: {
-      tableId: tag.assignment.id,
-      items: {
-        create: items.map((i: any) => ({
-          name: String(i.name ?? "Item"),
-          quantity: Number(i.quantity ?? 1),
-          station: toStation(String(i.station ?? "KITCHEN")),
-        })),
+    if (!resolvedSessionId && !tagId) {
+      return NextResponse.json({ error: "BAD_REQUEST" }, { status: 400 })
+    }
+
+    let session = resolvedSessionId
+      ? await prisma.session.findUnique({
+          where: { id: resolvedSessionId },
+          include: {
+            tag: { include: { assignment: true } },
+            cart: {
+              include: {
+                items: true,
+              },
+            },
+          },
+        })
+      : null
+
+    let tag = tagId
+      ? await prisma.nfcTag.findUnique({
+          where: { id: tagId },
+          include: { assignment: true },
+        })
+      : session?.tag ?? null
+
+    if (!tag && tagId) {
+      await prisma.nfcTag.create({
+        data: { id: tagId },
+      })
+      tag = await prisma.nfcTag.findUnique({
+        where: { id: tagId },
+        include: { assignment: true },
+      })
+    }
+
+    if (!session && resolvedSessionId) {
+      return NextResponse.json({ error: "SESSION_NOT_FOUND" }, { status: 404 })
+    }
+
+    if (!session && tag) {
+      const reused = await prisma.session.findFirst({
+        where: {
+          tagId: tag.id,
+          status: "ACTIVE",
+        },
+        include: {
+          tag: { include: { assignment: true } },
+          cart: { include: { items: true } },
+        },
+        orderBy: { lastActivityAt: "desc" },
+      })
+
+      const reusedIsFresh =
+        reused &&
+        Date.now() - reused.lastActivityAt.getTime() <=
+          SESSION_IDLE_TIMEOUT_MS
+
+      if (reused && reusedIsFresh) {
+        session = reused
+      } else {
+        if (reused && !reusedIsFresh) {
+          await prisma.session.update({
+            where: { id: reused.id },
+            data: {
+              status: "CLOSED",
+              closedAt: new Date(),
+            },
+          })
+        }
+
+        session = await prisma.session.create({
+          data: {
+            tagId: tag.id,
+            tableId: tag.assignment?.id ?? null,
+            status: "ACTIVE",
+            openedAt: new Date(),
+            lastActivityAt: new Date(),
+          },
+          include: {
+            tag: { include: { assignment: true } },
+            cart: { include: { items: true } },
+          },
+        })
+
+        await appendSystemEvent(
+          "session_created",
+          {
+            sessionId: session.id,
+            tagId: tag.id,
+            source: "orders_post",
+          },
+          {
+            req,
+            sessionId: session.id,
+            tableId: session.tableId,
+          }
+        )
+
+        if (!session.cart) {
+          await prisma.sessionCart.create({
+            data: { sessionId: session.id },
+          })
+          session = await prisma.session.findUnique({
+            where: { id: session.id },
+            include: {
+              tag: { include: { assignment: true } },
+              cart: { include: { items: true } },
+            },
+          })
+        }
+      }
+    }
+
+    if (!session) {
+      return NextResponse.json({ error: "SESSION_NOT_FOUND" }, { status: 404 })
+    }
+
+    const table = session?.tableId
+      ? await prisma.tableAssignment.findUnique({
+          where: { id: session.tableId },
+        })
+      : tag?.assignment ?? null
+
+    if (!table) {
+      return NextResponse.json({ error: "TABLE_NOT_ASSIGNED" }, { status: 400 })
+    }
+
+    if (!session.tableId) {
+      await prisma.session.update({
+        where: { id: session.id },
+        data: { tableId: table.id },
+      })
+      session = {
+        ...session,
+        tableId: table.id,
+      }
+    }
+
+    if (table.closedAt) {
+      return NextResponse.json({ error: "TABLE_CLOSED" }, { status: 409 })
+    }
+    if (table.locked) {
+      return NextResponse.json({ error: "TABLE_LOCKED" }, { status: 423 })
+    }
+
+    const stale =
+      Date.now() - session.lastActivityAt.getTime() >
+      SESSION_IDLE_TIMEOUT_MS
+    if (stale || session.status !== "ACTIVE") {
+      if (stale && session.status === "ACTIVE") {
+        await prisma.session.update({
+          where: { id: session.id },
+          data: {
+            status: "CLOSED",
+            closedAt: new Date(),
+          },
+        })
+        await appendSystemEvent(
+          "session_closed_stale",
+          { sessionId: session.id },
+          { req, sessionId: session.id, tableId: session.tableId }
+        )
+      }
+      return NextResponse.json({ error: "SESSION_STALE" }, { status: 410 })
+    }
+
+    if (session.cart?.items.length) {
+      const confirmationByMember = new Map<string, boolean>()
+      for (const cartItem of session.cart.items) {
+        const ownerClientKey = getEditClientKey(cartItem.edits)
+        if (!ownerClientKey) continue
+
+        const confirmed = isEditConfirmed(cartItem.edits)
+        const existing = confirmationByMember.get(ownerClientKey)
+        confirmationByMember.set(
+          ownerClientKey,
+          existing === undefined ? confirmed : existing && confirmed
+        )
+      }
+
+      const unconfirmedMemberCount = Array.from(
+        confirmationByMember.values()
+      ).filter(confirmed => !confirmed).length
+
+      if (unconfirmedMemberCount > 0) {
+        return NextResponse.json(
+          {
+            error: "MEMBER_CONFIRMATION_REQUIRED",
+            unconfirmedMemberCount,
+          },
+          { status: 409 }
+        )
+      }
+    }
+
+    const submittedItems: SubmitItem[] =
+      Array.isArray(items) && items.length > 0
+        ? items
+        : (session?.cart?.items.map(i => ({
+            itemId: i.id,
+            menuItemId: i.menuItemId ?? undefined,
+            name: i.name,
+            quantity: i.quantity,
+            edits: i.edits,
+            allergens: Array.isArray(i.allergens)
+              ? (i.allergens as string[])
+              : [],
+            unitPrice: i.unitPrice,
+            vatRate: i.vatRate,
+            station: i.station,
+          })) ?? [])
+
+    if (submittedItems.length === 0) {
+      return NextResponse.json({ error: "EMPTY_ORDER" }, { status: 400 })
+    }
+
+    const grouped = new Map<Station, SubmitItem[]>()
+    for (const item of submittedItems) {
+      const qty = Number(item.quantity ?? 0)
+      if (!Number.isFinite(qty) || qty <= 0) {
+        continue
+      }
+      const stationKey = toStation(item.station)
+      const next = grouped.get(stationKey) ?? []
+      next.push({
+        ...item,
+        quantity: qty,
+      })
+      grouped.set(stationKey, next)
+    }
+
+    if (grouped.size === 0) {
+      return NextResponse.json(
+        { error: "EMPTY_ORDER" },
+        { status: 400 }
+      )
+    }
+
+    const referencedMenuIds = Array.from(
+      new Set(
+        submittedItems
+          .map(item => item.menuItemId)
+          .filter((id): id is string => typeof id === "string" && id.length > 0)
+      )
+    )
+    const validMenuIds = new Set<string>()
+    if (referencedMenuIds.length > 0) {
+      const existingMenuItems = await prisma.menuItem.findMany({
+        where: {
+          id: {
+            in: referencedMenuIds,
+          },
+        },
+        select: { id: true },
+      })
+      for (const menuItem of existingMenuItems) {
+        validMenuIds.add(menuItem.id)
+      }
+    }
+
+    const createdOrderIds: string[] = []
+
+    for (const [stationKey, stationItems] of grouped.entries()) {
+      const order = await prisma.order.create({
+        data: {
+          sessionId: session.id,
+          tableId: table.id,
+          targetStation: stationKey,
+          status: "PENDING",
+          items: {
+            create: stationItems.map(item => ({
+              menuItemId:
+                typeof item.menuItemId === "string" &&
+                validMenuIds.has(item.menuItemId)
+                  ? item.menuItemId
+                  : null,
+              name: String(item.name ?? "Item"),
+              quantity: Number(item.quantity ?? 1),
+              unitPrice: Number(item.unitPrice ?? 0),
+              vatRate: Number(item.vatRate ?? 0),
+              allergens: asJson(
+                Array.isArray(item.allergens) ? item.allergens : []
+              ),
+              edits: editsToInputJson(
+                item.edits,
+                getEditClientKey(item.edits) ??
+                  requesterClientKey
+              ),
+              station: stationKey,
+              status: "PENDING",
+            })),
+          },
+        },
+      })
+
+      createdOrderIds.push(order.id)
+      await appendSystemEvent(
+        "order_submitted",
+        {
+          orderId: order.id,
+          station: stationKey,
+          itemCount: stationItems.length,
+        },
+        {
+          req,
+          sessionId: session.id,
+          tableId: table.id,
+          orderId: order.id,
+        }
+      )
+    }
+
+    if (session.cart) {
+      await prisma.cartItem.deleteMany({
+        where: { cartId: session.cart.id },
+      })
+    }
+
+    await prisma.session.update({
+      where: { id: session.id },
+      data: { lastActivityAt: new Date() },
+    })
+
+    return NextResponse.json({
+      orderIds: createdOrderIds,
+      ticketId: createdOrderIds[0] ?? null,
+    })
+  } catch (error) {
+    const detail =
+      error instanceof Error ? error.message : String(error)
+    console.error("orders_post_failed", {
+      detail,
+    })
+    return NextResponse.json(
+      {
+        error: "ORDER_SUBMIT_FAILED",
+        detail:
+          process.env.NODE_ENV === "production"
+            ? undefined
+            : detail,
       },
-    },
-  })
-
-  return NextResponse.json({ ticketId: ticket.id })
+      { status: 500 }
+    )
+  }
 }
 
 export async function PATCH(req: Request) {
+  const body = await req.json()
+
+  const hasQuantityUpdate =
+    typeof body?.quantity === "number"
+  const hasEditsUpdate = Object.prototype.hasOwnProperty.call(
+    body ?? {},
+    "edits"
+  )
+  const itemUpdateRequested =
+    typeof body?.orderItemId === "string" &&
+    (hasQuantityUpdate || hasEditsUpdate)
+
+  if (itemUpdateRequested) {
+    const orderItemId = String(body.orderItemId ?? "").trim()
+    const quantity = Number(body?.quantity ?? 0)
+    const requesterClientKey = normalizeClientKey(
+      body?.clientKey
+    )
+    if (
+      !orderItemId ||
+      (hasQuantityUpdate &&
+        (!Number.isInteger(quantity) || quantity < 0))
+    ) {
+      return NextResponse.json({ error: "BAD_REQUEST" }, { status: 400 })
+    }
+
+    const customerScopedSession = await resolveCustomerSession({
+      sessionId:
+        typeof body?.sessionId === "string"
+          ? body.sessionId
+          : null,
+      tagId:
+        typeof body?.tagId === "string" ? body.tagId : null,
+    })
+
+    if (!customerScopedSession) {
+      try {
+        requireStaff(req)
+      } catch {
+        return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 })
+      }
+    }
+
+    const orderItem = await prisma.orderItem.findUnique({
+      where: { id: orderItemId },
+      include: { order: true },
+    })
+    if (!orderItem) {
+      return NextResponse.json(
+        { error: "ORDER_ITEM_NOT_FOUND" },
+        { status: 404 }
+      )
+    }
+
+    if (
+      customerScopedSession &&
+      orderItem.order.sessionId !== customerScopedSession.id
+    ) {
+      return NextResponse.json({ error: "FORBIDDEN" }, { status: 403 })
+    }
+
+    if (customerScopedSession) {
+      const ownerClientKey = getEditClientKey(orderItem.edits)
+      if (
+        ownerClientKey &&
+        ownerClientKey !== requesterClientKey
+      ) {
+        return NextResponse.json({ error: "FORBIDDEN" }, { status: 403 })
+      }
+    }
+
+    if (
+      orderItem.status === "COMPLETED" ||
+      orderItem.order.status === "COMPLETED"
+    ) {
+      return NextResponse.json(
+        { error: "ORDER_ITEM_LOCKED" },
+        { status: 409 }
+      )
+    }
+
+    if (hasQuantityUpdate && quantity === 0) {
+      await prisma.orderItem.delete({
+        where: { id: orderItem.id },
+      })
+
+      const remainingOpenItems =
+        await prisma.orderItem.count({
+          where: {
+            orderId: orderItem.orderId,
+            status: { in: ["PENDING", "IN_PROGRESS"] },
+          },
+        })
+
+      let orderStatus: OrderStatus = orderItem.order.status
+      if (remainingOpenItems === 0) {
+        const completedOrder = await prisma.order.update({
+          where: { id: orderItem.orderId },
+          data: {
+            status: "COMPLETED",
+            completedAt: new Date(),
+          },
+        })
+        orderStatus = completedOrder.status
+        await appendSystemEvent(
+          "order_completed",
+          { orderId: completedOrder.id },
+          {
+            req,
+            orderId: completedOrder.id,
+            tableId: completedOrder.tableId,
+          }
+        )
+      }
+
+      await prisma.session.update({
+        where: { id: orderItem.order.sessionId },
+        data: { lastActivityAt: new Date() },
+      })
+
+      await appendSystemEvent(
+        "order_item_removed",
+        {
+          orderId: orderItem.orderId,
+          orderItemId: orderItem.id,
+          name: orderItem.name,
+        },
+        {
+          req,
+          orderId: orderItem.orderId,
+          tableId: orderItem.order.tableId,
+          sessionId: orderItem.order.sessionId,
+        }
+      )
+
+      return NextResponse.json({
+        removed: true,
+        orderId: orderItem.orderId,
+        orderStatus: orderStatus.toLowerCase(),
+      })
+    }
+
+    const nextData: Prisma.OrderItemUpdateInput = {}
+    if (hasQuantityUpdate) {
+      nextData.quantity = quantity
+    }
+    if (hasEditsUpdate) {
+      const ownerClientKey = getEditClientKey(orderItem.edits)
+      const keyForWrite = ownerClientKey ?? requesterClientKey
+      const nextEdits = editsToInputJson(
+        body?.edits,
+        keyForWrite
+      )
+      if (nextEdits !== undefined) {
+        nextData.edits = nextEdits
+      }
+    }
+
+    const updatedItem = await prisma.orderItem.update({
+      where: { id: orderItem.id },
+      data: nextData,
+    })
+
+    await prisma.session.update({
+      where: { id: orderItem.order.sessionId },
+      data: { lastActivityAt: new Date() },
+    })
+
+    if (hasQuantityUpdate) {
+      await appendSystemEvent(
+        "order_item_quantity_updated",
+        {
+          orderId: orderItem.orderId,
+          orderItemId: updatedItem.id,
+          quantity: updatedItem.quantity,
+        },
+        {
+          req,
+          orderId: orderItem.orderId,
+          tableId: orderItem.order.tableId,
+          sessionId: orderItem.order.sessionId,
+        }
+      )
+    }
+    if (hasEditsUpdate) {
+      await appendSystemEvent(
+        "order_item_edited",
+        {
+          orderId: orderItem.orderId,
+          orderItemId: updatedItem.id,
+        },
+        {
+          req,
+          orderId: orderItem.orderId,
+          tableId: orderItem.order.tableId,
+          sessionId: orderItem.order.sessionId,
+        }
+      )
+    }
+
+    return NextResponse.json({
+      id: updatedItem.id,
+      quantity: updatedItem.quantity,
+      orderId: orderItem.orderId,
+      edits: stripInternalEditMeta(updatedItem.edits),
+    })
+  }
+
   try {
     requireStaff(req)
   } catch {
     return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 })
   }
 
-  const { tableNumber } = await req.json()
-  if (typeof tableNumber !== "number") {
+  if (typeof body?.orderItemId === "string") {
+    const orderItem = await prisma.orderItem.findUnique({
+      where: { id: body.orderItemId },
+      include: {
+        order: true,
+      },
+    })
+    if (!orderItem) {
+      return NextResponse.json({ error: "ORDER_ITEM_NOT_FOUND" }, { status: 404 })
+    }
+
+    const updatedItem = await prisma.orderItem.update({
+      where: { id: orderItem.id },
+      data: {
+        status: "COMPLETED",
+        completedAt: new Date(),
+      },
+    })
+
+    const updatedOrder = await syncOrderStatus(orderItem.orderId)
+    await appendSystemEvent(
+      "order_item_completed",
+      {
+        orderId: orderItem.orderId,
+        orderItemId: orderItem.id,
+      },
+      {
+        req,
+        orderId: orderItem.orderId,
+        tableId: orderItem.order.tableId,
+      }
+    )
+
+    if (updatedOrder.status === "COMPLETED") {
+      await appendSystemEvent(
+        "order_completed",
+        { orderId: updatedOrder.id },
+        {
+          req,
+          orderId: updatedOrder.id,
+          tableId: updatedOrder.tableId,
+        }
+      )
+    }
+
+    return NextResponse.json({
+      completed: 1,
+      orderId: updatedOrder.id,
+      orderStatus: updatedOrder.status.toLowerCase(),
+      item: {
+        ...updatedItem,
+        edits: stripInternalEditMeta(updatedItem.edits),
+      },
+    })
+  }
+
+  const tableNumber = Number(body?.tableNumber)
+  if (!Number.isFinite(tableNumber)) {
     return NextResponse.json({ error: "BAD_REQUEST" }, { status: 400 })
   }
+  const station = toStation(
+    typeof body?.station === "string" ? body.station : undefined
+  )
 
   const assignments = await prisma.tableAssignment.findMany({
     where: { tableNo: tableNumber },
@@ -139,15 +924,66 @@ export async function PATCH(req: Request) {
     return NextResponse.json({ error: "TABLE_NOT_FOUND" }, { status: 404 })
   }
 
-  const result = await prisma.kitchenTicket.updateMany({
+  const openItems = await prisma.orderItem.findMany({
     where: {
-      tableId: { in: assignments.map(a => a.id) },
-      readyAt: null,
+      order: {
+        tableId: { in: assignments.map(a => a.id) },
+      },
+      station,
+      status: { in: ["PENDING", "IN_PROGRESS"] },
     },
-    data: { readyAt: new Date() },
+    include: {
+      order: true,
+    },
+    orderBy: { createdAt: "asc" },
   })
 
-  return NextResponse.json({ completed: result.count })
+  if (openItems.length === 0) {
+    return NextResponse.json({ completed: 0 })
+  }
+
+  const itemIds = openItems.map(i => i.id)
+
+  await prisma.orderItem.updateMany({
+    where: { id: { in: itemIds } },
+    data: {
+      status: "COMPLETED",
+      completedAt: new Date(),
+    },
+  })
+
+  const uniqueOrderIds = Array.from(
+    new Set(openItems.map(i => i.orderId))
+  )
+  for (const orderId of uniqueOrderIds) {
+    const order = await syncOrderStatus(orderId)
+    if (order.status === "COMPLETED") {
+      await appendSystemEvent(
+        "order_completed",
+        { orderId: order.id },
+        {
+          req,
+          orderId: order.id,
+          tableId: order.tableId,
+        }
+      )
+    }
+  }
+
+  await appendSystemEvent(
+    "table_station_completed",
+    {
+      tableNumber,
+      station,
+      completedItems: itemIds.length,
+    },
+    {
+      req,
+      tableId: assignments[0].id,
+    }
+  )
+
+  return NextResponse.json({ completed: itemIds.length })
 }
 
 export async function PUT(req: Request) {
@@ -161,6 +997,12 @@ export async function PUT(req: Request) {
   if (typeof tableNumber !== "number") {
     return NextResponse.json({ error: "BAD_REQUEST" }, { status: 400 })
   }
+
+  await appendSystemEvent(
+    "ticket_reprint_requested",
+    { tableNumber },
+    { req }
+  )
 
   return NextResponse.json({ reprinted: true })
 }

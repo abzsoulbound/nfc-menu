@@ -12,7 +12,7 @@ export function Card({
   return (
     <div
       {...props}
-      className={`p-4 rounded border surface-secondary ${className}`}
+      className={`card ${className}`}
     >
       {children}
     </div>

@@ -7,6 +7,7 @@ import { useStaffStore } from "@/store/useStaffStore"
 import { useUIStore } from "@/store/useUIStore"
 import { ToastProvider } from "@/components/ui/Toast"
 import { ModalProvider } from "@/components/ui/Modal"
+import { flushQueuedOrders } from "@/lib/offlineOrders"
 
 /*
 APPLICATION-WIDE PROVIDERS
@@ -20,7 +21,7 @@ Key invariant:
 */
 
 export function Providers({ children }: { children: ReactNode }) {
-  const ensureSession = useSessionStore(s => s.ensureSession)
+  const hydrateSession = useSessionStore(s => s.hydrate)
   const hydrateCart = useCartStore(s => s.hydrate)
   const hydrateStaff = useStaffStore(s => s.hydrate)
   const hydrateUI = useUIStore(s => s.hydrate)
@@ -28,15 +29,30 @@ export function Providers({ children }: { children: ReactNode }) {
   useEffect(() => {
     /*
       On first client mount:
-      - Ensure a user session exists or is resumed.
+      - Hydrate any previously persisted session.
       - Hydrate all client-side stores from persisted state.
       - Do NOT perform any table or order mutations here.
     */
-    ensureSession()
+    hydrateSession()
     hydrateCart()
     hydrateStaff()
     hydrateUI()
-  }, [ensureSession, hydrateCart, hydrateStaff, hydrateUI])
+
+    flushQueuedOrders().catch(() => {
+      // Best-effort background sync for queued offline orders.
+    })
+  }, [hydrateSession, hydrateCart, hydrateStaff, hydrateUI])
+
+  useEffect(() => {
+    const onOnline = () => {
+      flushQueuedOrders().catch(() => {
+        // Keep queue for next connectivity recovery.
+      })
+    }
+
+    window.addEventListener("online", onOnline)
+    return () => window.removeEventListener("online", onOnline)
+  }, [])
 
   return (
     <ToastProvider>

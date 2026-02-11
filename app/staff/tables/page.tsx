@@ -27,16 +27,38 @@ export default function StaffTablesPage() {
   const [tags, setTags] = useState<Tag[]>([])
   const [activeTable, setActiveTable] = useState<Table | null>(null)
 
+  async function parseArrayResponse<T>(
+    res: Response
+  ): Promise<T[]> {
+    const raw = await res.text()
+    if (!raw) return []
+
+    try {
+      const parsed = JSON.parse(raw) as unknown
+      return Array.isArray(parsed) ? (parsed as T[]) : []
+    } catch {
+      return []
+    }
+  }
+
   async function fetchTables() {
-    const res = await fetch("/api/tables", { cache: "no-store" })
-    const data = await res.json()
-    setTables(data)
+    try {
+      const res = await fetch("/api/tables", { cache: "no-store" })
+      const data = await parseArrayResponse<Table>(res)
+      setTables(data)
+    } catch {
+      // keep existing values on transient failures
+    }
   }
 
   async function fetchTags() {
-    const res = await fetch("/api/tags", { cache: "no-store" })
-    const data = await res.json()
-    setTags(data)
+    try {
+      const res = await fetch("/api/tags", { cache: "no-store" })
+      const data = await parseArrayResponse<Tag>(res)
+      setTags(data)
+    } catch {
+      // keep existing values on transient failures
+    }
   }
 
   useEffect(() => {

@@ -24,17 +24,16 @@ export function Modal({
   confirmDisabled?: boolean
 }) {
   return (
-    <div className="fixed inset-0 flex items-center justify-center bg-[rgba(7,14,26,0.8)] z-50">
+    <div className="modal-overlay">
       <div className="w-full max-w-md">
-        <div className="p-4 rounded surface-secondary border space-y-3">
-          <div className="font-semibold">{title}</div>
+        <div className="card space-y-3">
+          <div className="font-semibold text-center">{title}</div>
           <div className="text-sm">{children}</div>
           <div className="flex gap-2 justify-end">
-            <button onClick={onCancel}>Cancel</button>
-            <button
-              onClick={onConfirm}
-              disabled={confirmDisabled}
-            >
+            <button onClick={onCancel} className="px-3 py-2 rounded btn-secondary">
+              Cancel
+            </button>
+            <button onClick={onConfirm} disabled={confirmDisabled} className="px-3 py-2 rounded btn-primary">
               Confirm
             </button>
           </div>

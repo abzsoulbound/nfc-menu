@@ -1,0 +1,2 @@
+export const SESSION_IDLE_TIMEOUT_MS = 90 * 60 * 1000
+export const CONTRIBUTION_WINDOW_MS = 30 * 60 * 1000

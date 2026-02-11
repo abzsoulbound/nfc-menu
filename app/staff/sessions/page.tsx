@@ -19,12 +19,44 @@ export default function StaffSessionsPage() {
   const [sessions, setSessions] = useState<Session[]>([])
   const [activeSession, setActiveSession] = useState<Session | null>(null)
 
+  async function parseArrayResponse<T>(
+    res: Response
+  ): Promise<T[]> {
+    const raw = await res.text()
+    if (!raw) return []
+
+    try {
+      const parsed = JSON.parse(raw) as unknown
+      return Array.isArray(parsed) ? (parsed as T[]) : []
+    } catch {
+      return []
+    }
+  }
+
+  async function parseObjectResponse<T>(
+    res: Response
+  ): Promise<T | null> {
+    const raw = await res.text()
+    if (!raw) return null
+
+    try {
+      const parsed = JSON.parse(raw) as unknown
+      return parsed as T
+    } catch {
+      return null
+    }
+  }
+
   async function fetchSessions() {
-    const res = await fetch("/api/sessions", {
-      cache: "no-store",
-    })
-    const data = await res.json()
-    setSessions(data)
+    try {
+      const res = await fetch("/api/sessions", {
+        cache: "no-store",
+      })
+      const data = await parseArrayResponse<Session>(res)
+      setSessions(data)
+    } catch {
+      // keep current state on transient network failures
+    }
   }
 
   useEffect(() => {
@@ -34,17 +66,23 @@ export default function StaffSessionsPage() {
   }, [])
 
   async function createStaffSession() {
-    const res = await fetch("/api/sessions", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        origin: "STAFF",
-      }),
-    })
+    try {
+      const res = await fetch("/api/sessions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          origin: "STAFF",
+        }),
+      })
 
-    const session = await res.json()
-    setActiveSession(session)
-    fetchSessions()
+      const session = await parseObjectResponse<Session>(res)
+      if (!session || typeof session.id !== "string") return
+
+      setActiveSession(session)
+      fetchSessions()
+    } catch {
+      // no-op; caller can retry
+    }
   }
 
   function minutesSince(ts: string) {
@@ -111,8 +149,12 @@ export default function StaffSessionsPage() {
       ))}
 
       {sessions.length === 0 && (
-        <div className="opacity-60 text-center">
-          No active sessions
+        <div className="opacity-60 text-center space-y-1">
+          <div>No active sessions</div>
+          <div className="text-xs">
+            Opening <code>/menu</code> does not create a table session. Sessions
+            appear when guests open a tag URL like <code>/t/&lt;tagId&gt;</code>.
+          </div>
         </div>
       )}
     </div>

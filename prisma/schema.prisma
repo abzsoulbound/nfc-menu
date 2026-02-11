@@ -7,6 +7,23 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+enum SessionStatus {
+  ACTIVE
+  PAID
+  CLOSED
+}
+
+enum OrderStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+}
+
+enum Station {
+  KITCHEN
+  BAR
+}
+
 model NfcTag {
   id         String   @id @default(uuid())
   createdAt  DateTime @default(now())
@@ -15,36 +32,63 @@ model NfcTag {
 }
 
 model TableAssignment {
-  id        String   @id @default(uuid())
-  tableNo   Int
-  tagId     String   @unique
-  tag       NfcTag   @relation(fields: [tagId], references: [id])
-  createdAt DateTime @default(now())
-  drafts    TableDraft[]
-  tickets   KitchenTicket[]
+  id         String   @id @default(uuid())
+  tableNo    Int
+  tagId      String   @unique
+  tag        NfcTag   @relation(fields: [tagId], references: [id])
+  locked     Boolean  @default(false)
+  closedAt   DateTime?
+  closedPaid Boolean?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  drafts     TableDraft[]
+  tickets    KitchenTicket[]
+  sessions   Session[]
+  orders     Order[]
+
+  @@index([tableNo])
 }
 
 model Session {
-  id        String   @id @default(uuid())
-  tagId     String
-  tag       NfcTag   @relation(fields: [tagId], references: [id])
-  createdAt DateTime @default(now())
-  cart      SessionCart?
+  id             String        @id @default(uuid())
+  tagId          String
+  tag            NfcTag        @relation(fields: [tagId], references: [id])
+  tableId        String?
+  table          TableAssignment? @relation(fields: [tableId], references: [id])
+  openedAt       DateTime      @default(now())
+  lastActivityAt DateTime      @default(now())
+  status         SessionStatus @default(ACTIVE)
+  closedAt       DateTime?
+  cart           SessionCart?
+  orders         Order[]
+
+  @@index([tagId, status])
+  @@index([tableId, status])
 }
 
 model SessionCart {
   id        String   @id @default(uuid())
   sessionId String   @unique
-  session   Session  @relation(fields: [sessionId], references: [id])
+  session   Session  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
   items     CartItem[]
+  updatedAt DateTime @updatedAt
 }
 
 model CartItem {
   id        String      @id @default(uuid())
-  cartId   String
-  cart     SessionCart @relation(fields: [cartId], references: [id])
-  name     String
-  quantity Int
+  cartId     String
+  cart       SessionCart @relation(fields: [cartId], references: [id], onDelete: Cascade)
+  menuItemId String?
+  menuItem   MenuItem?   @relation(fields: [menuItemId], references: [id])
+  name       String
+  quantity   Int
+  unitPrice  Float
+  vatRate    Float
+  allergens  Json
+  station    Station
+  edits      Json?
+  createdAt  DateTime    @default(now())
+  updatedAt  DateTime    @updatedAt
 }
 
 model TableDraft {
@@ -82,6 +126,74 @@ model TicketItem {
   station  String
 }
 
+model MenuCategory {
+  id        String     @id @default(uuid())
+  slug      String     @unique
+  name      String
+  sortOrder Int        @default(0)
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+  items     MenuItem[]
+}
+
+model MenuItem {
+  id          String      @id
+  categoryId  String
+  category    MenuCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  sortOrder   Int         @default(0)
+  name        String
+  description String
+  image       String?
+  basePrice   Float
+  vatRate     Float
+  allergens   Json
+  station     Station
+  available   Boolean     @default(true)
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+  cartItems   CartItem[]
+  orderItems  OrderItem[]
+
+  @@index([categoryId, available])
+}
+
+model Order {
+  id           String      @id @default(uuid())
+  sessionId    String
+  session      Session     @relation(fields: [sessionId], references: [id])
+  tableId      String
+  table        TableAssignment @relation(fields: [tableId], references: [id])
+  targetStation Station
+  status       OrderStatus @default(PENDING)
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+  completedAt  DateTime?
+  items        OrderItem[]
+
+  @@index([tableId, status, createdAt])
+  @@index([targetStation, status, createdAt])
+}
+
+model OrderItem {
+  id         String      @id @default(uuid())
+  orderId    String
+  order      Order       @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  menuItemId String?
+  menuItem   MenuItem?   @relation(fields: [menuItemId], references: [id])
+  name       String
+  quantity   Int
+  unitPrice  Float
+  vatRate    Float
+  allergens  Json
+  edits      Json?
+  station    Station
+  status     OrderStatus @default(PENDING)
+  createdAt  DateTime    @default(now())
+  completedAt DateTime?
+
+  @@index([station, status])
+}
+
 model DeviceSession {
   id        String   @id @default(uuid())
   role      String
@@ -92,5 +204,16 @@ model DeviceSession {
 model SystemEvent {
   id        String   @id @default(uuid())
   type      String
+  payload   Json
+  actor     String?
+  sessionId String?
+  tableId   String?
+  orderId   String?
   createdAt DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([type])
+  @@index([sessionId])
+  @@index([tableId])
+  @@index([orderId])
 }

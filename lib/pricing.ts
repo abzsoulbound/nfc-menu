@@ -36,20 +36,25 @@ export function calculateItemPrice(
 export function calculateCartTotals(
   items: { quantity: number; unitPrice: number; vatRate?: number }[]
 ) {
-  let subtotal = 0
+  let total = 0
   let vat = 0
 
   for (const i of items) {
-    subtotal += i.unitPrice * i.quantity
-    vat += calculateVat(
-      i.unitPrice * i.quantity,
-      i.vatRate ?? 0
-    )
+    const lineTotal = i.unitPrice * i.quantity
+    const rate = i.vatRate ?? 0
+
+    total += lineTotal
+    if (rate > 0) {
+      // Menu prices are VAT-inclusive; extract the VAT portion.
+      vat += lineTotal - lineTotal / (1 + rate)
+    }
   }
+
+  const subtotal = total - vat
 
   return {
     subtotal,
     vat,
-    total: subtotal + vat,
+    total,
   }
 }

@@ -1,0 +1,5 @@
+{
+  "/menu/page": "app/menu/page.js",
+  "/api/sessions/route": "app/api/sessions/route.js",
+  "/t/[tagId]/page": "app/t/[tagId]/page.js"
+}

@@ -19,6 +19,20 @@ Routes:
 
 Development:
 - npm install
-- copy .env.example to .env.local
-- prisma migrate dev
+- copy .env.example to .env
+- set DATABASE_URL to your managed Postgres URL
+- npm run prisma:migrate:deploy
+- npm run db:check
 - npm run dev
+
+Online DB Cutover:
+1. Provision a managed Postgres database (Neon/Supabase/RDS).
+2. Put its connection string in `.env` as `DATABASE_URL`.
+3. Apply schema: `npm run prisma:migrate:deploy`.
+4. Verify connectivity and schema: `npm run db:check`.
+5. Start app: `npm run dev`.
+
+Useful Prisma commands:
+- `npm run prisma:migrate:status`
+- `npm run prisma:generate`
+- `npm run prisma:db:push` (dev-only shortcut; prefer migrations for shared envs)

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { requireStaff } from '@/lib/auth'
+import { appendSystemEvent } from '@/lib/events'
 
 export async function POST(req: Request) {
   try {
@@ -14,9 +15,38 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'BAD_REQUEST' }, { status: 400 })
   }
 
-  await prisma.kitchenTicket.deleteMany({
-    where: { tableId }
+  const table = await prisma.tableAssignment.update({
+    where: { id: tableId },
+    data: {
+      closedAt: new Date(),
+      closedPaid: false,
+      locked: true
+    }
   })
 
-  return NextResponse.json({ closed: true })
+  await prisma.session.updateMany({
+    where: {
+      tableId,
+      status: 'ACTIVE'
+    },
+    data: {
+      status: 'CLOSED',
+      closedAt: new Date()
+    }
+  })
+
+  await appendSystemEvent(
+    'table_closed',
+    { tableId, paid: false },
+    { req, tableId }
+  )
+
+  return NextResponse.json({
+    closed: true,
+    table: {
+      id: table.id,
+      closedAt: table.closedAt,
+      closedPaid: table.closedPaid
+    }
+  })
 }
