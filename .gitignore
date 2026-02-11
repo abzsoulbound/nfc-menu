@@ -3,6 +3,7 @@ node_modules
 /generated/prisma
 
 .env
-
-.env
 .next
+.next.bak-*/
+.DS_Store
+tsconfig.tsbuildinfo

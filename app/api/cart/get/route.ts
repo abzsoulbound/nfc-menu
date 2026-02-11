@@ -36,6 +36,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'SESSION_NOT_FOUND' }, { status: 404 })
   }
 
+  const previousLastActivityAt = cart.session.lastActivityAt
   const touchedAt = new Date()
   await prisma.session.update({
     where: { id: sessionId },
@@ -43,7 +44,7 @@ export async function POST(req: Request) {
   })
 
   const stale =
-    Date.now() - touchedAt.getTime() >
+    Date.now() - previousLastActivityAt.getTime() >
     SESSION_IDLE_TIMEOUT_MS
 
   const items = cart.items.map(item => {

@@ -19,7 +19,7 @@ Routes:
 
 Development:
 - npm install
-- copy .env.example to .env
+- create a `.env` file
 - set DATABASE_URL to your managed Postgres URL
 - npm run prisma:migrate:deploy
 - npm run db:check

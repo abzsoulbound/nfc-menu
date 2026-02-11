@@ -501,20 +501,28 @@ export default function PerUserReviewPage({
       })
 
       if (!res.ok) {
-        const raw = await res.text()
-        let apiError = "SUBMISSION_FAILED"
-        if (raw) {
-          try {
-            const parsed = JSON.parse(raw) as {
-              error?: unknown
-            }
-            if (typeof parsed?.error === "string") {
-              apiError = parsed.error
-            }
-          } catch {
-            apiError = raw.slice(0, 120)
-          }
+        const failure = await res
+          .json()
+          .catch(() => ({}) as { error?: unknown; unconfirmedMemberCount?: unknown })
+        const apiError =
+          typeof failure?.error === "string"
+            ? failure.error
+            : "SUBMISSION_FAILED"
+
+        if (apiError === "MEMBER_CONFIRMATION_REQUIRED") {
+          const count =
+            typeof failure?.unconfirmedMemberCount === "number"
+              ? failure.unconfirmedMemberCount
+              : null
+          setError(
+            count && count > 0
+              ? `Not sent yet. Waiting for ${count} ${count === 1 ? "member" : "members"} to confirm pending items.`
+              : "Not sent yet. Waiting for all members to confirm their pending items."
+          )
+          await refreshAll(false)
+          return
         }
+
         throw new Error(`${apiError} (HTTP ${res.status})`)
       }
 
@@ -529,17 +537,21 @@ export default function PerUserReviewPage({
       })
       await refreshAll(false)
     } catch (submitError: any) {
-      if (submitError?.message === "MEMBER_CONFIRMATION_REQUIRED") {
-        setError(
-          "Not sent yet. Waiting for all members to confirm their pending items."
-        )
-        return
+      const message = String(submitError?.message ?? "unknown")
+      const isNetworkFailure =
+        !navigator.onLine ||
+        /failed to fetch|networkerror/i.test(message)
+
+      if (isNetworkFailure) {
+        queueOrderSubmission(queuedPayload)
       }
-      queueOrderSubmission(queuedPayload)
+
       setError(
-        navigator.onLine
-          ? `Order could not be submitted (${submitError?.message ?? "unknown"}). Your items are still in your cart.`
-          : "You are offline. Your items are still in your cart and can be submitted when connection returns."
+        isNetworkFailure
+          ? navigator.onLine
+            ? `Order could not be submitted (${message}). Your items are still in your cart.`
+            : "You are offline. Your items are still in your cart and can be submitted when connection returns."
+          : `Order could not be submitted (${message}).`
       )
     } finally {
       setSubmitting(false)

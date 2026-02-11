@@ -38,10 +38,26 @@ function isLocked(req: Request) {
     .includes(key)
 }
 
-function setAuthorizedCookies(res: NextResponse) {
+function readCookie(req: Request, key: string) {
+  const raw = req.headers.get("cookie")
+  if (!raw) return null
+  const prefix = `${key}=`
+  const token = raw
+    .split(";")
+    .map(part => part.trim())
+    .find(part => part.startsWith(prefix))
+  if (!token) return null
+  return decodeURIComponent(token.slice(prefix.length))
+}
+
+function setAuthorizedCookies(
+  res: NextResponse,
+  role: StaffRole
+) {
   const authToken = process.env.STAFF_AUTH_SECRET
   if (!authToken) return
   res.cookies.set(staffAuthCookies.auth, authToken, cookieBase)
+  res.cookies.set(staffAuthCookies.role, role, cookieBase)
   res.cookies.set(staffAuthCookies.failures, "0", cookieBase)
   res.cookies.set(staffAuthCookies.locked, "", {
     ...cookieBase,
@@ -62,6 +78,10 @@ function clearAuthCookies(res: NextResponse) {
     ...cookieBase,
     expires: new Date(0),
   })
+  res.cookies.set(staffAuthCookies.role, "", {
+    ...cookieBase,
+    expires: new Date(0),
+  })
   res.cookies.set(staffAuthCookies.failures, "0", cookieBase)
   res.cookies.set(staffAuthCookies.locked, "", {
     ...cookieBase,
@@ -71,7 +91,15 @@ function clearAuthCookies(res: NextResponse) {
 
 function validateRoleAuth(role: StaffRole, passcode: string) {
   const expected = getRolePasscode(role)
-  return !!expected && passcode === expected
+  if (expected && passcode === expected) return true
+
+  // Allow manager passcode to authenticate admin screens directly.
+  if (role === "admin") {
+    const managerPasscode = getManagerPasscode()
+    return !!managerPasscode && passcode === managerPasscode
+  }
+
+  return false
 }
 
 function validateManagerUnlock(passcode: string) {
@@ -89,16 +117,14 @@ export async function GET(req: Request) {
 
   const locked = isLocked(req)
   const failures = readFailures(req)
-  const token = req.headers
-    .get("cookie")
-    ?.split(";")
-    .map(part => part.trim())
-    .find(part => part.startsWith(`${staffAuthCookies.auth}=`))
-    ?.split("=")[1]
+  const token = readCookie(req, staffAuthCookies.auth)
+  const sessionRole = readCookie(req, staffAuthCookies.role)
   const authorized =
     !!token &&
+    !!sessionRole &&
     !!process.env.STAFF_AUTH_SECRET &&
-    decodeURIComponent(token) === process.env.STAFF_AUTH_SECRET
+    token === process.env.STAFF_AUTH_SECRET &&
+    sessionRole === role
 
   return NextResponse.json({
     authorized,
@@ -159,7 +185,7 @@ export async function POST(req: Request) {
   }
 
   const res = NextResponse.json({ ok: true })
-  setAuthorizedCookies(res)
+  setAuthorizedCookies(res, role)
 
   return res
 }
