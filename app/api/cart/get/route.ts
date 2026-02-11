@@ -1,9 +1,14 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
-import { SESSION_IDLE_TIMEOUT_MS } from '@/lib/constants'
+import {
+  ASSIST_EDIT_UNLOCK_MS,
+  MEMBER_INACTIVE_MS,
+  SESSION_IDLE_TIMEOUT_MS,
+} from '@/lib/constants'
 import {
   getEditClientKey,
   isEditConfirmed,
+  getEditHardActivityAt,
   stripInternalEditMeta,
 } from '@/lib/itemEdits'
 
@@ -46,14 +51,31 @@ export async function POST(req: Request) {
   const stale =
     Date.now() - previousLastActivityAt.getTime() >
     SESSION_IDLE_TIMEOUT_MS
+  const nowMs = Date.now()
 
   const items = cart.items.map(item => {
     const ownerClientKey = getEditClientKey(item.edits)
     const confirmed = isEditConfirmed(item.edits)
+    const hardActivityAt =
+      getEditHardActivityAt(item.edits) ??
+      item.updatedAt.toISOString()
+    const hardActivityMs = new Date(hardActivityAt).getTime()
+    const inactive =
+      nowMs - hardActivityMs >= MEMBER_INACTIVE_MS
+    const assistUnlocked =
+      nowMs - hardActivityMs >= ASSIST_EDIT_UNLOCK_MS
     const isMine = Boolean(
       requesterClientKey &&
         ownerClientKey &&
         requesterClientKey === ownerClientKey
+    )
+    const canRequesterEdit = Boolean(
+      requesterClientKey &&
+        (
+          !ownerClientKey ||
+          requesterClientKey === ownerClientKey ||
+          assistUnlocked
+        )
     )
 
     return {
@@ -61,6 +83,9 @@ export async function POST(req: Request) {
       edits: stripInternalEditMeta(item.edits),
       ownerClientKey,
       confirmed,
+      hardActivityAt,
+      inactive,
+      canRequesterEdit,
       isMine,
     }
   })
@@ -73,6 +98,8 @@ export async function POST(req: Request) {
       quantity: number
       confirmed: boolean
       isMine: boolean
+      hardActivityAt: string
+      inactive: boolean
     }
   >()
 
@@ -87,6 +114,8 @@ export async function POST(req: Request) {
         quantity: item.quantity,
         confirmed: item.confirmed,
         isMine: item.isMine,
+        hardActivityAt: item.hardActivityAt,
+        inactive: item.inactive,
       })
       continue
     }
@@ -94,19 +123,29 @@ export async function POST(req: Request) {
     existing.itemCount += 1
     existing.quantity += item.quantity
     existing.confirmed = existing.confirmed && item.confirmed
+    if (
+      new Date(item.hardActivityAt).getTime() >
+      new Date(existing.hardActivityAt).getTime()
+    ) {
+      existing.hardActivityAt = item.hardActivityAt
+    }
+    existing.inactive =
+      nowMs - new Date(existing.hardActivityAt).getTime() >=
+      MEMBER_INACTIVE_MS
   }
 
   const members = Array.from(membersByClient.values())
+  const activeMembers = members.filter(member => !member.inactive)
   const requesterMember = members.find(member => member.isMine)
   const requesterHasItems = Boolean(requesterMember)
   const requesterConfirmed = requesterMember
     ? requesterMember.confirmed
     : true
   const allMembersConfirmed =
-    members.length === 0
+    activeMembers.length === 0
       ? true
-      : members.every(member => member.confirmed)
-  const unconfirmedMemberCount = members.filter(
+      : activeMembers.every(member => member.confirmed)
+  const unconfirmedMemberCount = activeMembers.filter(
     member => !member.confirmed
   ).length
 
@@ -120,9 +159,10 @@ export async function POST(req: Request) {
       requesterConfirmed,
       allMembersConfirmed,
       unconfirmedMemberCount,
-      totalMemberCount: members.length,
+      totalMemberCount: activeMembers.length,
+      inactiveMemberCount: members.length - activeMembers.length,
       confirmedMemberCount:
-        members.length - unconfirmedMemberCount,
+        activeMembers.length - unconfirmedMemberCount,
     },
     session: {
       status: cart.session.status.toLowerCase(),

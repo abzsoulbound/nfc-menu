@@ -25,6 +25,7 @@ type ReviewItem = {
   status?: ReviewStatus
   submittedAt?: string
   menuItemId?: string | null
+  ownerClientKey?: string | null
   name: string
   quantity: number
   edits: unknown
@@ -34,6 +35,8 @@ type ReviewItem = {
   station: "KITCHEN" | "BAR"
   isMine: boolean
   confirmed?: boolean
+  canRequesterEdit?: boolean
+  ownerInactive?: boolean
 }
 
 type LocalCartItem = {
@@ -54,6 +57,8 @@ type PendingMember = {
   quantity: number
   confirmed: boolean
   isMine: boolean
+  inactive: boolean
+  hardActivityAt: string
 }
 
 type PendingCartResponse = {
@@ -62,6 +67,10 @@ type PendingCartResponse = {
   requesterConfirmed: boolean
   allMembersConfirmed: boolean
   unconfirmedMemberCount: number
+}
+
+type LoadCartOptions = {
+  preserveLocalDraft?: boolean
 }
 
 function toStation(value: unknown): "KITCHEN" | "BAR" {
@@ -79,6 +88,19 @@ function submittedStateLabel(status?: ReviewStatus) {
   if (status === "completed") return "sent · completed"
   if (status === "in_progress") return "sent · in progress"
   return "sent"
+}
+
+function sameLineItem(a: ReviewItem, b: ReviewItem) {
+  const aMenuKey = a.menuItemId ?? a.name
+  const bMenuKey = b.menuItemId ?? b.name
+  return (
+    aMenuKey === bMenuKey &&
+    a.quantity === b.quantity &&
+    a.unitPrice === b.unitPrice &&
+    (a.vatRate ?? 0) === (b.vatRate ?? 0) &&
+    a.station === b.station &&
+    getEditNote(a.edits) === getEditNote(b.edits)
+  )
 }
 
 export default function PerUserReviewPage({
@@ -102,7 +124,6 @@ export default function PerUserReviewPage({
   const [error, setError] = useState<string | null>(null)
   const [showConfirm, setShowConfirm] = useState(false)
   const [updatingCartItemId, setUpdatingCartItemId] = useState<string | null>(null)
-  const [updatingOrderItemId, setUpdatingOrderItemId] = useState<string | null>(null)
   const [pendingMembers, setPendingMembers] = useState<PendingMember[]>([])
   const [requesterConfirmed, setRequesterConfirmed] = useState(true)
   const [allMembersConfirmed, setAllMembersConfirmed] = useState(true)
@@ -111,6 +132,8 @@ export default function PerUserReviewPage({
   const [editingItem, setEditingItem] = useState<ReviewItem | null>(null)
   const [editDraft, setEditDraft] = useState("")
   const [savingEdit, setSavingEdit] = useState(false)
+  const [importingSavedCart, setImportingSavedCart] = useState(false)
+  const [importableLocalItems, setImportableLocalItems] = useState<ReviewItem[]>([])
   const [clientKey, setClientKey] = useState<string | null>(null)
 
   const ensureClientKey = () => {
@@ -162,6 +185,8 @@ export default function PerUserReviewPage({
           station: toStation(item.station),
           isMine: true,
           confirmed: true,
+          canRequesterEdit: true,
+          ownerInactive: false,
         }))
         .filter(item => item.quantity > 0)
     } catch {
@@ -196,8 +221,13 @@ export default function PerUserReviewPage({
     }
   }
 
-  const loadCartItems = async (): Promise<PendingCartResponse> => {
+  const loadCartItems = async (
+    options?: LoadCartOptions
+  ): Promise<PendingCartResponse> => {
+    const preserveLocalDraft = options?.preserveLocalDraft !== false
+
     if (!sessionId || sessionId.startsWith("local:")) {
+      setImportableLocalItems([])
       return {
         items: readLocalItems(),
         members: [],
@@ -236,6 +266,10 @@ export default function PerUserReviewPage({
                 typeof item.menuItemId === "string"
                   ? item.menuItemId
                   : null,
+              ownerClientKey:
+                typeof item.ownerClientKey === "string"
+                  ? item.ownerClientKey
+                  : null,
               name: String(item.name ?? "Item"),
               quantity: Number(item.quantity ?? 0),
               edits: item.edits ?? null,
@@ -249,6 +283,8 @@ export default function PerUserReviewPage({
               station: toStation(item.station),
               isMine: Boolean(item.isMine),
               confirmed: Boolean(item.confirmed),
+              canRequesterEdit: Boolean(item.canRequesterEdit),
+              ownerInactive: Boolean(item.inactive),
             }))
             .filter(item => item.quantity > 0)
         : []
@@ -261,22 +297,46 @@ export default function PerUserReviewPage({
               quantity: Number(member.quantity ?? 0),
               confirmed: Boolean(member.confirmed),
               isMine: Boolean(member.isMine),
+              inactive: Boolean(member.inactive),
+              hardActivityAt:
+                typeof member.hardActivityAt === "string"
+                  ? member.hardActivityAt
+                  : new Date(0).toISOString(),
             }))
             .filter(member => member.clientKey.length > 0)
         : []
 
+      const activeMembers = members.filter(
+        member => !member.inactive
+      )
       const fallbackRequesterConfirmed =
         members.find(member => member.isMine)?.confirmed ??
         true
       const fallbackAllMembersConfirmed =
-        members.length === 0
+        activeMembers.length === 0
           ? true
-          : members.every(member => member.confirmed)
-      const fallbackUnconfirmedCount = members.filter(
+          : activeMembers.every(member => member.confirmed)
+      const fallbackUnconfirmedCount = activeMembers.filter(
         member => !member.confirmed
       ).length
 
-      writeLocalItems(nextItems.filter(item => item.isMine))
+      const ownServerItems = nextItems.filter(item => item.isMine)
+      const localSnapshot = readLocalItems()
+      const unmatchedLocal = preserveLocalDraft
+        ? localSnapshot.filter(localItem =>
+            !ownServerItems.some(serverItem =>
+              sameLineItem(localItem, serverItem)
+            )
+          )
+        : []
+
+      if (unmatchedLocal.length > 0) {
+        setImportableLocalItems(unmatchedLocal)
+      } else {
+        setImportableLocalItems([])
+        writeLocalItems(ownServerItems)
+      }
+
       return {
         items: nextItems,
         members,
@@ -294,6 +354,7 @@ export default function PerUserReviewPage({
             : fallbackUnconfirmedCount,
       }
     } catch {
+      setImportableLocalItems([])
       return {
         items: readLocalItems(),
         members: [],
@@ -342,6 +403,10 @@ export default function PerUserReviewPage({
                 typeof item.menuItemId === "string"
                   ? item.menuItemId
                   : null,
+              ownerClientKey:
+                typeof item.ownerClientKey === "string"
+                  ? item.ownerClientKey
+                  : null,
               name: String(item.name ?? "Item"),
               quantity: Number(item.quantity ?? 0),
               edits: item.edits ?? null,
@@ -354,6 +419,8 @@ export default function PerUserReviewPage({
               vatRate: Number(item.vatRate ?? 0),
               station: toStation(item.station),
               isMine: Boolean(item.isMine),
+              canRequesterEdit: false,
+              ownerInactive: false,
             }))
             .filter(item => item.quantity > 0)
         : []
@@ -430,11 +497,16 @@ export default function PerUserReviewPage({
     () => [...mySubmittedItems, ...myPendingItems],
     [mySubmittedItems, myPendingItems]
   )
+  const tableVisibleItems = useMemo(
+    () => [...submittedItems, ...cartItems],
+    [submittedItems, cartItems]
+  )
   const sendDisabled =
     submitting ||
     cartItems.length === 0 ||
     (isSharedSession && !allMembersConfirmed)
-  const totals = calculateCartTotals(myVisibleItems)
+  const myTotals = calculateCartTotals(myVisibleItems)
+  const tableTotals = calculateCartTotals(tableVisibleItems)
 
   async function submit() {
     if (cartItems.length === 0) return
@@ -559,10 +631,10 @@ export default function PerUserReviewPage({
     }
   }
 
-  async function confirmMyPendingItems() {
+  async function setMyPendingConfirmation(nextConfirmed: boolean) {
     if (myPendingItems.length === 0 || !sessionId) return
     if (sessionId.startsWith("local:")) {
-      setRequesterConfirmed(true)
+      setRequesterConfirmed(nextConfirmed)
       return
     }
 
@@ -582,6 +654,7 @@ export default function PerUserReviewPage({
         body: JSON.stringify({
           sessionId,
           clientKey: activeClientKey,
+          confirmed: nextConfirmed,
         }),
       })
 
@@ -590,11 +663,13 @@ export default function PerUserReviewPage({
         throw new Error(payload?.error ?? "CONFIRMATION_FAILED")
       }
 
-      const pending = await loadCartItems()
+      const pending = await loadCartItems({
+        preserveLocalDraft: false,
+      })
       applyPendingState(pending)
     } catch (confirmError: any) {
       setError(
-        `Could not confirm your items (${confirmError?.message ?? "unknown"}).`
+        `Could not ${nextConfirmed ? "confirm" : "unconfirm"} your items (${confirmError?.message ?? "unknown"}).`
       )
     } finally {
       setConfirmingMine(false)
@@ -664,7 +739,9 @@ export default function PerUserReviewPage({
         throw new Error(payload?.error ?? "CART_ITEM_UPDATE_FAILED")
       }
 
-      const pending = await loadCartItems()
+      const pending = await loadCartItems({
+        preserveLocalDraft: false,
+      })
       applyPendingState(pending)
     } catch (qtyError: any) {
       setError(
@@ -677,63 +754,6 @@ export default function PerUserReviewPage({
 
   async function changeCartQty(item: ReviewItem, delta: 1 | -1) {
     await setCartQty(item, item.quantity + delta)
-  }
-
-  async function setSubmittedQty(item: ReviewItem, nextQty: number) {
-    if (!item.orderItemId || nextQty < 0 || !item.isMine) return
-
-    setUpdatingOrderItemId(item.orderItemId)
-    setError(null)
-
-    try {
-      const activeClientKey = ensureClientKey()
-      const body: {
-        orderItemId: string
-        quantity: number
-        tagId: string
-        clientKey?: string
-        sessionId?: string
-      } = {
-        orderItemId: item.orderItemId,
-        quantity: nextQty,
-        tagId,
-      }
-
-      if (activeClientKey) {
-        body.clientKey = activeClientKey
-      }
-      if (sessionId && !sessionId.startsWith("local:")) {
-        body.sessionId = sessionId
-      }
-
-      const res = await fetch("/api/orders", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      })
-
-      if (!res.ok) {
-        const payload = await res.json().catch(() => ({}))
-        throw new Error(payload?.error ?? "ORDER_ITEM_UPDATE_FAILED")
-      }
-
-      const submitted = await loadSubmittedItems()
-      setSubmittedItems(submitted.items)
-      setFirstSubmittedAt(submitted.firstSubmittedAt)
-    } catch (qtyError: any) {
-      setError(
-        `Could not update ordered item (${qtyError?.message ?? "unknown"}).`
-      )
-    } finally {
-      setUpdatingOrderItemId(null)
-    }
-  }
-
-  async function changeSubmittedQty(
-    item: ReviewItem,
-    delta: 1 | -1
-  ) {
-    await setSubmittedQty(item, item.quantity + delta)
   }
 
   function openEdit(item: ReviewItem) {
@@ -820,7 +840,9 @@ export default function PerUserReviewPage({
             throw new Error(payload?.error ?? "CART_ITEM_EDIT_FAILED")
           }
 
-          const pending = await loadCartItems()
+          const pending = await loadCartItems({
+            preserveLocalDraft: false,
+          })
           applyPendingState(pending)
         } else {
           updateLocalCart(editingItem.id, item => ({
@@ -841,6 +863,60 @@ export default function PerUserReviewPage({
     }
   }
 
+  async function importSavedCartToReview() {
+    if (
+      importingSavedCart ||
+      !sessionId ||
+      sessionId.startsWith("local:") ||
+      importableLocalItems.length === 0
+    ) {
+      return
+    }
+
+    setImportingSavedCart(true)
+    setError(null)
+
+    try {
+      const activeClientKey = ensureClientKey()
+
+      for (const item of importableLocalItems) {
+        const res = await fetch("/api/cart/add", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            sessionId,
+            menuItemId: item.menuItemId ?? undefined,
+            name: item.name,
+            unitPrice: item.unitPrice,
+            vatRate: item.vatRate ?? 0,
+            allergens: item.allergens,
+            station: item.station,
+            quantity: item.quantity,
+            edits: item.edits,
+            clientKey: activeClientKey,
+          }),
+        })
+
+        if (!res.ok) {
+          const payload = await res.json().catch(() => ({}))
+          throw new Error(payload?.error ?? "IMPORT_SAVED_CART_FAILED")
+        }
+      }
+
+      const pending = await loadCartItems({
+        preserveLocalDraft: false,
+      })
+      applyPendingState(pending)
+      await refreshAll(false)
+    } catch (importError: any) {
+      setError(
+        `Could not add saved cart to review (${importError?.message ?? "unknown"}).`
+      )
+    } finally {
+      setImportingSavedCart(false)
+    }
+  }
+
   if (loading) {
     return (
       <div className="p-4 opacity-60 text-center">
@@ -849,13 +925,49 @@ export default function PerUserReviewPage({
     )
   }
 
-  if (cartItems.length === 0 && submittedItems.length === 0) {
+  if (
+    cartItems.length === 0 &&
+    submittedItems.length === 0 &&
+    importableLocalItems.length === 0
+  ) {
     return (
       <div className="p-4 space-y-3">
         {error && <Toast>{error}</Toast>}
         <div className="opacity-60 text-center">
           No items to review
         </div>
+        <Button
+          variant="secondary"
+          onClick={() => router.push(`/t/${tagId}`)}
+        >
+          Back
+        </Button>
+      </div>
+    )
+  }
+
+  if (cartItems.length === 0 && submittedItems.length === 0) {
+    return (
+      <div className="p-4 space-y-3">
+        {error && <Toast>{error}</Toast>}
+        <Card>
+          <div className="text-sm font-semibold mb-2">
+            Saved cart ready to add
+          </div>
+          <div className="text-xs opacity-70 mb-3">
+            You have {importableLocalItems.length} saved item
+            {importableLocalItems.length === 1 ? "" : "s"} not yet added to this table review.
+          </div>
+          <Button
+            type="button"
+            onClick={importSavedCartToReview}
+            disabled={importingSavedCart}
+          >
+            {importingSavedCart
+              ? "Adding..."
+              : "Add saved cart to review"}
+          </Button>
+        </Card>
         <Button
           variant="secondary"
           onClick={() => router.push(`/t/${tagId}`)}
@@ -875,8 +987,8 @@ export default function PerUserReviewPage({
           Review additions
         </div>
         <div className="text-sm opacity-70">
-          Sent items are greyed out. Each member confirms first, then the table
-          order can be sent.
+          Pending items stay editable until the table order is sent. Sent items
+          are locked.
         </div>
         {firstSubmittedAt && (
           <div className="text-xs opacity-60 mt-2">
@@ -889,6 +1001,27 @@ export default function PerUserReviewPage({
           </div>
         )}
       </Card>
+
+      {isSharedSession && importableLocalItems.length > 0 && (
+        <Card>
+          <div className="text-sm font-semibold mb-2">
+            Saved cart ready to add
+          </div>
+          <div className="text-xs opacity-70 mb-3">
+            You have {importableLocalItems.length} saved item
+            {importableLocalItems.length === 1 ? "" : "s"} not yet added to this table review.
+          </div>
+          <Button
+            type="button"
+            onClick={importSavedCartToReview}
+            disabled={importingSavedCart}
+          >
+            {importingSavedCart
+              ? "Adding..."
+              : "Add saved cart to review"}
+          </Button>
+        </Card>
+      )}
 
       {cartItems.length > 0 && (
         <>
@@ -1020,7 +1153,7 @@ export default function PerUserReviewPage({
                 <div className="flex justify-between items-center gap-2">
                   <div className="text-xs opacity-70">
                     {requesterConfirmed
-                      ? "Your pending items are confirmed."
+                      ? "Your pending items are confirmed. Unconfirm to edit before send."
                       : "Confirm your items first."}
                   </div>
                   <Button
@@ -1028,12 +1161,15 @@ export default function PerUserReviewPage({
                     variant={requesterConfirmed ? "secondary" : "primary"}
                     disabled={
                       confirmingMine ||
-                      myPendingItems.length === 0 ||
-                      requesterConfirmed
+                      myPendingItems.length === 0
                     }
-                    onClick={confirmMyPendingItems}
+                    onClick={() =>
+                      setMyPendingConfirmation(!requesterConfirmed)
+                    }
                   >
-                    {requesterConfirmed ? "Confirmed" : "Confirm my items"}
+                    {requesterConfirmed
+                      ? "Edit items"
+                      : "Confirm my items"}
                   </Button>
                 </div>
               </>
@@ -1057,7 +1193,7 @@ export default function PerUserReviewPage({
               Your submitted additions
             </div>
             <div className="text-xs opacity-70 mb-3">
-              Sent items are greyed to show they were already sent. You can still update your own.
+              Sent items are greyed and locked after sending to kitchen/bar.
             </div>
             <div className="space-y-3">
               {mySubmittedItems.map(item => (
@@ -1091,39 +1227,6 @@ export default function PerUserReviewPage({
                   </div>
 
                   <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      className="px-2 py-1 rounded border"
-                      disabled={
-                        updatingOrderItemId === item.orderItemId
-                      }
-                      onClick={() => changeSubmittedQty(item, -1)}
-                    >
-                      −
-                    </button>
-                    <span className="min-w-8 text-center text-sm font-medium">
-                      {item.quantity}
-                    </span>
-                    <button
-                      type="button"
-                      className="px-2 py-1 rounded border"
-                      disabled={
-                        updatingOrderItemId === item.orderItemId
-                      }
-                      onClick={() => changeSubmittedQty(item, 1)}
-                    >
-                      +
-                    </button>
-                    <button
-                      type="button"
-                      className="px-2 py-1 rounded border"
-                      disabled={
-                        updatingOrderItemId === item.orderItemId
-                      }
-                      onClick={() => openEdit(item)}
-                    >
-                      Edit
-                    </button>
                     <div className="text-sm min-w-16 text-right">
                       £{(item.unitPrice * item.quantity).toFixed(2)}
                     </div>
@@ -1185,20 +1288,25 @@ export default function PerUserReviewPage({
 
       <Card>
         <div className="text-sm font-semibold mb-2">
-          Your totals
+          Totals
         </div>
         <div className="flex justify-between text-sm">
-          <div>Subtotal</div>
-          <div>£{totals.subtotal.toFixed(2)}</div>
+          <div>Your items total</div>
+          <div>£{myTotals.total.toFixed(2)}</div>
+        </div>
+        <Divider />
+        <div className="flex justify-between text-sm">
+          <div>Table subtotal</div>
+          <div>£{tableTotals.subtotal.toFixed(2)}</div>
         </div>
         <div className="flex justify-between text-sm opacity-70">
-          <div>VAT</div>
-          <div>£{totals.vat.toFixed(2)}</div>
+          <div>Table VAT</div>
+          <div>£{tableTotals.vat.toFixed(2)}</div>
         </div>
         <Divider />
         <div className="flex justify-between font-semibold">
-          <div>Total</div>
-          <div>£{totals.total.toFixed(2)}</div>
+          <div>Table total</div>
+          <div>£{tableTotals.total.toFixed(2)}</div>
         </div>
       </Card>
 

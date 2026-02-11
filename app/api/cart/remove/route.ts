@@ -1,7 +1,11 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { appendSystemEvent } from '@/lib/events'
-import { getEditClientKey } from '@/lib/itemEdits'
+import { ASSIST_EDIT_UNLOCK_MS } from '@/lib/constants'
+import {
+  getEditClientKey,
+  getEditHardActivityAt,
+} from '@/lib/itemEdits'
 
 function normalizeClientKey(value: unknown): string | null {
   if (typeof value !== 'string') return null
@@ -29,11 +33,26 @@ export async function POST(req: Request) {
 
   const requesterClientKey = normalizeClientKey(clientKey)
   const ownerClientKey = getEditClientKey(item.edits)
-  if (
+  const ownerHardActivityAt =
+    getEditHardActivityAt(item.edits) ??
+    item.updatedAt.toISOString()
+  const ownerIdleForMs =
+    Date.now() - new Date(ownerHardActivityAt).getTime()
+  const assistUnlocked = ownerIdleForMs >= ASSIST_EDIT_UNLOCK_MS
+  const isAssistEdit = Boolean(
     ownerClientKey &&
     ownerClientKey !== requesterClientKey
-  ) {
-    return NextResponse.json({ error: 'FORBIDDEN' }, { status: 403 })
+  )
+  if (isAssistEdit) {
+    if (!requesterClientKey) {
+      return NextResponse.json({ error: 'FORBIDDEN' }, { status: 403 })
+    }
+    if (!assistUnlocked) {
+      return NextResponse.json(
+        { error: 'ASSIST_LOCKED' },
+        { status: 403 }
+      )
+    }
   }
 
   await prisma.cartItem.delete({
@@ -46,11 +65,19 @@ export async function POST(req: Request) {
   })
 
   await appendSystemEvent(
-    'item_removed',
-    {
-      itemId,
-      name: item.name
-    },
+    isAssistEdit ? 'assist_item_removed' : 'item_removed',
+    isAssistEdit
+      ? {
+          itemId,
+          name: item.name,
+          ownerClientKey,
+          actorClientKey: requesterClientKey,
+          ownerHardActivityAt,
+        }
+      : {
+          itemId,
+          name: item.name
+        },
     {
       req,
       sessionId,

@@ -1,2 +1,4 @@
 export const SESSION_IDLE_TIMEOUT_MS = 90 * 60 * 1000
 export const CONTRIBUTION_WINDOW_MS = 30 * 60 * 1000
+export const ASSIST_EDIT_UNLOCK_MS = 2 * 60 * 1000
+export const MEMBER_INACTIVE_MS = 5 * 60 * 1000

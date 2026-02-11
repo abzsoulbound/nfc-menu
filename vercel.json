@@ -1,0 +1,9 @@
+{
+  "framework": "nextjs",
+  "env": {
+    "AUTH_DEMO_BYPASS": "1",
+    "DEMO_AUTO_REFRESH_MS": "5000",
+    "NEXT_PUBLIC_AUTH_DEMO_BYPASS": "1",
+    "NEXT_PUBLIC_AUTO_REFRESH_MS": "5000"
+  }
+}

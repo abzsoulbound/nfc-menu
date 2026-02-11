@@ -1,4 +1,8 @@
 type EditObject = Record<string, unknown>
+type EditConfirmationOptions = {
+  touchHardActivity?: boolean
+  hardActivityAt?: Date
+}
 
 function isObject(value: unknown): value is EditObject {
   return (
@@ -12,6 +16,15 @@ function normalizeClientKey(value: unknown): string | null {
   if (typeof value !== "string") return null
   const trimmed = value.trim()
   return trimmed.length > 0 ? trimmed : null
+}
+
+function normalizeIsoDate(value: unknown): string | null {
+  if (typeof value !== "string") return null
+  const trimmed = value.trim()
+  if (trimmed.length === 0) return null
+  const parsed = new Date(trimmed)
+  if (Number.isNaN(parsed.getTime())) return null
+  return parsed.toISOString()
 }
 
 function cloneWithoutMeta(value: EditObject): EditObject {
@@ -32,6 +45,13 @@ export function isEditConfirmed(edits: unknown): boolean {
   const meta = edits.__meta
   if (!isObject(meta)) return false
   return meta.confirmed === true
+}
+
+export function getEditHardActivityAt(edits: unknown): string | null {
+  if (!isObject(edits)) return null
+  const meta = edits.__meta
+  if (!isObject(meta)) return null
+  return normalizeIsoDate(meta.lastHardActivityAt)
 }
 
 export function withEditClientKey(
@@ -60,7 +80,8 @@ export function withEditClientKey(
 export function withEditConfirmation(
   edits: unknown,
   confirmed: boolean,
-  clientKey?: unknown
+  clientKey?: unknown,
+  options?: EditConfirmationOptions
 ): unknown {
   const normalizedKey = normalizeClientKey(clientKey)
   const hasObjectEdits = isObject(edits)
@@ -76,6 +97,11 @@ export function withEditConfirmation(
 
   if (normalizedKey) {
     existingMeta.clientKey = normalizedKey
+  }
+
+  if (options?.touchHardActivity !== false) {
+    const activityAt = options?.hardActivityAt ?? new Date()
+    existingMeta.lastHardActivityAt = activityAt.toISOString()
   }
 
   if (confirmed) {

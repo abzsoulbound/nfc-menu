@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import { Card } from "@/components/ui/Card"
 import { Button } from "@/components/ui/Button"
@@ -18,11 +18,40 @@ export default function StaffLoginPage() {
   const router = useRouter()
   const [role, setRole] = useState<StaffRole>("admin")
   const [passcode, setPasscode] = useState("")
+  const [authBypassEnabled, setAuthBypassEnabled] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  useEffect(() => {
+    let active = true
+
+    async function loadBypassStatus() {
+      try {
+        const res = await fetch(`/api/staff/auth?role=${role}`, {
+          cache: "no-store",
+        })
+        if (!res.ok) return
+
+        const payload = (await res.json()) as {
+          demoBypass?: unknown
+        }
+        if (!active) return
+        setAuthBypassEnabled(payload?.demoBypass === true)
+      } catch {
+        // best-effort status check only
+      }
+    }
+
+    void loadBypassStatus()
+
+    return () => {
+      active = false
+    }
+  }, [role])
+
   async function login() {
-    if (!passcode || submitting) return
+    if (submitting) return
+    if (!authBypassEnabled && !passcode) return
     setSubmitting(true)
     setError(null)
 
@@ -49,7 +78,9 @@ export default function StaffLoginPage() {
       <Card>
         <div className="text-lg font-semibold">Staff Login</div>
         <div className="text-sm opacity-70">
-          Role-specific passcodes are now used for staff access.
+          {authBypassEnabled
+            ? "Demo mode is active. Passcodes are temporarily disabled and will be re-enabled before launch."
+            : "Role-specific passcodes are now used for staff access."}
         </div>
       </Card>
 
@@ -70,22 +101,34 @@ export default function StaffLoginPage() {
             <option value="kitchen">Kitchen</option>
           </select>
 
-          <label className="text-sm opacity-70" htmlFor="staff-passcode">
-            Passcode
-          </label>
-          <input
-            id="staff-passcode"
-            type="password"
-            value={passcode}
-            onChange={e => setPasscode(e.target.value)}
-            className="input"
-            autoFocus
-          />
+          {!authBypassEnabled && (
+            <>
+              <label className="text-sm opacity-70" htmlFor="staff-passcode">
+                Passcode
+              </label>
+              <input
+                id="staff-passcode"
+                type="password"
+                value={passcode}
+                onChange={e => setPasscode(e.target.value)}
+                className="input"
+                autoFocus
+              />
+            </>
+          )}
 
           {error && <div className="text-sm text-red-400">{error}</div>}
 
-          <Button onClick={login} disabled={submitting || !passcode} className="w-full">
-            {submitting ? "Signing in..." : "Sign in"}
+          <Button
+            onClick={login}
+            disabled={submitting || (!authBypassEnabled && !passcode)}
+            className="w-full"
+          >
+            {submitting
+              ? "Signing in..."
+              : authBypassEnabled
+              ? "Continue (Demo)"
+              : "Sign in"}
           </Button>
         </div>
       </Card>

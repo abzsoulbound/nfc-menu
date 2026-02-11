@@ -1,0 +1,9 @@
+.git
+.next
+.next.bak-*
+node_modules
+.env
+.env.*
+npm-debug.log*
+yarn-error.log*
+*.tsbuildinfo

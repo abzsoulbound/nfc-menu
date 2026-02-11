@@ -3,9 +3,13 @@ import { OrderStatus, Prisma, Station } from "@prisma/client"
 import { prisma } from "@/lib/prisma"
 import { requireStaff } from "@/lib/auth"
 import { appendSystemEvent } from "@/lib/events"
-import { SESSION_IDLE_TIMEOUT_MS } from "@/lib/constants"
+import {
+  MEMBER_INACTIVE_MS,
+  SESSION_IDLE_TIMEOUT_MS,
+} from "@/lib/constants"
 import {
   getEditClientKey,
+  getEditHardActivityAt,
   isEditConfirmed,
   stripInternalEditMeta,
   withEditClientKey,
@@ -133,18 +137,26 @@ export async function GET(req: Request) {
     const orderWhere: Prisma.OrderWhereInput = session.tableId
       ? {
           tableId: session.tableId,
-          status: { in: ["PENDING", "IN_PROGRESS"] },
+          status: {
+            in: ["PENDING", "IN_PROGRESS", "COMPLETED"],
+          },
         }
       : {
           sessionId: session.id,
-          status: { in: ["PENDING", "IN_PROGRESS"] },
+          status: {
+            in: ["PENDING", "IN_PROGRESS", "COMPLETED"],
+          },
         }
 
     const orders = await prisma.order.findMany({
       where: orderWhere,
       include: {
         items: {
-          where: { status: { in: ["PENDING", "IN_PROGRESS"] } },
+          where: {
+            status: {
+              in: ["PENDING", "IN_PROGRESS", "COMPLETED"],
+            },
+          },
           orderBy: { createdAt: "asc" },
         },
       },
@@ -173,6 +185,7 @@ export async function GET(req: Request) {
           vatRate: i.vatRate,
           station: i.station,
           isMine,
+          ownerClientKey,
         }
       })
     )
@@ -458,22 +471,50 @@ export async function POST(req: Request) {
     }
 
     if (session.cart?.items.length) {
-      const confirmationByMember = new Map<string, boolean>()
+      const confirmationByMember = new Map<
+        string,
+        { confirmed: boolean; hardActivityAt: string }
+      >()
+      const nowMs = Date.now()
       for (const cartItem of session.cart.items) {
         const ownerClientKey = getEditClientKey(cartItem.edits)
         if (!ownerClientKey) continue
 
         const confirmed = isEditConfirmed(cartItem.edits)
+        const hardActivityAt =
+          getEditHardActivityAt(cartItem.edits) ??
+          cartItem.updatedAt.toISOString()
         const existing = confirmationByMember.get(ownerClientKey)
-        confirmationByMember.set(
-          ownerClientKey,
-          existing === undefined ? confirmed : existing && confirmed
-        )
+        if (!existing) {
+          confirmationByMember.set(ownerClientKey, {
+            confirmed,
+            hardActivityAt,
+          })
+          continue
+        }
+
+        const nextHardActivityAt =
+          new Date(hardActivityAt).getTime() >
+          new Date(existing.hardActivityAt).getTime()
+            ? hardActivityAt
+            : existing.hardActivityAt
+
+        confirmationByMember.set(ownerClientKey, {
+          confirmed: existing.confirmed && confirmed,
+          hardActivityAt: nextHardActivityAt,
+        })
       }
 
-      const unconfirmedMemberCount = Array.from(
+      const activeMembers = Array.from(
         confirmationByMember.values()
-      ).filter(confirmed => !confirmed).length
+      ).filter(member => {
+        const idleForMs =
+          nowMs - new Date(member.hardActivityAt).getTime()
+        return idleForMs < MEMBER_INACTIVE_MS
+      })
+      const unconfirmedMemberCount = activeMembers.filter(
+        member => !member.confirmed
+      ).length
 
       if (unconfirmedMemberCount > 0) {
         return NextResponse.json(
@@ -707,6 +748,11 @@ export async function PATCH(req: Request) {
       ) {
         return NextResponse.json({ error: "FORBIDDEN" }, { status: 403 })
       }
+
+      return NextResponse.json(
+        { error: "ORDER_ALREADY_SENT" },
+        { status: 409 }
+      )
     }
 
     if (

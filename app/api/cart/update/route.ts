@@ -2,8 +2,10 @@ import { NextResponse } from 'next/server'
 import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { appendSystemEvent } from '@/lib/events'
+import { ASSIST_EDIT_UNLOCK_MS } from '@/lib/constants'
 import {
   getEditClientKey,
+  getEditHardActivityAt,
   withEditConfirmation,
 } from '@/lib/itemEdits'
 
@@ -50,12 +52,27 @@ export async function POST(req: Request) {
     body?.clientKey
   )
   const ownerClientKey = getEditClientKey(item.edits)
-
-  if (
+  const ownerHardActivityAt =
+    getEditHardActivityAt(item.edits) ??
+    item.updatedAt.toISOString()
+  const ownerIdleForMs =
+    Date.now() - new Date(ownerHardActivityAt).getTime()
+  const assistUnlocked = ownerIdleForMs >= ASSIST_EDIT_UNLOCK_MS
+  const isAssistEdit = Boolean(
     ownerClientKey &&
     ownerClientKey !== requesterClientKey
-  ) {
-    return NextResponse.json({ error: 'FORBIDDEN' }, { status: 403 })
+  )
+
+  if (isAssistEdit) {
+    if (!requesterClientKey) {
+      return NextResponse.json({ error: 'FORBIDDEN' }, { status: 403 })
+    }
+    if (!assistUnlocked) {
+      return NextResponse.json(
+        { error: 'ASSIST_LOCKED' },
+        { status: 403 }
+      )
+    }
   }
 
   if (hasQuantity && quantity === 0) {
@@ -69,11 +86,19 @@ export async function POST(req: Request) {
     })
 
     await appendSystemEvent(
-      'item_removed',
-      {
-        itemId,
-        name: item.name
-      },
+      isAssistEdit ? 'assist_item_removed' : 'item_removed',
+      isAssistEdit
+        ? {
+            itemId,
+            name: item.name,
+            ownerClientKey,
+            actorClientKey: requesterClientKey,
+            ownerHardActivityAt,
+          }
+        : {
+            itemId,
+            name: item.name
+          },
       {
         req,
         sessionId,
@@ -95,7 +120,10 @@ export async function POST(req: Request) {
     const editsWithMeta = withEditConfirmation(
       nextEditsSource,
       false,
-      keyForWrite
+      keyForWrite,
+      {
+        touchHardActivity: !isAssistEdit,
+      }
     )
 
     if (editsWithMeta === null) {
@@ -117,11 +145,19 @@ export async function POST(req: Request) {
 
   if (hasQuantity) {
     await appendSystemEvent(
-      'item_quantity_updated',
-      {
-        itemId: updated.id,
-        quantity: updated.quantity
-      },
+      isAssistEdit ? 'assist_item_quantity_updated' : 'item_quantity_updated',
+      isAssistEdit
+        ? {
+            itemId: updated.id,
+            quantity: updated.quantity,
+            ownerClientKey,
+            actorClientKey: requesterClientKey,
+            ownerHardActivityAt,
+          }
+        : {
+            itemId: updated.id,
+            quantity: updated.quantity
+          },
       {
         req,
         sessionId,
@@ -132,10 +168,17 @@ export async function POST(req: Request) {
 
   if (hasEdits) {
     await appendSystemEvent(
-      'item_edited',
-      {
-        itemId: updated.id
-      },
+      isAssistEdit ? 'assist_item_edited' : 'item_edited',
+      isAssistEdit
+        ? {
+            itemId: updated.id,
+            ownerClientKey,
+            actorClientKey: requesterClientKey,
+            ownerHardActivityAt,
+          }
+        : {
+            itemId: updated.id
+          },
       {
         req,
         sessionId,

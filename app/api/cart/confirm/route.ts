@@ -19,6 +19,10 @@ export async function POST(req: Request) {
   const requesterClientKey = normalizeClientKey(
     body?.clientKey
   )
+  const confirmed =
+    typeof body?.confirmed === "boolean"
+      ? body.confirmed
+      : true
 
   if (!sessionId || !requesterClientKey) {
     return NextResponse.json({ error: "BAD_REQUEST" }, { status: 400 })
@@ -45,7 +49,7 @@ export async function POST(req: Request) {
 
   if (ownedItems.length === 0) {
     return NextResponse.json({
-      confirmed: false,
+      confirmed,
       updated: 0,
     })
   }
@@ -53,7 +57,7 @@ export async function POST(req: Request) {
   for (const item of ownedItems) {
     const nextEdits = withEditConfirmation(
       item.edits,
-      true,
+      confirmed,
       requesterClientKey
     )
 
@@ -78,7 +82,9 @@ export async function POST(req: Request) {
   })
 
   await appendSystemEvent(
-    "member_items_confirmed",
+    confirmed
+      ? "member_items_confirmed"
+      : "member_items_unconfirmed",
     {
       sessionId,
       itemCount: ownedItems.length,
@@ -91,7 +97,7 @@ export async function POST(req: Request) {
   )
 
   return NextResponse.json({
-    confirmed: true,
+    confirmed,
     updated: ownedItems.length,
   })
 }

@@ -15,6 +15,22 @@ const cookieBase = {
   path: "/",
 }
 
+function isAuthDemoBypassEnabled() {
+  const value = process.env.AUTH_DEMO_BYPASS
+  return value === "1" || value === "true"
+}
+
+function getDemoAutoRefreshMs() {
+  const raw =
+    process.env.DEMO_AUTO_REFRESH_MS ??
+    process.env.NEXT_PUBLIC_AUTO_REFRESH_MS
+  const parsed = Number(raw ?? "")
+  if (!Number.isFinite(parsed) || parsed < 1000) {
+    return 0
+  }
+  return Math.floor(parsed)
+}
+
 function readFailures(req: Request) {
   const raw = req.headers.get("cookie")
   if (!raw) return 0
@@ -115,6 +131,17 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: "INVALID_ROLE" }, { status: 400 })
   }
 
+  if (isAuthDemoBypassEnabled()) {
+    return NextResponse.json({
+      authorized: true,
+      locked: false,
+      failures: 0,
+      remaining: MAX_FAILED_ATTEMPTS,
+      demoBypass: true,
+      autoRefreshMs: getDemoAutoRefreshMs(),
+    })
+  }
+
   const locked = isLocked(req)
   const failures = readFailures(req)
   const token = readCookie(req, staffAuthCookies.auth)
@@ -131,11 +158,35 @@ export async function GET(req: Request) {
     locked,
     failures,
     remaining: Math.max(0, MAX_FAILED_ATTEMPTS - failures),
+    demoBypass: false,
+    autoRefreshMs: 0,
   })
 }
 
 export async function POST(req: Request) {
   const body = await req.json()
+
+  if (isAuthDemoBypassEnabled()) {
+    if (body?.action === "unlock") {
+      return NextResponse.json({
+        ok: true,
+        unlocked: true,
+        demoBypass: true,
+      })
+    }
+
+    const role = body?.role
+    if (!role || !isStaffRole(role)) {
+      return NextResponse.json({ error: "INVALID_ROLE" }, { status: 400 })
+    }
+
+    const res = NextResponse.json({
+      ok: true,
+      demoBypass: true,
+    })
+    setAuthorizedCookies(res, role)
+    return res
+  }
 
   if (body?.action === "unlock") {
     const managerPasscode = String(body?.managerPasscode ?? "")
