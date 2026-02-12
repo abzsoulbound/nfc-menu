@@ -4,6 +4,10 @@ import { prisma } from "@/lib/prisma"
 import { requireStaff } from "@/lib/auth"
 import { SESSION_IDLE_TIMEOUT_MS } from "@/lib/constants"
 import { appendSystemEvent } from "@/lib/events"
+import {
+  getTableGroupForTag,
+  isTableGroupClosed,
+} from "@/lib/tableGroups"
 
 function inferOrigin(tagId: string) {
   return tagId.startsWith("staff-") ? "STAFF" : "CUSTOMER"
@@ -13,6 +17,7 @@ function toSessionDto(session: {
   id: string
   tagId: string
   tableId: string | null
+  table?: { tableNo: number } | null
   openedAt: Date
   lastActivityAt: Date
   status: SessionStatus
@@ -28,7 +33,8 @@ function toSessionDto(session: {
     tagId: session.tagId,
     tableId:
       session.tableId ?? session.tag?.assignment?.id ?? null,
-    tableNumber: session.tag?.assignment?.tableNo ?? null,
+    tableNumber:
+      session.table?.tableNo ?? session.tag?.assignment?.tableNo ?? null,
     openedAt: session.openedAt.toISOString(),
     lastActivityAt: session.lastActivityAt.toISOString(),
     status: session.status.toLowerCase(),
@@ -88,6 +94,9 @@ export async function GET(req: Request) {
     },
     orderBy: { openedAt: "desc" },
     include: {
+      table: {
+        select: { tableNo: true },
+      },
       tag: {
         include: { assignment: true },
       },
@@ -98,12 +107,60 @@ export async function GET(req: Request) {
 }
 
 export async function POST(req: Request) {
-  const { sessionId, origin, tagId } = await req.json()
+  const body = await req.json()
+  const sessionId =
+    typeof body?.sessionId === "string"
+      ? body.sessionId.trim()
+      : undefined
+  const originRaw =
+    typeof body?.origin === "string"
+      ? body.origin
+      : undefined
+  const origin = originRaw?.toUpperCase()
+  const tagId =
+    typeof body?.tagId === "string"
+      ? body.tagId.trim()
+      : undefined
+
+  if (
+    origin &&
+    origin !== "STAFF" &&
+    origin !== "CUSTOMER"
+  ) {
+    return NextResponse.json(
+      { error: "BAD_REQUEST" },
+      { status: 400 }
+    )
+  }
+
+  if (
+    (sessionId && sessionId.length > 128) ||
+    (tagId && tagId.length > 128)
+  ) {
+    return NextResponse.json(
+      { error: "BAD_REQUEST" },
+      { status: 400 }
+    )
+  }
+
+  if (origin === "STAFF") {
+    try {
+      requireStaff(req)
+    } catch {
+      return NextResponse.json(
+        { error: "UNAUTHORIZED" },
+        { status: 401 }
+      )
+    }
+  }
 
   if (sessionId) {
     const existing = await prisma.session.findUnique({
       where: { id: sessionId },
       include: {
+        table: {
+          select: { tableNo: true },
+        },
         tag: {
           include: { assignment: true },
         },
@@ -112,6 +169,10 @@ export async function POST(req: Request) {
     })
     if (!existing) {
       return NextResponse.json({ error: "SESSION_NOT_FOUND" }, { status: 404 })
+    }
+
+    if (tagId && existing.tagId !== tagId) {
+      return NextResponse.json({ error: "FORBIDDEN" }, { status: 403 })
     }
 
     if (
@@ -139,16 +200,19 @@ export async function POST(req: Request) {
       })
     }
 
+    const existingTableGroup = await getTableGroupForTag(existing.tagId)
+    const masterTableId = existingTableGroup?.master.id ?? null
+
     const resumed = await prisma.session.update({
       where: { id: existing.id },
       data: {
         lastActivityAt: new Date(),
-        tableId:
-          existing.tableId ??
-          existing.tag.assignment?.id ??
-          null,
+        tableId: masterTableId,
       },
       include: {
+        table: {
+          select: { tableNo: true },
+        },
         tag: {
           include: { assignment: true },
         },
@@ -165,13 +229,9 @@ export async function POST(req: Request) {
   }
 
   const resolvedTagId = await ensureTagId(tagId, origin)
-  const tag = await prisma.nfcTag.findUnique({
-    where: { id: resolvedTagId },
-    include: { assignment: true },
-  })
-
-  const tableId = tag?.assignment?.id ?? null
-  if (tag?.assignment?.closedAt) {
+  const tagTableGroup = await getTableGroupForTag(resolvedTagId)
+  const tableId = tagTableGroup?.master.id ?? null
+  if (tagTableGroup && isTableGroupClosed(tagTableGroup)) {
     return NextResponse.json(
       { error: "TABLE_CLOSED" },
       { status: 409 }
@@ -185,6 +245,9 @@ export async function POST(req: Request) {
     },
     orderBy: { lastActivityAt: "desc" },
     include: {
+      table: {
+        select: { tableNo: true },
+      },
       tag: {
         include: { assignment: true },
       },
@@ -202,12 +265,12 @@ export async function POST(req: Request) {
       where: { id: activeForTag.id },
       data: {
         lastActivityAt: new Date(),
-        tableId:
-          activeForTag.tableId ??
-          activeForTag.tag.assignment?.id ??
-          null,
+        tableId,
       },
       include: {
+        table: {
+          select: { tableNo: true },
+        },
         tag: {
           include: { assignment: true },
         },
@@ -247,6 +310,9 @@ export async function POST(req: Request) {
       lastActivityAt: new Date(),
     },
     include: {
+      table: {
+        select: { tableNo: true },
+      },
       tag: {
         include: { assignment: true },
       },

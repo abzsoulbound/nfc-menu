@@ -4,6 +4,7 @@ import {
   ASSIST_EDIT_UNLOCK_MS,
   MEMBER_INACTIVE_MS,
   SESSION_IDLE_TIMEOUT_MS,
+  UNCONFIRMED_ITEM_EXPIRY_MS,
 } from '@/lib/constants'
 import {
   getEditClientKey,
@@ -11,6 +12,7 @@ import {
   getEditHardActivityAt,
   stripInternalEditMeta,
 } from '@/lib/itemEdits'
+import { appendSystemEvent } from '@/lib/events'
 
 function normalizeClientKey(value: unknown): string | null {
   if (typeof value !== 'string') return null
@@ -53,7 +55,49 @@ export async function POST(req: Request) {
     SESSION_IDLE_TIMEOUT_MS
   const nowMs = Date.now()
 
-  const items = cart.items.map(item => {
+  const expiredUnconfirmedItemIds = cart.items
+    .filter(item => {
+      const ownerClientKey = getEditClientKey(item.edits)
+      if (!ownerClientKey) return false
+      if (isEditConfirmed(item.edits)) return false
+
+      const hardActivityAt =
+        getEditHardActivityAt(item.edits) ??
+        item.updatedAt.toISOString()
+      const idleForMs =
+        nowMs - new Date(hardActivityAt).getTime()
+      return idleForMs >= UNCONFIRMED_ITEM_EXPIRY_MS
+    })
+    .map(item => item.id)
+
+  let activeCartItems = cart.items
+  if (expiredUnconfirmedItemIds.length > 0) {
+    await prisma.cartItem.deleteMany({
+      where: {
+        cartId: cart.id,
+        id: { in: expiredUnconfirmedItemIds },
+      },
+    })
+    const expiredIdSet = new Set(expiredUnconfirmedItemIds)
+    activeCartItems = cart.items.filter(
+      item => !expiredIdSet.has(item.id)
+    )
+
+    await appendSystemEvent(
+      'member_items_expired',
+      {
+        sessionId,
+        itemCount: expiredUnconfirmedItemIds.length,
+      },
+      {
+        req,
+        sessionId,
+        tableId: cart.session.tableId,
+      }
+    )
+  }
+
+  const items = activeCartItems.map(item => {
     const ownerClientKey = getEditClientKey(item.edits)
     const confirmed = isEditConfirmed(item.edits)
     const hardActivityAt =

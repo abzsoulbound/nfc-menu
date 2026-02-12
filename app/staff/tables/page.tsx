@@ -5,6 +5,10 @@ import { Card } from "@/components/ui/Card"
 import { Badge } from "@/components/ui/Badge"
 import { Divider } from "@/components/ui/Divider"
 import { TableAssignment } from "@/components/staff/TableAssignment"
+import {
+  BillingData,
+  BillingSplitPanel,
+} from "@/components/staff/BillingSplitPanel"
 
 type Table = {
   id: string
@@ -26,6 +30,9 @@ export default function StaffTablesPage() {
   const [tables, setTables] = useState<Table[]>([])
   const [tags, setTags] = useState<Tag[]>([])
   const [activeTable, setActiveTable] = useState<Table | null>(null)
+  const [billingData, setBillingData] = useState<BillingData | null>(null)
+  const [billingLoading, setBillingLoading] = useState(false)
+  const [billingError, setBillingError] = useState<string | null>(null)
 
   async function parseArrayResponse<T>(
     res: Response
@@ -41,11 +48,33 @@ export default function StaffTablesPage() {
     }
   }
 
+  async function parseObjectResponse<T>(
+    res: Response
+  ): Promise<T | null> {
+    const raw = await res.text()
+    if (!raw) return null
+
+    try {
+      const parsed = JSON.parse(raw) as unknown
+      if (!parsed || typeof parsed !== "object") return null
+      return parsed as T
+    } catch {
+      return null
+    }
+  }
+
   async function fetchTables() {
     try {
       const res = await fetch("/api/tables", { cache: "no-store" })
       const data = await parseArrayResponse<Table>(res)
       setTables(data)
+      setActiveTable(current => {
+        if (!current) return current
+        return (
+          data.find(table => table.number === current.number) ??
+          current
+        )
+      })
     } catch {
       // keep existing values on transient failures
     }
@@ -61,15 +90,77 @@ export default function StaffTablesPage() {
     }
   }
 
+  async function fetchBilling(
+    tableNumber: number,
+    options?: { silent?: boolean }
+  ) {
+    const silent = options?.silent === true
+    if (!silent) {
+      setBillingLoading(true)
+    }
+
+    try {
+      const res = await fetch(
+        `/api/billing?tableNumber=${tableNumber}`,
+        {
+          cache: "no-store",
+        }
+      )
+
+      if (!res.ok) {
+        const payload = await parseObjectResponse<{
+          error?: string
+        }>(res)
+        setBillingData(null)
+        setBillingError(payload?.error ?? "BILLING_FETCH_FAILED")
+        return
+      }
+
+      const payload = await parseObjectResponse<BillingData>(res)
+      if (!payload) {
+        setBillingData(null)
+        setBillingError("BILLING_PARSE_FAILED")
+        return
+      }
+
+      setBillingData(payload)
+      setBillingError(null)
+    } catch {
+      if (!silent) {
+        setBillingData(null)
+        setBillingError("BILLING_FETCH_FAILED")
+      }
+    } finally {
+      if (!silent) {
+        setBillingLoading(false)
+      }
+    }
+  }
+
   useEffect(() => {
     fetchTables()
     fetchTags()
+
+    const activeTableNumber = activeTable?.number
     const interval = setInterval(() => {
       fetchTables()
       fetchTags()
+      if (activeTableNumber) {
+        fetchBilling(activeTableNumber, { silent: true })
+      }
     }, 5000)
     return () => clearInterval(interval)
-  }, [])
+  }, [activeTable?.number])
+
+  useEffect(() => {
+    if (!activeTable) {
+      setBillingData(null)
+      setBillingError(null)
+      setBillingLoading(false)
+      return
+    }
+    fetchBilling(activeTable.number)
+  }, [activeTable?.number])
 
   function minutesSince(ts: string) {
     return Math.floor(
@@ -99,6 +190,8 @@ export default function StaffTablesPage() {
       }),
     })
     setActiveTable(null)
+    setBillingData(null)
+    setBillingError(null)
     fetchTables()
   }
 
@@ -130,6 +223,15 @@ export default function StaffTablesPage() {
           tags={assignedTags}
           allTags={tags}
           onChange={fetchTags}
+        />
+
+        <BillingSplitPanel
+          data={billingData}
+          loading={billingLoading}
+          error={billingError}
+          onRefresh={() => {
+            fetchBilling(activeTable.number)
+          }}
         />
 
         <Divider />

@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { requireStaff } from '@/lib/auth'
 import { appendSystemEvent } from '@/lib/events'
+import { getTableGroupByAssignmentId } from '@/lib/tableGroups'
 
 export async function POST(req: Request) {
   try {
@@ -15,10 +16,23 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'BAD_REQUEST' }, { status: 400 })
   }
 
-  const table = await prisma.tableAssignment.update({
-    where: { id: tableId },
+  const tableGroup = await getTableGroupByAssignmentId(tableId)
+  if (!tableGroup) {
+    return NextResponse.json(
+      { error: 'TABLE_NOT_FOUND' },
+      { status: 404 }
+    )
+  }
+  const groupTableIds = tableGroup.assignments.map(
+    assignment => assignment.id
+  )
+  const masterTableId = tableGroup.master.id
+  const closedAt = new Date()
+
+  await prisma.tableAssignment.updateMany({
+    where: { id: { in: groupTableIds } },
     data: {
-      closedAt: new Date(),
+      closedAt,
       closedPaid: false,
       locked: true
     }
@@ -26,27 +40,31 @@ export async function POST(req: Request) {
 
   await prisma.session.updateMany({
     where: {
-      tableId,
+      tableId: { in: groupTableIds },
       status: 'ACTIVE'
     },
     data: {
       status: 'CLOSED',
-      closedAt: new Date()
+      closedAt
     }
   })
 
   await appendSystemEvent(
     'table_closed',
-    { tableId, paid: false },
-    { req, tableId }
+    {
+      tableId: masterTableId,
+      paid: false,
+      groupedTableIds: groupTableIds
+    },
+    { req, tableId: masterTableId }
   )
 
   return NextResponse.json({
     closed: true,
     table: {
-      id: table.id,
-      closedAt: table.closedAt,
-      closedPaid: table.closedPaid
+      id: masterTableId,
+      closedAt,
+      closedPaid: false
     }
   })
 }

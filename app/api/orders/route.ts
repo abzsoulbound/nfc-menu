@@ -6,6 +6,7 @@ import { appendSystemEvent } from "@/lib/events"
 import {
   MEMBER_INACTIVE_MS,
   SESSION_IDLE_TIMEOUT_MS,
+  UNCONFIRMED_ITEM_EXPIRY_MS,
 } from "@/lib/constants"
 import {
   getEditClientKey,
@@ -14,6 +15,12 @@ import {
   stripInternalEditMeta,
   withEditClientKey,
 } from "@/lib/itemEdits"
+import {
+  getTableGroupByAssignmentId,
+  getTableGroupForTag,
+  isTableGroupClosed,
+  isTableGroupLocked,
+} from "@/lib/tableGroups"
 
 type SubmitItem = {
   itemId?: string
@@ -98,6 +105,21 @@ async function resolveCustomerSession({
   return session
 }
 
+async function resolveSessionTableGroup(input: {
+  tableId?: string | null
+  tagId?: string | null
+}) {
+  if (input.tableId) {
+    const byTable = await getTableGroupByAssignmentId(input.tableId)
+    if (byTable) return byTable
+  }
+  if (input.tagId) {
+    const byTag = await getTableGroupForTag(input.tagId)
+    if (byTag) return byTag
+  }
+  return null
+}
+
 async function syncOrderStatus(orderId: string) {
   const items = await prisma.orderItem.findMany({
     where: { orderId },
@@ -134,19 +156,33 @@ export async function GET(req: Request) {
       return NextResponse.json({ items: [] })
     }
 
-    const orderWhere: Prisma.OrderWhereInput = session.tableId
-      ? {
-          tableId: session.tableId,
-          status: {
-            in: ["PENDING", "IN_PROGRESS", "COMPLETED"],
-          },
-        }
-      : {
-          sessionId: session.id,
-          status: {
-            in: ["PENDING", "IN_PROGRESS", "COMPLETED"],
-          },
-        }
+    const tableGroup = await resolveSessionTableGroup({
+      tableId: session.tableId,
+      tagId: session.tagId,
+    })
+    const groupedTableIds =
+      tableGroup?.assignments.map(assignment => assignment.id) ?? []
+    const orderWhere: Prisma.OrderWhereInput =
+      groupedTableIds.length > 0
+        ? {
+            tableId: { in: groupedTableIds },
+            status: {
+              in: ["PENDING", "IN_PROGRESS", "COMPLETED"],
+            },
+          }
+        : session.tableId
+        ? {
+            tableId: session.tableId,
+            status: {
+              in: ["PENDING", "IN_PROGRESS", "COMPLETED"],
+            },
+          }
+        : {
+            sessionId: session.id,
+            status: {
+              in: ["PENDING", "IN_PROGRESS", "COMPLETED"],
+            },
+          }
 
     const orders = await prisma.order.findMany({
       where: orderWhere,
@@ -193,6 +229,7 @@ export async function GET(req: Request) {
     return NextResponse.json({
       sessionId: session.id,
       tableId: session.tableId,
+      tableNumber: tableGroup?.tableNo ?? null,
       firstSubmittedAt: orders[0]?.createdAt.toISOString() ?? null,
       items,
     })
@@ -374,10 +411,13 @@ export async function POST(req: Request) {
           })
         }
 
+        const tagTableGroup = await getTableGroupForTag(tag.id)
+        const masterTableId = tagTableGroup?.master.id ?? null
+
         session = await prisma.session.create({
           data: {
             tagId: tag.id,
-            tableId: tag.assignment?.id ?? null,
+            tableId: masterTableId,
             status: "ACTIVE",
             openedAt: new Date(),
             lastActivityAt: new Date(),
@@ -398,7 +438,7 @@ export async function POST(req: Request) {
           {
             req,
             sessionId: session.id,
-            tableId: session.tableId,
+            tableId: masterTableId,
           }
         )
 
@@ -421,17 +461,17 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "SESSION_NOT_FOUND" }, { status: 404 })
     }
 
-    const table = session?.tableId
-      ? await prisma.tableAssignment.findUnique({
-          where: { id: session.tableId },
-        })
-      : tag?.assignment ?? null
+    const tableGroup = await resolveSessionTableGroup({
+      tableId: session.tableId,
+      tagId: session.tagId,
+    })
+    const table = tableGroup?.master ?? null
 
     if (!table) {
       return NextResponse.json({ error: "TABLE_NOT_ASSIGNED" }, { status: 400 })
     }
 
-    if (!session.tableId) {
+    if (session.tableId !== table.id) {
       await prisma.session.update({
         where: { id: session.id },
         data: { tableId: table.id },
@@ -442,10 +482,10 @@ export async function POST(req: Request) {
       }
     }
 
-    if (table.closedAt) {
+    if (tableGroup && isTableGroupClosed(tableGroup)) {
       return NextResponse.json({ error: "TABLE_CLOSED" }, { status: 409 })
     }
-    if (table.locked) {
+    if (tableGroup && isTableGroupLocked(tableGroup)) {
       return NextResponse.json({ error: "TABLE_LOCKED" }, { status: 423 })
     }
 
@@ -470,13 +510,21 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "SESSION_STALE" }, { status: 410 })
     }
 
-    if (session.cart?.items.length) {
-      const confirmationByMember = new Map<
-        string,
-        { confirmed: boolean; hardActivityAt: string }
-      >()
+    const memberConfirmationByClientKey = new Map<
+      string,
+      {
+        confirmed: boolean
+        hardActivityAt: string
+        inactive: boolean
+        expired: boolean
+      }
+    >()
+    const sessionCartItems = session?.cart?.items ?? []
+    let effectiveSessionCartItems = sessionCartItems
+
+    if (sessionCartItems.length > 0) {
       const nowMs = Date.now()
-      for (const cartItem of session.cart.items) {
+      for (const cartItem of sessionCartItems) {
         const ownerClientKey = getEditClientKey(cartItem.edits)
         if (!ownerClientKey) continue
 
@@ -484,11 +532,14 @@ export async function POST(req: Request) {
         const hardActivityAt =
           getEditHardActivityAt(cartItem.edits) ??
           cartItem.updatedAt.toISOString()
-        const existing = confirmationByMember.get(ownerClientKey)
+        const existing =
+          memberConfirmationByClientKey.get(ownerClientKey)
         if (!existing) {
-          confirmationByMember.set(ownerClientKey, {
+          memberConfirmationByClientKey.set(ownerClientKey, {
             confirmed,
             hardActivityAt,
+            inactive: false,
+            expired: false,
           })
           continue
         }
@@ -499,19 +550,69 @@ export async function POST(req: Request) {
             ? hardActivityAt
             : existing.hardActivityAt
 
-        confirmationByMember.set(ownerClientKey, {
+        memberConfirmationByClientKey.set(ownerClientKey, {
           confirmed: existing.confirmed && confirmed,
           hardActivityAt: nextHardActivityAt,
+          inactive: false,
+          expired: false,
         })
       }
 
-      const activeMembers = Array.from(
-        confirmationByMember.values()
-      ).filter(member => {
+      const activeMembers: Array<{ confirmed: boolean }> = []
+      for (const [clientKey, member] of memberConfirmationByClientKey.entries()) {
         const idleForMs =
           nowMs - new Date(member.hardActivityAt).getTime()
-        return idleForMs < MEMBER_INACTIVE_MS
-      })
+        const inactive = idleForMs >= MEMBER_INACTIVE_MS
+        const expired =
+          !member.confirmed &&
+          idleForMs >= UNCONFIRMED_ITEM_EXPIRY_MS
+        memberConfirmationByClientKey.set(clientKey, {
+          ...member,
+          inactive,
+          expired,
+        })
+        if (!inactive && !expired) {
+          activeMembers.push({ confirmed: member.confirmed })
+        }
+      }
+
+      const expiredUnconfirmedItemIds = sessionCartItems
+        .filter(cartItem => {
+          const ownerClientKey = getEditClientKey(cartItem.edits)
+          if (!ownerClientKey) return false
+          const member =
+            memberConfirmationByClientKey.get(ownerClientKey)
+          if (!member) return false
+          return member.expired && !member.confirmed
+        })
+        .map(item => item.id)
+
+      if (expiredUnconfirmedItemIds.length > 0 && session.cart) {
+        await prisma.cartItem.deleteMany({
+          where: {
+            cartId: session.cart.id,
+            id: { in: expiredUnconfirmedItemIds },
+          },
+        })
+        const expiredSet = new Set(expiredUnconfirmedItemIds)
+        effectiveSessionCartItems = sessionCartItems.filter(
+          item => !expiredSet.has(item.id)
+        )
+
+        await appendSystemEvent(
+          "member_items_expired",
+          {
+            sessionId: session.id,
+            itemCount: expiredUnconfirmedItemIds.length,
+          },
+          {
+            req,
+            sessionId: session.id,
+            tableId: table.id,
+          }
+        )
+      }
+
       const unconfirmedMemberCount = activeMembers.filter(
         member => !member.confirmed
       ).length
@@ -527,10 +628,30 @@ export async function POST(req: Request) {
       }
     }
 
+    const sendableSessionCartItems = effectiveSessionCartItems.filter(item => {
+      const ownerClientKey = getEditClientKey(item.edits)
+      if (!ownerClientKey) return true
+
+      const member =
+        memberConfirmationByClientKey.get(ownerClientKey)
+      if (!member) return false
+      return member.confirmed
+    })
+    const skippedUnconfirmedInactiveItemCount =
+      effectiveSessionCartItems.filter(item => {
+        const ownerClientKey = getEditClientKey(item.edits)
+        if (!ownerClientKey) return false
+        const member =
+          memberConfirmationByClientKey.get(ownerClientKey)
+        if (!member) return false
+        return (member.inactive || member.expired) && !member.confirmed
+      }).length
+
+    const sentCartItemIds = sendableSessionCartItems.map(i => i.id)
+
     const submittedItems: SubmitItem[] =
-      Array.isArray(items) && items.length > 0
-        ? items
-        : (session?.cart?.items.map(i => ({
+      effectiveSessionCartItems.length > 0
+        ? sendableSessionCartItems.map(i => ({
             itemId: i.id,
             menuItemId: i.menuItemId ?? undefined,
             name: i.name,
@@ -542,9 +663,19 @@ export async function POST(req: Request) {
             unitPrice: i.unitPrice,
             vatRate: i.vatRate,
             station: i.station,
-          })) ?? [])
+          }))
+        : Array.isArray(items) && items.length > 0
+        ? items
+        : []
 
     if (submittedItems.length === 0) {
+      if (sessionCartItems.length > 0) {
+        return NextResponse.json({
+          orderIds: [],
+          ticketId: null,
+          skippedUnconfirmedInactiveItemCount,
+        })
+      }
       return NextResponse.json({ error: "EMPTY_ORDER" }, { status: 400 })
     }
 
@@ -644,9 +775,12 @@ export async function POST(req: Request) {
       )
     }
 
-    if (session.cart) {
+    if (session.cart && sentCartItemIds.length > 0) {
       await prisma.cartItem.deleteMany({
-        where: { cartId: session.cart.id },
+        where: {
+          cartId: session.cart.id,
+          id: { in: sentCartItemIds },
+        },
       })
     }
 
@@ -658,6 +792,7 @@ export async function POST(req: Request) {
     return NextResponse.json({
       orderIds: createdOrderIds,
       ticketId: createdOrderIds[0] ?? null,
+      skippedUnconfirmedInactiveItemCount,
     })
   } catch (error) {
     const detail =

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { requireStaff } from "@/lib/auth"
 import { appendSystemEvent } from "@/lib/events"
+import { getTableGroupByAssignmentId } from "@/lib/tableGroups"
 
 export async function POST(req: Request) {
   try {
@@ -15,52 +16,66 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "BAD_REQUEST" }, { status: 400 })
   }
 
+  const tableGroup = await getTableGroupByAssignmentId(tableId)
+  if (!tableGroup) {
+    return NextResponse.json(
+      { error: "TABLE_NOT_FOUND" },
+      { status: 404 }
+    )
+  }
+  const groupTableIds = tableGroup.assignments.map(
+    assignment => assignment.id
+  )
+  const masterTableId = tableGroup.master.id
+
   if (action === "LOCK_TABLE") {
-    const table = await prisma.tableAssignment.update({
-      where: { id: tableId },
+    await prisma.tableAssignment.updateMany({
+      where: { id: { in: groupTableIds } },
       data: { locked: true },
     })
     await appendSystemEvent(
       "table_locked",
-      { tableId },
-      { req, tableId }
+      { tableId: masterTableId, groupedTableIds: groupTableIds },
+      { req, tableId: masterTableId }
     )
     return NextResponse.json({
       ok: true,
       action,
       table: {
-        id: table.id,
-        locked: table.locked,
+        id: masterTableId,
+        locked: true,
       },
     })
   }
 
   if (action === "UNLOCK_TABLE") {
-    const table = await prisma.tableAssignment.update({
-      where: { id: tableId },
+    await prisma.tableAssignment.updateMany({
+      where: { id: { in: groupTableIds } },
       data: { locked: false },
     })
     await appendSystemEvent(
       "table_unlocked",
-      { tableId },
-      { req, tableId }
+      { tableId: masterTableId, groupedTableIds: groupTableIds },
+      { req, tableId: masterTableId }
     )
     return NextResponse.json({
       ok: true,
       action,
       table: {
-        id: table.id,
-        locked: table.locked,
+        id: masterTableId,
+        locked: false,
       },
     })
   }
 
   if (action === "CLOSE_PAID" || action === "CLOSE_UNPAID") {
     const paid = action === "CLOSE_PAID"
-    const table = await prisma.tableAssignment.update({
-      where: { id: tableId },
+    const closedAt = new Date()
+
+    await prisma.tableAssignment.updateMany({
+      where: { id: { in: groupTableIds } },
       data: {
-        closedAt: new Date(),
+        closedAt,
         closedPaid: paid,
         locked: true,
       },
@@ -68,29 +83,29 @@ export async function POST(req: Request) {
 
     await prisma.session.updateMany({
       where: {
-        tableId,
+        tableId: { in: groupTableIds },
         status: "ACTIVE",
       },
       data: {
         status: paid ? "PAID" : "CLOSED",
-        closedAt: new Date(),
+        closedAt,
       },
     })
 
     await appendSystemEvent(
       "table_closed",
-      { tableId, paid },
-      { req, tableId }
+      { tableId: masterTableId, paid, groupedTableIds: groupTableIds },
+      { req, tableId: masterTableId }
     )
 
     return NextResponse.json({
       ok: true,
       action,
       table: {
-        id: table.id,
-        locked: table.locked,
-        closedAt: table.closedAt,
-        closedPaid: table.closedPaid,
+        id: masterTableId,
+        locked: true,
+        closedAt,
+        closedPaid: paid,
       },
     })
   }
@@ -113,14 +128,23 @@ export async function PUT(req: Request) {
     return NextResponse.json({ error: "BAD_REQUEST" }, { status: 400 })
   }
 
+  const tableGroup = await getTableGroupByAssignmentId(tableId)
+  if (!tableGroup) {
+    return NextResponse.json(
+      { error: "TABLE_NOT_FOUND" },
+      { status: 404 }
+    )
+  }
+  const masterTableId = tableGroup.master.id
+
   await appendSystemEvent(
     "staff_message_sent",
     {
-      tableId,
+      tableId: masterTableId,
       target,
       message,
     },
-    { req, tableId }
+    { req, tableId: masterTableId }
   )
 
   return NextResponse.json({ sent: true })

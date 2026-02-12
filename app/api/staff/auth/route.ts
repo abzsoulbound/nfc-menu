@@ -20,17 +20,6 @@ function isAuthDemoBypassEnabled() {
   return value === "1" || value === "true"
 }
 
-function getDemoAutoRefreshMs() {
-  const raw =
-    process.env.DEMO_AUTO_REFRESH_MS ??
-    process.env.NEXT_PUBLIC_AUTO_REFRESH_MS
-  const parsed = Number(raw ?? "")
-  if (!Number.isFinite(parsed) || parsed < 1000) {
-    return 0
-  }
-  return Math.floor(parsed)
-}
-
 function readFailures(req: Request) {
   const raw = req.headers.get("cookie")
   if (!raw) return 0
@@ -138,7 +127,6 @@ export async function GET(req: Request) {
       failures: 0,
       remaining: MAX_FAILED_ATTEMPTS,
       demoBypass: true,
-      autoRefreshMs: getDemoAutoRefreshMs(),
     })
   }
 
@@ -159,7 +147,6 @@ export async function GET(req: Request) {
     failures,
     remaining: Math.max(0, MAX_FAILED_ATTEMPTS - failures),
     demoBypass: false,
-    autoRefreshMs: 0,
   })
 }
 

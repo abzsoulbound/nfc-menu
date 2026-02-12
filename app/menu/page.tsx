@@ -140,7 +140,7 @@ export default function PublicMenuPage() {
     }
 
     loadMenu()
-    const interval = setInterval(loadMenu, 5000)
+    const interval = setInterval(loadMenu, 15000)
     return () => {
       cancelled = true
       clearInterval(interval)
@@ -161,24 +161,6 @@ export default function PublicMenuPage() {
 
   return (
     <div className="menu-page">
-      <div className="menu-hero">
-        <div className="menu-logo-wrap">
-          <img
-            src="/images/marlos-logo.png"
-            alt="Marlo's Brasserie"
-            className="menu-logo"
-            loading="eager"
-            decoding="async"
-            onError={(event) => {
-              event.currentTarget.style.display = "none"
-              const fallback = event.currentTarget.nextElementSibling as HTMLElement | null
-              if (fallback) fallback.style.display = "block"
-            }}
-          />
-          <div className="menu-logo-fallback">Marlo&apos;s Brasserie</div>
-        </div>
-      </div>
-
       {locked && (
         <div className="menu-lock-banner">
           Menu is currently locked during service.

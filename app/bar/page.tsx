@@ -73,7 +73,7 @@ export default function BarDashboard() {
 
   useEffect(() => {
     fetchQueue()
-    const interval = setInterval(fetchQueue, 5000)
+    const interval = setInterval(fetchQueue, 3000)
     return () => clearInterval(interval)
   }, [])
 

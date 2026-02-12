@@ -99,8 +99,7 @@ export default function TableReviewPage({
   useEffect(() => {
     fetchTable()
 
-    let interval = 5000
-    const timer = setInterval(fetchTable, interval)
+    const timer = setInterval(fetchTable, 3000)
 
     return () => clearInterval(timer)
   }, [tableNumber])

@@ -2,9 +2,21 @@ import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { SESSION_IDLE_TIMEOUT_MS } from '@/lib/constants'
 import { appendSystemEvent } from '@/lib/events'
+import {
+  getTableGroupForTag,
+  isTableGroupClosed,
+} from '@/lib/tableGroups'
 
 export async function POST(req: Request) {
-  const { tagId } = await req.json()
+  const body = await req.json()
+  const tagId =
+    typeof body?.tagId === 'string'
+      ? body.tagId.trim()
+      : ''
+
+  if (tagId.length > 128) {
+    return NextResponse.json({ error: 'BAD_REQUEST' }, { status: 400 })
+  }
   if (!tagId) {
     return NextResponse.json({ error: 'BAD_REQUEST' }, { status: 400 })
   }
@@ -23,8 +35,14 @@ export async function POST(req: Request) {
     where: { id: tagId },
     include: { assignment: true }
   })
+  const resolvedTableGroup = await getTableGroupForTag(tagId)
+  const masterTableId = resolvedTableGroup?.master.id ?? null
+  const tableNumber = resolvedTableGroup?.tableNo ?? null
 
-  if (resolvedTag?.assignment?.closedAt) {
+  if (
+    resolvedTag?.assignment?.closedAt ||
+    (resolvedTableGroup && isTableGroupClosed(resolvedTableGroup))
+  ) {
     return NextResponse.json({ error: 'TABLE_CLOSED' }, { status: 409 })
   }
 
@@ -51,7 +69,7 @@ export async function POST(req: Request) {
       where: { id: existing.id },
       data: {
         lastActivityAt: new Date(),
-        tableId: existing.tableId ?? resolvedTag?.assignment?.id ?? null
+        tableId: masterTableId
       }
     })
 
@@ -65,7 +83,8 @@ export async function POST(req: Request) {
       sessionId: resumed.id,
       id: resumed.id,
       status: resumed.status.toLowerCase(),
-      tableId: resumed.tableId
+      tableId: resumed.tableId,
+      tableNumber
     })
   }
 
@@ -88,7 +107,7 @@ export async function POST(req: Request) {
   const session = await prisma.session.create({
     data: {
       tagId,
-      tableId: resolvedTag?.assignment?.id ?? null,
+      tableId: masterTableId,
       status: 'ACTIVE',
       openedAt: new Date(),
       lastActivityAt: new Date()
@@ -105,5 +124,10 @@ export async function POST(req: Request) {
     { req, sessionId: session.id, tableId: session.tableId }
   )
 
-  return NextResponse.json({ sessionId: session.id, id: session.id })
+  return NextResponse.json({
+    sessionId: session.id,
+    id: session.id,
+    tableId: session.tableId,
+    tableNumber
+  })
 }

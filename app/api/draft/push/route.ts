@@ -1,8 +1,22 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import { requireStaff } from '@/lib/auth'
 
 export async function POST(req: Request) {
-  const { sessionId } = await req.json()
+  try {
+    requireStaff(req)
+  } catch {
+    return NextResponse.json({ error: 'UNAUTHORIZED' }, { status: 401 })
+  }
+
+  const body = await req.json()
+  const sessionId =
+    typeof body?.sessionId === 'string'
+      ? body.sessionId.trim()
+      : ''
+  if (!sessionId) {
+    return NextResponse.json({ error: 'BAD_REQUEST' }, { status: 400 })
+  }
 
   const session = await prisma.session.findUnique({
     where: { id: sessionId },

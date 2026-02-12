@@ -51,6 +51,8 @@ export default function TagPage({ params }: { params: { tagId: string } }) {
   const menuCacheKey = "nfc-pos.menu-cache.v1"
   const sessionCacheKey = `nfc-pos.tag-session.${params.tagId}`
   const localCartKey = `nfc-pos.local-cart.${params.tagId}`
+  const tableNumberCacheKey = `nfc-pos.table-number.${params.tagId}`
+  const currentTableNumberKey = "nfc-pos.table-number.current"
   const clientKeyStorage = "nfc-pos.client-key.v1"
   const [menu, setMenu] = useState<MenuSectionType[]>([])
   const [menuLocked, setMenuLocked] = useState(false)
@@ -86,6 +88,13 @@ export default function TagPage({ params }: { params: { tagId: string } }) {
     Boolean(value && value.startsWith("local:"))
 
   const createLocalSessionId = () => `local:${params.tagId}:${Date.now()}`
+  const notifyHeader = (
+    eventName: "nfc-cart-updated" | "nfc-table-updated"
+  ) => {
+    if (typeof window === "undefined") return
+    window.dispatchEvent(new Event(eventName))
+  }
+
   const ensureClientKey = () => {
     if (typeof window === "undefined") return null
 
@@ -104,6 +113,29 @@ export default function TagPage({ params }: { params: { tagId: string } }) {
       return next
     } catch {
       return null
+    }
+  }
+
+  const persistTableNumber = (value: unknown) => {
+    const nextTableNumber = Number(value)
+
+    try {
+      if (Number.isInteger(nextTableNumber) && nextTableNumber > 0) {
+        localStorage.setItem(
+          tableNumberCacheKey,
+          String(nextTableNumber)
+        )
+        localStorage.setItem(
+          currentTableNumberKey,
+          String(nextTableNumber)
+        )
+      } else {
+        localStorage.removeItem(tableNumberCacheKey)
+      }
+    } catch {
+      // best-effort cache only
+    } finally {
+      notifyHeader("nfc-table-updated")
     }
   }
 
@@ -132,6 +164,8 @@ export default function TagPage({ params }: { params: { tagId: string } }) {
       )
     } catch {
       // best-effort local cache only
+    } finally {
+      notifyHeader("nfc-cart-updated")
     }
   }
 
@@ -154,6 +188,7 @@ export default function TagPage({ params }: { params: { tagId: string } }) {
       cartByKeyRef.current = local
       setCartByKey(local)
       setUsingLocalCart(true)
+      notifyHeader("nfc-cart-updated")
       return false
     }
 
@@ -212,6 +247,7 @@ export default function TagPage({ params }: { params: { tagId: string } }) {
       cartByKeyRef.current = local
       setCartByKey(local)
       setUsingLocalCart(true)
+      notifyHeader("nfc-cart-updated")
       return false
     }
   }
@@ -263,6 +299,7 @@ export default function TagPage({ params }: { params: { tagId: string } }) {
         const payload = await res.json()
         if (!mounted) return
         const sid = payload.sessionId as string
+        persistTableNumber(payload?.tableNumber)
         writeSessionCache(sid)
         setSessionId(sid)
         setGlobalSession(sid, "customer")
@@ -394,7 +431,7 @@ export default function TagPage({ params }: { params: { tagId: string } }) {
     }
 
     loadMenu()
-    const interval = setInterval(loadMenu, 5000)
+    const interval = setInterval(loadMenu, 15000)
     return () => {
       cancelled = true
       clearInterval(interval)
@@ -636,34 +673,13 @@ export default function TagPage({ params }: { params: { tagId: string } }) {
   if (loading || menuLoading) {
     return (
       <div className="order-page">
-        <div className="order-hero">
-          <p className="menu-eyebrow">Preparing Session</p>
-          <h1 className="order-title">Connecting your table</h1>
-        </div>
+        <div className="menu-empty-state">Connecting your table...</div>
       </div>
     )
   }
 
   return (
     <div className="menu-page">
-      <div className="menu-hero">
-        <div className="menu-logo-wrap">
-          <img
-            src="/images/marlos-logo.png"
-            alt="Marlo's Brasserie"
-            className="menu-logo"
-            loading="eager"
-            decoding="async"
-            onError={(event) => {
-              event.currentTarget.style.display = "none"
-              const fallback = event.currentTarget.nextElementSibling as HTMLElement | null
-              if (fallback) fallback.style.display = "block"
-            }}
-          />
-          <div className="menu-logo-fallback">Marlo&apos;s Brasserie</div>
-        </div>
-      </div>
-
       <div className="category-bar">
         {menu.map(section => (
           <button

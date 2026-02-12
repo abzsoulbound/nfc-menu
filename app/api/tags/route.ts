@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { requireStaff } from "@/lib/auth"
 import { appendSystemEvent } from "@/lib/events"
+import { getTableGroupByTableNo } from "@/lib/tableGroups"
 
 export async function GET(req: Request) {
   try {
@@ -47,8 +48,24 @@ export async function PATCH(req: Request) {
     return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 })
   }
 
-  const { tagId, tableId } = await req.json()
-  if (!tagId) {
+  const body = await req.json()
+  const tagId =
+    typeof body?.tagId === "string"
+      ? body.tagId.trim()
+      : ""
+  const tableIdRaw = body?.tableId
+  const tableId =
+    typeof tableIdRaw === "string"
+      ? tableIdRaw.trim()
+      : tableIdRaw === null
+      ? null
+      : undefined
+
+  if (
+    !tagId ||
+    tagId.length > 128 ||
+    tableId === undefined
+  ) {
     return NextResponse.json({ error: "BAD_REQUEST" }, { status: 400 })
   }
 
@@ -62,10 +79,47 @@ export async function PATCH(req: Request) {
     })
   }
 
+  const previousAssignment = await prisma.tableAssignment.findUnique({
+    where: { tagId },
+    select: {
+      tableNo: true,
+    },
+  })
+
   if (tableId === null) {
     await prisma.tableAssignment.deleteMany({
       where: { tagId },
     })
+    await prisma.session.updateMany({
+      where: {
+        tagId,
+        status: "ACTIVE",
+      },
+      data: {
+        tableId: null,
+      },
+    })
+
+    if (previousAssignment) {
+      const previousGroup = await getTableGroupByTableNo(
+        previousAssignment.tableNo
+      )
+      if (previousGroup) {
+        const previousGroupTagIds = previousGroup.assignments.map(
+          assignment => assignment.tagId
+        )
+        await prisma.session.updateMany({
+          where: {
+            tagId: { in: previousGroupTagIds },
+            status: "ACTIVE",
+          },
+          data: {
+            tableId: previousGroup.master.id,
+          },
+        })
+      }
+    }
+
     await appendSystemEvent(
       "tag_unassigned",
       { tagId },
@@ -87,16 +141,51 @@ export async function PATCH(req: Request) {
     update: { tableNo: table.tableNo },
     create: { tagId, tableNo: table.tableNo },
   })
+  const tableGroup = await getTableGroupByTableNo(table.tableNo)
+  const masterTableId = tableGroup?.master.id ?? assignment.id
+
+  await prisma.session.updateMany({
+    where: {
+      tagId,
+      status: "ACTIVE",
+    },
+    data: {
+      tableId: masterTableId,
+    },
+  })
+
+  if (
+    previousAssignment &&
+    previousAssignment.tableNo !== table.tableNo
+  ) {
+    const previousGroup = await getTableGroupByTableNo(
+      previousAssignment.tableNo
+    )
+    if (previousGroup) {
+      const previousGroupTagIds = previousGroup.assignments.map(
+        assignment => assignment.tagId
+      )
+      await prisma.session.updateMany({
+        where: {
+          tagId: { in: previousGroupTagIds },
+          status: "ACTIVE",
+        },
+        data: {
+          tableId: previousGroup.master.id,
+        },
+      })
+    }
+  }
 
   await appendSystemEvent(
     "tag_assigned",
     {
       tagId,
-      tableId,
+      tableId: masterTableId,
       tableNo: table.tableNo,
       assignmentId: assignment.id,
     },
-    { req, tableId: assignment.id }
+    { req, tableId: masterTableId }
   )
 
   return NextResponse.json(assignment)

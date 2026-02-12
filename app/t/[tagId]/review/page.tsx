@@ -84,10 +84,10 @@ function toStatus(value: unknown): ReviewStatus {
   return "pending"
 }
 
-function submittedStateLabel(status?: ReviewStatus) {
-  if (status === "completed") return "sent · completed"
-  if (status === "in_progress") return "sent · in progress"
-  return "sent"
+function serviceStateLabel(item: ReviewItem) {
+  if (item.status === "completed") return "delivered"
+  if (item.station === "BAR") return "in the bar"
+  return "in the kitchen"
 }
 
 function sameLineItem(a: ReviewItem, b: ReviewItem) {
@@ -111,6 +111,8 @@ export default function PerUserReviewPage({
   const router = useRouter()
   const tagId = params.tagId
   const localCartKey = `nfc-pos.local-cart.${tagId}`
+  const tableNumberCacheKey = `nfc-pos.table-number.${tagId}`
+  const currentTableNumberKey = "nfc-pos.table-number.current"
   const clientKeyStorage = "nfc-pos.client-key.v1"
 
   const { sessionId } = useSessionStore()
@@ -136,6 +138,13 @@ export default function PerUserReviewPage({
   const [importableLocalItems, setImportableLocalItems] = useState<ReviewItem[]>([])
   const [clientKey, setClientKey] = useState<string | null>(null)
 
+  const notifyHeader = (
+    eventName: "nfc-cart-updated" | "nfc-table-updated"
+  ) => {
+    if (typeof window === "undefined") return
+    window.dispatchEvent(new Event(eventName))
+  }
+
   const ensureClientKey = () => {
     if (typeof window === "undefined") return null
 
@@ -154,6 +163,29 @@ export default function PerUserReviewPage({
       return next
     } catch {
       return null
+    }
+  }
+
+  const persistTableNumber = (value: unknown) => {
+    const nextTableNumber = Number(value)
+
+    try {
+      if (Number.isInteger(nextTableNumber) && nextTableNumber > 0) {
+        localStorage.setItem(
+          tableNumberCacheKey,
+          String(nextTableNumber)
+        )
+        localStorage.setItem(
+          currentTableNumberKey,
+          String(nextTableNumber)
+        )
+      } else {
+        localStorage.removeItem(tableNumberCacheKey)
+      }
+    } catch {
+      // best-effort cache only
+    } finally {
+      notifyHeader("nfc-table-updated")
     }
   }
 
@@ -210,6 +242,8 @@ export default function PerUserReviewPage({
       localStorage.setItem(localCartKey, JSON.stringify(serializable))
     } catch {
       // best-effort cache only
+    } finally {
+      notifyHeader("nfc-cart-updated")
     }
   }
 
@@ -218,6 +252,8 @@ export default function PerUserReviewPage({
       localStorage.removeItem(localCartKey)
     } catch {
       // best-effort cache clear only
+    } finally {
+      notifyHeader("nfc-cart-updated")
     }
   }
 
@@ -258,6 +294,7 @@ export default function PerUserReviewPage({
       }
 
       const payload = await res.json()
+      persistTableNumber(payload?.tableNumber)
       const nextItems: ReviewItem[] = Array.isArray(payload?.items)
         ? (payload.items as any[])
             .map(item => ({
@@ -474,13 +511,50 @@ export default function PerUserReviewPage({
     refreshAll(true)
   }, [localCartKey, sessionId, clientKey])
 
+  useEffect(() => {
+    if (!sessionId) return
+
+    const timer = window.setInterval(() => {
+      void refreshAll(false)
+    }, 3000)
+
+    return () => window.clearInterval(timer)
+  }, [sessionId, clientKey])
+
   const isSharedSession = Boolean(
     sessionId && !sessionId.startsWith("local:")
   )
-  const mySubmittedItems = useMemo(
-    () => submittedItems.filter(item => item.isMine),
-    [submittedItems]
-  )
+  const isItemLockedByRequesterConfirmation = (
+    item: ReviewItem
+  ) => isSharedSession && requesterConfirmed && item.isMine
+  const canEditPendingItem = (item: ReviewItem) =>
+    !isItemLockedByRequesterConfirmation(item) &&
+    (item.isMine || item.canRequesterEdit === true)
+
+  const memberLabelByClientKey = useMemo(() => {
+    const map = new Map<string, string>()
+    let guestNumber = 1
+
+    for (const member of pendingMembers) {
+      if (member.isMine) continue
+      if (!map.has(member.clientKey)) {
+        map.set(member.clientKey, `Guest ${guestNumber}`)
+        guestNumber += 1
+      }
+    }
+
+    const fillFromItems = [...cartItems, ...submittedItems]
+    for (const item of fillFromItems) {
+      if (item.isMine) continue
+      const key = item.ownerClientKey
+      if (!key || map.has(key)) continue
+      map.set(key, `Guest ${guestNumber}`)
+      guestNumber += 1
+    }
+
+    return map
+  }, [pendingMembers, cartItems, submittedItems])
+
   const myPendingItems = useMemo(
     () => cartItems.filter(item => item.isMine),
     [cartItems]
@@ -489,8 +563,54 @@ export default function PerUserReviewPage({
     () => cartItems.filter(item => !item.isMine),
     [cartItems]
   )
-  const otherSubmittedItems = useMemo(
-    () => submittedItems.filter(item => !item.isMine),
+  const otherPendingGroups = useMemo(() => {
+    const grouped = new Map<string, ReviewItem[]>()
+    for (const item of otherPendingItems) {
+      const key = item.ownerClientKey ?? `unknown:${item.id}`
+      const existing = grouped.get(key) ?? []
+      existing.push(item)
+      grouped.set(key, existing)
+    }
+    return Array.from(grouped.entries()).map(([clientKey, items]) => {
+      const member = pendingMembers.find(
+        value => value.clientKey === clientKey
+      )
+      return {
+        clientKey,
+        items,
+        label:
+          memberLabelByClientKey.get(clientKey) ?? "Guest",
+        inactive: Boolean(member?.inactive),
+      }
+    })
+  }, [otherPendingItems, pendingMembers, memberLabelByClientKey])
+
+  const inKitchenItems = useMemo(
+    () =>
+      submittedItems.filter(
+        item => item.status !== "completed"
+      ),
+    [submittedItems]
+  )
+  const deliveredItems = useMemo(
+    () =>
+      submittedItems.filter(
+        item => item.status === "completed"
+      ),
+    [submittedItems]
+  )
+
+  const activePendingMembers = useMemo(
+    () => pendingMembers.filter(member => !member.inactive),
+    [pendingMembers]
+  )
+  const inactivePendingMembers = useMemo(
+    () => pendingMembers.filter(member => member.inactive),
+    [pendingMembers]
+  )
+
+  const mySubmittedItems = useMemo(
+    () => submittedItems.filter(item => item.isMine),
     [submittedItems]
   )
   const myVisibleItems = useMemo(
@@ -505,6 +625,11 @@ export default function PerUserReviewPage({
     submitting ||
     cartItems.length === 0 ||
     (isSharedSession && !allMembersConfirmed)
+  const ownerLabelForItem = (item: ReviewItem) => {
+    if (item.isMine) return "You"
+    if (!item.ownerClientKey) return "Guest"
+    return memberLabelByClientKey.get(item.ownerClientKey) ?? "Guest"
+  }
   const myTotals = calculateCartTotals(myVisibleItems)
   const tableTotals = calculateCartTotals(tableVisibleItems)
 
@@ -512,7 +637,7 @@ export default function PerUserReviewPage({
     if (cartItems.length === 0) return
     if (isSharedSession && !allMembersConfirmed) {
       setError(
-        "Every member with pending items must confirm before sending the table order."
+        "Every active member with pending items must confirm before sending the table order."
       )
       return
     }
@@ -589,7 +714,7 @@ export default function PerUserReviewPage({
           setError(
             count && count > 0
               ? `Not sent yet. Waiting for ${count} ${count === 1 ? "member" : "members"} to confirm pending items.`
-              : "Not sent yet. Waiting for all members to confirm their pending items."
+              : "Not sent yet. Waiting for all active members to confirm their pending items."
           )
           await refreshAll(false)
           return
@@ -700,7 +825,15 @@ export default function PerUserReviewPage({
   }
 
   async function setCartQty(item: ReviewItem, nextQty: number) {
-    if (nextQty < 0 || !item.isMine) return
+    if (nextQty < 0) return
+    if (!canEditPendingItem(item)) {
+      if (isItemLockedByRequesterConfirmation(item)) {
+        setError(
+          'Your pending items are confirmed. Tap "Edit items" to unconfirm before editing.'
+        )
+      }
+      return
+    }
 
     setUpdatingCartItemId(item.id)
     setError(null)
@@ -744,8 +877,23 @@ export default function PerUserReviewPage({
       })
       applyPendingState(pending)
     } catch (qtyError: any) {
+      const errorMessage = String(
+        qtyError?.message ?? "unknown"
+      )
+      if (errorMessage.includes("ITEM_CONFIRMED")) {
+        setError(
+          'Your pending items are confirmed. Tap "Edit items" to unconfirm before editing.'
+        )
+        return
+      }
+      if (errorMessage.includes("ASSIST_LOCKED")) {
+        setError(
+          "Assist edit unlocks after 2 minutes of owner inactivity."
+        )
+        return
+      }
       setError(
-        `Could not update cart item (${qtyError?.message ?? "unknown"}).`
+        `Could not update cart item (${errorMessage}).`
       )
     } finally {
       setUpdatingCartItemId(null)
@@ -757,6 +905,15 @@ export default function PerUserReviewPage({
   }
 
   function openEdit(item: ReviewItem) {
+    if (!canEditPendingItem(item)) {
+      if (isItemLockedByRequesterConfirmation(item)) {
+        setError(
+          'Your pending items are confirmed. Tap "Edit items" to unconfirm before editing.'
+        )
+      }
+      return
+    }
+
     setEditingItem(item)
     setEditDraft(getEditNote(item.edits))
   }
@@ -814,8 +971,12 @@ export default function PerUserReviewPage({
         setSubmittedItems(submitted.items)
         setFirstSubmittedAt(submitted.firstSubmittedAt)
       } else {
-        if (!editingItem.isMine) {
-          throw new Error("FORBIDDEN")
+        if (!canEditPendingItem(editingItem)) {
+          throw new Error(
+            isItemLockedByRequesterConfirmation(editingItem)
+              ? "ITEM_CONFIRMED"
+              : "FORBIDDEN"
+          )
         }
 
         const canSync =
@@ -855,8 +1016,23 @@ export default function PerUserReviewPage({
       setEditingItem(null)
       setEditDraft("")
     } catch (editError: any) {
+      const errorMessage = String(
+        editError?.message ?? "unknown"
+      )
+      if (errorMessage.includes("ITEM_CONFIRMED")) {
+        setError(
+          'Your pending items are confirmed. Tap "Edit items" to unconfirm before editing.'
+        )
+        return
+      }
+      if (errorMessage.includes("ASSIST_LOCKED")) {
+        setError(
+          "Assist edit unlocks after 2 minutes of owner inactivity."
+        )
+        return
+      }
       setError(
-        `Could not update item edits (${editError?.message ?? "unknown"}).`
+        `Could not update item edits (${errorMessage}).`
       )
     } finally {
       setSavingEdit(false)
@@ -1031,7 +1207,7 @@ export default function PerUserReviewPage({
               Your pending additions
             </div>
             <div className="text-xs opacity-70 mb-3">
-              These stay in review until every member confirms.
+              These stay in review until every active member confirms.
             </div>
             <div className="space-y-3">
               {myPendingItems.map(item => (
@@ -1063,7 +1239,8 @@ export default function PerUserReviewPage({
                       className="px-2 py-1 rounded border"
                       disabled={
                         updatingCartItemId === item.id ||
-                        submitting
+                        submitting ||
+                        !canEditPendingItem(item)
                       }
                       onClick={() => changeCartQty(item, -1)}
                     >
@@ -1077,7 +1254,8 @@ export default function PerUserReviewPage({
                       className="px-2 py-1 rounded border"
                       disabled={
                         updatingCartItemId === item.id ||
-                        submitting
+                        submitting ||
+                        !canEditPendingItem(item)
                       }
                       onClick={() => changeCartQty(item, 1)}
                     >
@@ -1088,7 +1266,8 @@ export default function PerUserReviewPage({
                       className="px-2 py-1 rounded border"
                       disabled={
                         updatingCartItemId === item.id ||
-                        submitting
+                        submitting ||
+                        !canEditPendingItem(item)
                       }
                       onClick={() => openEdit(item)}
                     >
@@ -1107,39 +1286,100 @@ export default function PerUserReviewPage({
               )}
             </div>
 
-            {otherPendingItems.length > 0 && (
+            {otherPendingGroups.length > 0 && (
               <>
                 <Divider />
                 <div className="text-sm font-semibold mb-2">
                   Other members at your table ordered
                 </div>
                 <div className="text-xs opacity-70 mb-3">
-                  These are pending too, but only they can edit and confirm them.
+                  Grouped by guest. You can assist-edit items after 2 minutes of
+                  inactivity.
                 </div>
-                <div className="space-y-3">
-                  {otherPendingItems.map(item => (
-                    <div
-                      key={item.id}
-                      className="flex justify-between items-center gap-3 rounded border px-3 py-2 opacity-70"
-                      style={{
-                        background: "rgba(145, 158, 173, 0.16)",
-                        borderColor: "rgba(110, 128, 145, 0.32)",
-                      }}
-                    >
-                      <div>
-                        <div className="font-medium">
-                          {item.quantity}× {item.name}
-                        </div>
-                        {hasVisibleEdits(item.edits) && (
-                          <div className="text-xs opacity-60">
-                            {getEditNote(item.edits)
-                              ? `Note: ${getEditNote(item.edits)}`
-                              : "modified"}
-                          </div>
-                        )}
+                <div className="space-y-4">
+                  {otherPendingGroups.map(group => (
+                    <div key={group.clientKey} className="space-y-2">
+                      <div className="text-xs font-semibold opacity-70">
+                        {group.label}
+                        {group.inactive ? " · inactive" : ""}
                       </div>
-                      <div className="text-sm min-w-16 text-right">
-                        £{(item.unitPrice * item.quantity).toFixed(2)}
+                      <div className="space-y-2">
+                        {group.items.map(item => (
+                          <div
+                            key={item.id}
+                            className="flex justify-between items-center gap-3 rounded border px-3 py-2 opacity-80"
+                            style={{
+                              background: "rgba(145, 158, 173, 0.16)",
+                              borderColor: "rgba(110, 128, 145, 0.32)",
+                            }}
+                          >
+                            <div>
+                              <div className="font-medium">
+                                {item.quantity}× {item.name}
+                              </div>
+                              {hasVisibleEdits(item.edits) && (
+                                <div className="text-xs opacity-60">
+                                  {getEditNote(item.edits)
+                                    ? `Note: ${getEditNote(item.edits)}`
+                                    : "modified"}
+                                </div>
+                              )}
+                              {item.canRequesterEdit && (
+                                <div className="text-xs opacity-60">
+                                  Assist edit enabled
+                                </div>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-2">
+                              {item.canRequesterEdit && (
+                                <>
+                                  <button
+                                    type="button"
+                                    className="px-2 py-1 rounded border"
+                                    disabled={
+                                      updatingCartItemId === item.id ||
+                                      submitting ||
+                                      !canEditPendingItem(item)
+                                    }
+                                    onClick={() => changeCartQty(item, -1)}
+                                  >
+                                    −
+                                  </button>
+                                  <span className="min-w-8 text-center text-sm font-medium">
+                                    {item.quantity}
+                                  </span>
+                                  <button
+                                    type="button"
+                                    className="px-2 py-1 rounded border"
+                                    disabled={
+                                      updatingCartItemId === item.id ||
+                                      submitting ||
+                                      !canEditPendingItem(item)
+                                    }
+                                    onClick={() => changeCartQty(item, 1)}
+                                  >
+                                    +
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className="px-2 py-1 rounded border"
+                                    disabled={
+                                      updatingCartItemId === item.id ||
+                                      submitting ||
+                                      !canEditPendingItem(item)
+                                    }
+                                    onClick={() => openEdit(item)}
+                                  >
+                                    Edit
+                                  </button>
+                                </>
+                              )}
+                              <div className="text-sm min-w-16 text-right">
+                                £{(item.unitPrice * item.quantity).toFixed(2)}
+                              </div>
+                            </div>
+                          </div>
+                        ))}
                       </div>
                     </div>
                   ))}
@@ -1177,29 +1417,31 @@ export default function PerUserReviewPage({
 
             {isSharedSession && pendingMembers.length > 0 && (
               <div className="text-xs opacity-60 mt-2">
-                {pendingMembers.filter(member => member.confirmed).length}/
-                {pendingMembers.length} members confirmed
+                {activePendingMembers.filter(member => member.confirmed).length}/
+                {activePendingMembers.length} active members confirmed
+                {inactivePendingMembers.length > 0 &&
+                  ` · ${inactivePendingMembers.length} inactive`}
               </div>
             )}
           </Card>
         </>
       )}
 
-      {mySubmittedItems.length > 0 && (
+      {inKitchenItems.length > 0 && (
         <>
           <Divider />
           <Card>
             <div className="text-sm font-semibold mb-2">
-              Your submitted additions
+              In the kitchen / bar
             </div>
             <div className="text-xs opacity-70 mb-3">
-              Sent items are greyed and locked after sending to kitchen/bar.
+              Sent items are locked. Status updates automatically.
             </div>
             <div className="space-y-3">
-              {mySubmittedItems.map(item => (
+              {inKitchenItems.map(item => (
                 <div
                   key={item.id}
-                  className="flex justify-between items-center gap-3 rounded border px-3 py-2"
+                  className="flex justify-between items-center gap-3 rounded border px-3 py-2 opacity-80"
                   style={{
                     background: "rgba(145, 158, 173, 0.16)",
                     borderColor: "rgba(110, 128, 145, 0.32)",
@@ -1210,7 +1452,7 @@ export default function PerUserReviewPage({
                       {item.quantity}× {item.name}
                     </div>
                     <div className="text-xs opacity-60">
-                      {submittedStateLabel(item.status)}
+                      {ownerLabelForItem(item)} · {serviceStateLabel(item)}
                     </div>
                     {hasVisibleEdits(item.edits) && (
                       <div className="text-xs opacity-60">
@@ -1219,17 +1461,10 @@ export default function PerUserReviewPage({
                           : "modified"}
                       </div>
                     )}
-                    {item.allergens.length > 0 && (
-                      <div className="text-xs opacity-60">
-                        Allergens: {item.allergens.join(", ")}
-                      </div>
-                    )}
                   </div>
 
-                  <div className="flex items-center gap-2">
-                    <div className="text-sm min-w-16 text-right">
-                      £{(item.unitPrice * item.quantity).toFixed(2)}
-                    </div>
+                  <div className="text-sm min-w-16 text-right">
+                    £{(item.unitPrice * item.quantity).toFixed(2)}
                   </div>
                 </div>
               ))}
@@ -1238,24 +1473,24 @@ export default function PerUserReviewPage({
         </>
       )}
 
-      {otherSubmittedItems.length > 0 && (
+      {deliveredItems.length > 0 && (
         <>
           <Divider />
           <Card>
             <div className="text-sm font-semibold mb-2">
-              Other people&apos;s additions
+              Delivered
             </div>
             <div className="text-xs opacity-70 mb-3">
-              Sent by other devices. Read-only on your phone.
+              Completed items for this table.
             </div>
             <div className="space-y-3">
-              {otherSubmittedItems.map(item => (
+              {deliveredItems.map(item => (
                 <div
                   key={item.id}
                   className="flex justify-between items-center gap-3 rounded border px-3 py-2 opacity-70"
                   style={{
-                    background: "rgba(145, 158, 173, 0.16)",
-                    borderColor: "rgba(110, 128, 145, 0.32)",
+                    background: "rgba(145, 158, 173, 0.12)",
+                    borderColor: "rgba(110, 128, 145, 0.28)",
                   }}
                 >
                   <div>
@@ -1263,15 +1498,8 @@ export default function PerUserReviewPage({
                       {item.quantity}× {item.name}
                     </div>
                     <div className="text-xs opacity-60">
-                      {submittedStateLabel(item.status)}
+                      {ownerLabelForItem(item)} · delivered
                     </div>
-                    {hasVisibleEdits(item.edits) && (
-                      <div className="text-xs opacity-60">
-                        {getEditNote(item.edits)
-                          ? `Note: ${getEditNote(item.edits)}`
-                          : "modified"}
-                      </div>
-                    )}
                   </div>
 
                   <div className="text-sm min-w-16 text-right">
@@ -1330,8 +1558,8 @@ export default function PerUserReviewPage({
       {isSharedSession && cartItems.length > 0 && !allMembersConfirmed && (
         <div className="text-xs opacity-70 text-center">
           Waiting for {unconfirmedMemberCount}{" "}
-          {unconfirmedMemberCount === 1 ? "member" : "members"} to confirm
-          their items.
+          {unconfirmedMemberCount === 1 ? "active member" : "active members"} to confirm
+          pending items.
         </div>
       )}
 
