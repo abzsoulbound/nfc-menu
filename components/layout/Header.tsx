@@ -3,6 +3,7 @@
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { useEffect, useMemo, useState } from "react"
+import styles from "./Header.module.css"
 
 const LEGACY_CART_KEY = "nfc-pos.cart.v1"
 const LOCAL_CART_KEY_PREFIX = "nfc-pos.local-cart."
@@ -37,7 +38,7 @@ function parseCartCount(raw: string | null): number {
 function CartIcon() {
   return (
     <svg
-      className="app-header-cart-icon"
+      className={styles.cartIcon}
       viewBox="0 0 24 24"
       aria-hidden="true"
       focusable="false"
@@ -125,16 +126,20 @@ export function Header() {
   const cartAriaLabel = `Open cart (${cartCount} item${cartCount === 1 ? "" : "s"})`
 
   return (
-    <header className="app-header">
-      <div className="app-header-inner">
-        <Link href={routeContext.homeHref} className="app-header-brand">
+    <header className={styles.header}>
+      <div className={styles.inner}>
+        <Link
+          href={routeContext.homeHref}
+          className={styles.brand}
+          aria-label="Marlo's Kitchen"
+        >
           <img
             src="/images/marlos-wordmark-alpha.svg"
-            alt="Marlo's Brasserie"
-            className="app-header-logo"
+            alt="Marlo's Kitchen"
+            className={styles.logo}
             loading="eager"
             decoding="async"
-            onError={(event) => {
+            onError={event => {
               event.currentTarget.src = "/images/marlos-wordmark-alpha-tight.png"
             }}
           />
@@ -143,16 +148,16 @@ export function Header() {
         {routeContext.tagId ? (
           <Link
             href={routeContext.cartHref}
-            className="app-header-cart"
+            className={styles.cart}
             aria-label={cartAriaLabel}
           >
             <CartIcon />
-            <span className="app-header-cart-badge">{badgeLabel}</span>
+            <span className={styles.cartBadge}>{badgeLabel}</span>
           </Link>
         ) : (
-          <div className="app-header-cart app-header-cart-static" aria-hidden="true">
+          <div className={`${styles.cart} ${styles.cartStatic}`} aria-hidden="true">
             <CartIcon />
-            <span className="app-header-cart-badge">{badgeLabel}</span>
+            <span className={styles.cartBadge}>{badgeLabel}</span>
           </div>
         )}
       </div>

@@ -4,6 +4,7 @@ import { useEffect, useState } from "react"
 import { Card } from "@/components/ui/Card"
 import { Badge } from "@/components/ui/Badge"
 import { Divider } from "@/components/ui/Divider"
+import { Button } from "@/components/ui/Button"
 import { TableAssignment } from "@/components/staff/TableAssignment"
 import {
   BillingData,
@@ -24,12 +25,23 @@ type Table = {
 type Tag = {
   id: string
   tableNumber: number | null
+  activeSessionCount: number
+}
+
+type TableCatalog = {
+  fixedTableNumbers: number[]
+  temporaryTableNumbers: number[]
 }
 
 export default function StaffTablesPage() {
   const [tables, setTables] = useState<Table[]>([])
   const [tags, setTags] = useState<Tag[]>([])
+  const [tableCatalog, setTableCatalog] = useState<TableCatalog>({
+    fixedTableNumbers: [],
+    temporaryTableNumbers: [],
+  })
   const [activeTable, setActiveTable] = useState<Table | null>(null)
+  const [showSeatingPanel, setShowSeatingPanel] = useState(false)
   const [billingData, setBillingData] = useState<BillingData | null>(null)
   const [billingLoading, setBillingLoading] = useState(false)
   const [billingError, setBillingError] = useState<string | null>(null)
@@ -63,20 +75,19 @@ export default function StaffTablesPage() {
     }
   }
 
-  async function fetchTables() {
+  async function fetchTables(): Promise<Table[]> {
     try {
       const res = await fetch("/api/tables", { cache: "no-store" })
       const data = await parseArrayResponse<Table>(res)
       setTables(data)
       setActiveTable(current => {
         if (!current) return current
-        return (
-          data.find(table => table.number === current.number) ??
-          current
-        )
+        return data.find(table => table.number === current.number) ?? null
       })
+      return data
     } catch {
       // keep existing values on transient failures
+      return []
     }
   }
 
@@ -88,6 +99,41 @@ export default function StaffTablesPage() {
     } catch {
       // keep existing values on transient failures
     }
+  }
+
+  async function fetchTableCatalog() {
+    try {
+      const res = await fetch("/api/staff/table-catalog", {
+        cache: "no-store",
+      })
+      const payload = await parseObjectResponse<TableCatalog>(res)
+      if (!payload) return
+
+      setTableCatalog({
+        fixedTableNumbers: Array.isArray(payload.fixedTableNumbers)
+          ? payload.fixedTableNumbers
+              .map(value => Number(value))
+              .filter(value => Number.isInteger(value) && value > 0)
+              .sort((a, b) => a - b)
+          : [],
+        temporaryTableNumbers: Array.isArray(payload.temporaryTableNumbers)
+          ? payload.temporaryTableNumbers
+              .map(value => Number(value))
+              .filter(value => Number.isInteger(value) && value > 0)
+              .sort((a, b) => a - b)
+          : [],
+      })
+    } catch {
+      // keep current catalog when fetch fails
+    }
+  }
+
+  async function refreshData() {
+    await Promise.all([
+      fetchTables(),
+      fetchTags(),
+      fetchTableCatalog(),
+    ])
   }
 
   async function fetchBilling(
@@ -138,13 +184,11 @@ export default function StaffTablesPage() {
   }
 
   useEffect(() => {
-    fetchTables()
-    fetchTags()
+    refreshData()
 
     const activeTableNumber = activeTable?.number
     const interval = setInterval(() => {
-      fetchTables()
-      fetchTags()
+      refreshData()
       if (activeTableNumber) {
         fetchBilling(activeTableNumber, { silent: true })
       }
@@ -192,7 +236,30 @@ export default function StaffTablesPage() {
     setActiveTable(null)
     setBillingData(null)
     setBillingError(null)
-    fetchTables()
+    refreshData()
+  }
+
+  async function onSeatingUpdated(
+    tableNumber: number,
+    options?: { stayOnTable?: boolean }
+  ) {
+    const nextTables = await fetchTables()
+    await Promise.all([fetchTags(), fetchTableCatalog()])
+
+    if (options?.stayOnTable) {
+      const nextTable =
+        nextTables.find(table => table.number === tableNumber) ?? null
+      setActiveTable(nextTable)
+      if (nextTable) {
+        await fetchBilling(nextTable.number)
+      } else {
+        setBillingData(null)
+        setBillingError(null)
+      }
+      return
+    }
+
+    setShowSeatingPanel(false)
   }
 
   if (activeTable) {
@@ -218,11 +285,16 @@ export default function StaffTablesPage() {
         </Card>
 
         <TableAssignment
-          tableId={activeTable.id}
-          tableNumber={activeTable.number}
-          tags={assignedTags}
-          allTags={tags}
-          onChange={fetchTags}
+          fixedTableNumbers={tableCatalog.fixedTableNumbers}
+          temporaryTableNumbers={tableCatalog.temporaryTableNumbers}
+          tags={tags}
+          defaultTableNumber={activeTable.number}
+          initialTagIds={assignedTags.map(tag => tag.id)}
+          onComplete={async result => {
+            await onSeatingUpdated(result.tableNo, {
+              stayOnTable: true,
+            })
+          }}
         />
 
         <BillingSplitPanel
@@ -271,6 +343,45 @@ export default function StaffTablesPage() {
 
   return (
     <div className="p-4 space-y-4">
+      <Card>
+        <div className="space-y-3">
+          <div className="flex justify-between items-center">
+            <div className="space-y-1">
+              <div className="text-lg font-semibold">
+                Seat new table
+              </div>
+              <div className="text-sm opacity-70">
+                Select a table number, assign NFC numbers, and confirm.
+              </div>
+            </div>
+            <Button
+              variant={showSeatingPanel ? "secondary" : "primary"}
+              onClick={() => setShowSeatingPanel(current => !current)}
+            >
+              {showSeatingPanel ? "Hide seating" : "Start seating"}
+            </Button>
+          </div>
+
+          {showSeatingPanel && (
+            <TableAssignment
+              fixedTableNumbers={tableCatalog.fixedTableNumbers}
+              temporaryTableNumbers={tableCatalog.temporaryTableNumbers}
+              tags={tags}
+              onComplete={async result => {
+                await onSeatingUpdated(result.tableNo)
+              }}
+              onCancel={() => setShowSeatingPanel(false)}
+            />
+          )}
+        </div>
+      </Card>
+
+      <Divider />
+
+      <div className="text-sm opacity-70">
+        Active tables
+      </div>
+
       {tables.map(table => (
         <Card
           key={table.id}
@@ -283,7 +394,8 @@ export default function StaffTablesPage() {
                 Table {table.number}
               </div>
               <div className="text-sm opacity-70">
-                Open {minutesSince(table.openedAt)}m ago
+                Open {minutesSince(table.openedAt)}m ago ·{" "}
+                {tags.filter(tag => tag.tableNumber === table.number).length} NFC
               </div>
             </div>
 
@@ -300,7 +412,7 @@ export default function StaffTablesPage() {
 
       {tables.length === 0 && (
         <div className="opacity-60 text-center">
-          No tables
+          No active tables
         </div>
       )}
     </div>

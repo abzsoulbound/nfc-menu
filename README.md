@@ -21,6 +21,7 @@ Development:
 - npm install
 - create a `.env` file
 - set DATABASE_URL to your managed Postgres URL
+- set TABLE_NUMBERS to fixed table numbers (example: `1-20,30,32`)
 - npm run prisma:migrate:deploy
 - npm run db:check
 - npm run dev

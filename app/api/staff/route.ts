@@ -71,6 +71,9 @@ export async function POST(req: Request) {
   if (action === "CLOSE_PAID" || action === "CLOSE_UNPAID") {
     const paid = action === "CLOSE_PAID"
     const closedAt = new Date()
+    const groupTagIds = tableGroup.assignments.map(
+      assignment => assignment.tagId
+    )
 
     await prisma.tableAssignment.updateMany({
       where: { id: { in: groupTableIds } },
@@ -91,10 +94,30 @@ export async function POST(req: Request) {
         closedAt,
       },
     })
+    await prisma.session.updateMany({
+      where: {
+        tagId: { in: groupTagIds },
+        status: "ACTIVE",
+      },
+      data: {
+        status: paid ? "PAID" : "CLOSED",
+        closedAt,
+      },
+    })
+
+    await prisma.tableAssignment.deleteMany({
+      where: { id: { in: groupTableIds } },
+    })
 
     await appendSystemEvent(
       "table_closed",
-      { tableId: masterTableId, paid, groupedTableIds: groupTableIds },
+      {
+        tableId: masterTableId,
+        paid,
+        groupedTableIds: groupTableIds,
+        groupedTagIds: groupTagIds,
+        unassignedOnClose: true,
+      },
       { req, tableId: masterTableId }
     )
 

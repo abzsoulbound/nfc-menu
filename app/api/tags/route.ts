@@ -41,6 +41,51 @@ export async function GET(req: Request) {
   )
 }
 
+export async function POST(req: Request) {
+  try {
+    requireStaff(req)
+  } catch {
+    return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 })
+  }
+
+  const body = await req.json().catch(() => ({}))
+  const tagId =
+    typeof body?.tagId === "string"
+      ? body.tagId.trim()
+      : ""
+
+  if (!tagId || tagId.length > 128) {
+    return NextResponse.json({ error: "BAD_REQUEST" }, { status: 400 })
+  }
+
+  const existing = await prisma.nfcTag.findUnique({
+    where: { id: tagId },
+    select: { id: true },
+  })
+  if (existing) {
+    return NextResponse.json({
+      ok: true,
+      created: false,
+      tagId,
+    })
+  }
+
+  await prisma.nfcTag.create({
+    data: { id: tagId },
+  })
+
+  await appendSystemEvent("tag_registered", { tagId }, { req })
+
+  return NextResponse.json(
+    {
+      ok: true,
+      created: true,
+      tagId,
+    },
+    { status: 201 }
+  )
+}
+
 export async function PATCH(req: Request) {
   try {
     requireStaff(req)
@@ -74,9 +119,10 @@ export async function PATCH(req: Request) {
     select: { id: true },
   })
   if (!tag) {
-    await prisma.nfcTag.create({
-      data: { id: tagId },
-    })
+    return NextResponse.json(
+      { error: "TAG_NOT_REGISTERED" },
+      { status: 404 }
+    )
   }
 
   const previousAssignment = await prisma.tableAssignment.findUnique({

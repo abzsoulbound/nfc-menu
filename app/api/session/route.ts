@@ -26,9 +26,10 @@ export async function POST(req: Request) {
     select: { id: true }
   })
   if (!tag) {
-    await prisma.nfcTag.create({
-      data: { id: tagId }
-    })
+    return NextResponse.json(
+      { error: 'TAG_NOT_REGISTERED' },
+      { status: 404 }
+    )
   }
 
   const resolvedTag = await prisma.nfcTag.findUnique({

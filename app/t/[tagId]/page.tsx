@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { MenuSection } from "@/components/menu/MenuSection"
 import { MenuItemCard } from "@/components/menu/MenuItemCard"
@@ -38,13 +38,6 @@ type CartItem = {
   station?: "KITCHEN" | "BAR"
 }
 
-type PendingSyncEntry = {
-  sessionId: string
-  clientKey: string | null
-  item: MenuItem
-  quantity: number
-}
-
 export default function TagPage({ params }: { params: { tagId: string } }) {
   const router = useRouter()
   const setGlobalSession = useSessionStore(s => s.setSession)
@@ -67,17 +60,9 @@ export default function TagPage({ params }: { params: { tagId: string } }) {
   const [loading, setLoading] = useState(true)
   const [clientKey, setClientKey] = useState<string | null>(null)
   const cartByKeyRef = useRef<Record<string, CartItem>>({})
-  const syncTimersRef = useRef<Record<string, number>>({})
-  const syncInFlightRef = useRef<Record<string, boolean>>({})
-  const pendingSyncRef = useRef<Record<string, PendingSyncEntry>>({})
 
   const activeSection = menu.find(
     section => section.id === selectedCategoryId
-  )
-
-  const totalItems = useMemo(
-    () => Object.values(cartByKey).reduce((sum, item) => sum + item.quantity, 0),
-    [cartByKey]
   )
 
   useEffect(() => {
@@ -289,7 +274,10 @@ export default function TagPage({ params }: { params: { tagId: string } }) {
           body: JSON.stringify({ tagId: params.tagId })
         })
         if (!res.ok) {
-          if (res.status === 409) {
+          const payload = await res
+            .json()
+            .catch(() => ({} as { error?: string }))
+          if (res.status === 409 && payload?.error === 'TABLE_CLOSED') {
             router.replace(`/t/${params.tagId}/closed`)
             return
           }
@@ -438,17 +426,6 @@ export default function TagPage({ params }: { params: { tagId: string } }) {
     }
   }, [])
 
-  useEffect(() => {
-    return () => {
-      for (const timer of Object.values(syncTimersRef.current)) {
-        window.clearTimeout(timer)
-      }
-      syncTimersRef.current = {}
-      pendingSyncRef.current = {}
-      syncInFlightRef.current = {}
-    }
-  }, [])
-
   const findCartEntry = (
     source: Record<string, CartItem>,
     item: MenuItem
@@ -466,116 +443,9 @@ export default function TagPage({ params }: { params: { tagId: string } }) {
     }
   }
 
-  const flushPendingSync = async (itemId: string) => {
-    if (syncInFlightRef.current[itemId]) return
-
-    const pending = pendingSyncRef.current[itemId]
-    if (!pending) return
-
-    syncInFlightRef.current[itemId] = true
-    const requestedQty = pending.quantity
-
-    try {
-      const found = findCartEntry(cartByKeyRef.current, pending.item)
-      const existing = found?.item
-      let synced = false
-
-      if (requestedQty <= 0) {
-        if (!existing || existing.id.startsWith("local:")) {
-          synced = true
-        } else {
-          const response = await fetch('/api/cart/update', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              sessionId: pending.sessionId,
-              itemId: existing.id,
-              quantity: 0,
-              clientKey: pending.clientKey,
-            })
-          })
-          synced = response.ok
-        }
-      } else if (existing && !existing.id.startsWith("local:")) {
-        const response = await fetch('/api/cart/update', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            sessionId: pending.sessionId,
-            itemId: existing.id,
-            quantity: requestedQty,
-            clientKey: pending.clientKey,
-          })
-        })
-        synced = response.ok
-      } else {
-        const response = await fetch('/api/cart/add', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            sessionId: pending.sessionId,
-            menuItemId: pending.item.id,
-            name: pending.item.name,
-            unitPrice: pending.item.basePrice,
-            vatRate: pending.item.vatRate,
-            allergens: pending.item.allergens,
-            station: pending.item.station ?? "KITCHEN",
-            quantity: requestedQty,
-            clientKey: pending.clientKey,
-          })
-        })
-        synced = response.ok
-      }
-
-      if (synced) {
-        await loadCart(pending.sessionId)
-      } else {
-        setUsingLocalCart(true)
-      }
-    } catch {
-      setUsingLocalCart(true)
-    } finally {
-      syncInFlightRef.current[itemId] = false
-
-      const latest = pendingSyncRef.current[itemId]
-      if (!latest) return
-
-      if (
-        latest.quantity !== requestedQty ||
-        latest.sessionId !== pending.sessionId
-      ) {
-        window.setTimeout(() => {
-          void flushPendingSync(itemId)
-        }, 0)
-        return
-      }
-
-      delete pendingSyncRef.current[itemId]
-      const timer = syncTimersRef.current[itemId]
-      if (timer) {
-        window.clearTimeout(timer)
-        delete syncTimersRef.current[itemId]
-      }
-    }
-  }
-
-  const scheduleSync = (entry: PendingSyncEntry) => {
-    pendingSyncRef.current[entry.item.id] = entry
-
-    const existingTimer = syncTimersRef.current[entry.item.id]
-    if (existingTimer) {
-      window.clearTimeout(existingTimer)
-    }
-
-    syncTimersRef.current[entry.item.id] = window.setTimeout(() => {
-      void flushPendingSync(entry.item.id)
-    }, 180)
-  }
-
   const changeQty = (item: MenuItem, delta: 1 | -1) => {
     if (menuLocked) return
 
-    const activeClientKey = ensureClientKey()
     let activeSessionId = sessionId
     if (!activeSessionId) {
       activeSessionId = createLocalSessionId()
@@ -590,13 +460,11 @@ export default function TagPage({ params }: { params: { tagId: string } }) {
     }
 
     if (!activeSessionId) return
-    const canSync = !isLocalSessionId(activeSessionId)
     const current = cartByKeyRef.current
     const optimistic = { ...current }
     const found = findCartEntry(current, item)
     const existingKey = found?.key ?? null
     const existing = found?.item
-    let desiredQty = existing?.quantity ?? 0
 
     if (delta === 1) {
       const targetKey = item.id
@@ -611,7 +479,7 @@ export default function TagPage({ params }: { params: { tagId: string } }) {
         station: item.station ?? "KITCHEN",
       }
 
-      desiredQty = (base.quantity ?? 0) + 1
+      const nextQty = (base.quantity ?? 0) + 1
       optimistic[targetKey] = {
         ...base,
         name: item.name,
@@ -620,14 +488,13 @@ export default function TagPage({ params }: { params: { tagId: string } }) {
         vatRate: item.vatRate,
         allergens: item.allergens,
         station: item.station ?? "KITCHEN",
-        quantity: desiredQty,
+        quantity: nextQty,
       }
       if (existingKey && existingKey !== targetKey) {
         delete optimistic[existingKey]
       }
     } else if (existing && existingKey) {
       const nextQty = existing.quantity - 1
-      desiredQty = Math.max(0, nextQty)
       if (nextQty <= 0) {
         delete optimistic[existingKey]
       } else {
@@ -643,17 +510,6 @@ export default function TagPage({ params }: { params: { tagId: string } }) {
     cartByKeyRef.current = optimistic
     setCartByKey(optimistic)
     writeLocalCart(optimistic)
-
-    if (canSync) {
-      scheduleSync({
-        sessionId: activeSessionId,
-        clientKey: activeClientKey,
-        item,
-        quantity: desiredQty,
-      })
-    } else {
-      setUsingLocalCart(true)
-    }
   }
 
   const requestItemEdit = (item: MenuItem) => {
@@ -738,25 +594,6 @@ export default function TagPage({ params }: { params: { tagId: string } }) {
           })}
         </MenuSection>
       )}
-
-      <div className="order-actions">
-        <button
-          className="order-cta"
-          type="button"
-          onClick={() => router.push(`/t/${params.tagId}/review`)}
-          disabled={menuLocked || totalItems === 0}
-        >
-          Review Additions ({totalItems})
-        </button>
-        <button
-          className="order-cta secondary"
-          type="button"
-          onClick={() => router.push(`/t/${params.tagId}/review`)}
-          disabled={menuLocked}
-        >
-          View Table Orders
-        </button>
-      </div>
     </div>
   )
 }

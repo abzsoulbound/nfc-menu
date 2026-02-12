@@ -27,6 +27,17 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'BAD_REQUEST' }, { status: 400 })
   }
 
+  const tag = await prisma.nfcTag.findUnique({
+    where: { id: tagId },
+    select: { id: true }
+  })
+  if (!tag) {
+    return NextResponse.json(
+      { error: 'TAG_NOT_REGISTERED' },
+      { status: 404 }
+    )
+  }
+
   const previousAssignment = await prisma.tableAssignment.findUnique({
     where: { tagId },
     select: { tableNo: true }

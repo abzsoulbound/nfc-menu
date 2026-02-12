@@ -42,6 +42,17 @@ function toSessionDto(session: {
   }
 }
 
+class SessionRouteError extends Error {
+  status: number
+  payload: { error: string }
+
+  constructor(status: number, payload: { error: string }) {
+    super(payload.error)
+    this.status = status
+    this.payload = payload
+  }
+}
+
 async function ensureTagId(
   tagId: string | undefined,
   origin: string | undefined
@@ -52,8 +63,8 @@ async function ensureTagId(
       select: { id: true },
     })
     if (!existing) {
-      await prisma.nfcTag.create({
-        data: { id: tagId },
+      throw new SessionRouteError(404, {
+        error: "TAG_NOT_REGISTERED",
       })
     }
     return tagId
@@ -67,11 +78,9 @@ async function ensureTagId(
     return staffTagId
   }
 
-  const customerTagId = `anon-${crypto.randomUUID()}`
-  await prisma.nfcTag.create({
-    data: { id: customerTagId },
+  throw new SessionRouteError(400, {
+    error: "BAD_REQUEST",
   })
-  return customerTagId
 }
 
 function isStale(lastActivityAt: Date) {
@@ -201,6 +210,20 @@ export async function POST(req: Request) {
     }
 
     const existingTableGroup = await getTableGroupForTag(existing.tagId)
+    const tableRequired = !existing.tagId.startsWith("staff-")
+    if (tableRequired && !existingTableGroup) {
+      await prisma.session.update({
+        where: { id: existing.id },
+        data: {
+          status: "CLOSED",
+          closedAt: new Date(),
+        },
+      })
+      return NextResponse.json(
+        { error: "TABLE_NOT_SEATED" },
+        { status: 409 }
+      )
+    }
     const masterTableId = existingTableGroup?.master.id ?? null
 
     const resumed = await prisma.session.update({
@@ -228,8 +251,37 @@ export async function POST(req: Request) {
     return NextResponse.json(toSessionDto(resumed))
   }
 
-  const resolvedTagId = await ensureTagId(tagId, origin)
+  let resolvedTagId: string
+  try {
+    resolvedTagId = await ensureTagId(tagId, origin)
+  } catch (error) {
+    if (error instanceof SessionRouteError) {
+      return NextResponse.json(error.payload, {
+        status: error.status,
+      })
+    }
+    throw error
+  }
+
   const tagTableGroup = await getTableGroupForTag(resolvedTagId)
+  const tableRequired = !resolvedTagId.startsWith("staff-")
+  if (tableRequired && !tagTableGroup) {
+    await prisma.session.updateMany({
+      where: {
+        tagId: resolvedTagId,
+        status: "ACTIVE",
+      },
+      data: {
+        status: "CLOSED",
+        closedAt: new Date(),
+      },
+    })
+    return NextResponse.json(
+      { error: "TABLE_NOT_SEATED" },
+      { status: 409 }
+    )
+  }
+
   const tableId = tagTableGroup?.master.id ?? null
   if (tagTableGroup && isTableGroupClosed(tagTableGroup)) {
     return NextResponse.json(

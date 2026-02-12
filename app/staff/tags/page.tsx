@@ -4,6 +4,7 @@ import { useEffect, useState } from "react"
 import { Card } from "@/components/ui/Card"
 import { Badge } from "@/components/ui/Badge"
 import { Divider } from "@/components/ui/Divider"
+import { Button } from "@/components/ui/Button"
 import { TagList } from "@/components/staff/TagList"
 
 type Tag = {
@@ -11,18 +12,21 @@ type Tag = {
   active: boolean
   tableNumber: number | null
   activeSessionCount: number
+  totalSessionCount: number
   lastSeenAt: string
-}
-
-type Table = {
-  id: string
-  number: number
 }
 
 export default function StaffTagsPage() {
   const [tags, setTags] = useState<Tag[]>([])
-  const [tables, setTables] = useState<Table[]>([])
   const [selectedTag, setSelectedTag] = useState<Tag | null>(null)
+  const [newTagId, setNewTagId] = useState("")
+  const [registering, setRegistering] = useState(false)
+  const [registerError, setRegisterError] = useState<string | null>(
+    null
+  )
+  const [registerNotice, setRegisterNotice] = useState<string | null>(
+    null
+  )
 
   async function parseArrayResponse<T>(
     res: Response
@@ -48,22 +52,25 @@ export default function StaffTagsPage() {
     }
   }
 
-  async function fetchTables() {
+  async function parseObjectResponse<T>(
+    res: Response
+  ): Promise<T | null> {
+    const raw = await res.text()
+    if (!raw) return null
+
     try {
-      const res = await fetch("/api/tables", { cache: "no-store" })
-      const data = await parseArrayResponse<Table>(res)
-      setTables(data)
+      const parsed = JSON.parse(raw) as unknown
+      if (!parsed || typeof parsed !== "object") return null
+      return parsed as T
     } catch {
-      // keep existing values on transient failures
+      return null
     }
   }
 
   useEffect(() => {
     fetchTags()
-    fetchTables()
     const interval = setInterval(() => {
       fetchTags()
-      fetchTables()
     }, 5000)
     return () => clearInterval(interval)
   }, [])
@@ -74,21 +81,49 @@ export default function StaffTagsPage() {
     )
   }
 
-  async function assignTag(tagId: string, tableNumber: number | null) {
-    await fetch("/api/tags", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        tagId,
-        tableId:
-          tableNumber === null
-            ? null
-            : tables.find(t => t.number === tableNumber)?.id,
-      }),
-    })
+  async function registerTag() {
+    const tagId = newTagId.trim()
+    if (!tagId) {
+      setRegisterError("Enter an NFC number.")
+      return
+    }
 
-    setSelectedTag(null)
-    fetchTags()
+    setRegistering(true)
+    setRegisterError(null)
+    setRegisterNotice(null)
+    try {
+      const res = await fetch("/api/tags", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tagId }),
+      })
+
+      const payload = await parseObjectResponse<{
+        error?: string
+        created?: boolean
+      }>(res)
+
+      if (!res.ok) {
+        if (payload?.error === "BAD_REQUEST") {
+          setRegisterError("Invalid NFC number.")
+        } else {
+          setRegisterError("Could not register NFC number.")
+        }
+        return
+      }
+
+      setRegisterNotice(
+        payload?.created
+          ? "NFC number registered."
+          : "NFC number already registered."
+      )
+      setNewTagId("")
+      fetchTags()
+    } catch {
+      setRegisterError("Could not register NFC number.")
+    } finally {
+      setRegistering(false)
+    }
   }
 
   if (selectedTag) {
@@ -110,26 +145,29 @@ export default function StaffTagsPage() {
 
         <Divider />
 
-        <div className="space-y-2">
-          {tables.map(table => (
-            <Card
-              key={table.id}
-              className="cursor-pointer text-center"
-              onClick={() =>
-                assignTag(selectedTag.id, table.number)
-              }
-            >
-              Assign to table {table.number}
-            </Card>
-          ))}
+        <Card>
+          <div className="space-y-1">
+            <div className="text-sm opacity-70">
+              Current table
+            </div>
+            <div className="text-lg font-semibold">
+              {selectedTag.tableNumber === null
+                ? "Unassigned"
+                : `Table ${selectedTag.tableNumber}`}
+            </div>
+          </div>
+        </Card>
 
-          <Card
-            className="cursor-pointer text-center opacity-70"
-            onClick={() => assignTag(selectedTag.id, null)}
-          >
-            Unassign tag
-          </Card>
-        </div>
+        <Card>
+          <div className="space-y-1">
+            <div className="text-sm opacity-70">
+              Lifetime sessions
+            </div>
+            <div className="text-lg font-semibold">
+              {selectedTag.totalSessionCount}
+            </div>
+          </div>
+        </Card>
 
         <Card
           className="cursor-pointer text-center opacity-70"
@@ -143,6 +181,46 @@ export default function StaffTagsPage() {
 
   return (
     <div className="p-4 space-y-4">
+      <Card>
+        <div className="space-y-3">
+          <div className="text-lg font-semibold">
+            Register NFC number
+          </div>
+          <div className="text-sm opacity-70">
+            Add printed NFC numbers to the registry before service starts.
+          </div>
+
+          <input
+            className="input"
+            value={newTagId}
+            onChange={event => {
+              setNewTagId(event.target.value)
+              setRegisterError(null)
+              setRegisterNotice(null)
+            }}
+            placeholder="Example: NFC-017"
+            disabled={registering}
+          />
+
+          <Button onClick={registerTag} disabled={registering}>
+            {registering ? "Registering..." : "Register NFC"}
+          </Button>
+
+          {registerError && (
+            <div className="text-sm text-red-400">
+              {registerError}
+            </div>
+          )}
+          {registerNotice && (
+            <div className="text-sm opacity-70">
+              {registerNotice}
+            </div>
+          )}
+        </div>
+      </Card>
+
+      <Divider />
+
       <TagList
         tags={tags}
         onSelect={setSelectedTag}

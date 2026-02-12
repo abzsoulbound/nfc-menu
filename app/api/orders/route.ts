@@ -367,13 +367,10 @@ export async function POST(req: Request) {
       : session?.tag ?? null
 
     if (!tag && tagId) {
-      await prisma.nfcTag.create({
-        data: { id: tagId },
-      })
-      tag = await prisma.nfcTag.findUnique({
-        where: { id: tagId },
-        include: { assignment: true },
-      })
+      return NextResponse.json(
+        { error: "TAG_NOT_REGISTERED" },
+        { status: 404 }
+      )
     }
 
     if (!session && resolvedSessionId) {
