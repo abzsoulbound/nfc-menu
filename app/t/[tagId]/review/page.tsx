@@ -162,7 +162,7 @@ export default function PerUserReviewPage({
     window.dispatchEvent(new Event("nfc-cart-updated"))
   }
 
-  const loadCartItems = async (): Promise<PendingCartResponse> => {
+  const loadCartItems = async (): Promise<PendingCartResponse | null> => {
     if (!sessionId) {
       return {
         items: [],
@@ -186,6 +186,9 @@ export default function PerUserReviewPage({
       if (!res.ok) {
         const errorInfo = await readApiErrorInfo(res)
         setError(cartLoadErrorMessage(errorInfo))
+        if (errorInfo.status >= 500) {
+          return null
+        }
         return {
           items: [],
           members: [],
@@ -199,8 +202,7 @@ export default function PerUserReviewPage({
       setError(current =>
         current &&
         (current.toLowerCase().includes("cart") ||
-          current.toLowerCase().includes("session") ||
-          current.toLowerCase().includes("connect"))
+          current.toLowerCase().includes("session"))
           ? null
           : current
       )
@@ -284,20 +286,14 @@ export default function PerUserReviewPage({
       }
     } catch {
       setError(networkErrorMessage("load pending cart items"))
-      return {
-        items: [],
-        members: [],
-        requesterConfirmed: true,
-        allMembersConfirmed: true,
-        unconfirmedMemberCount: 0,
-      }
+      return null
     }
   }
 
   const loadSubmittedItems = async (): Promise<{
     items: ReviewItem[]
     firstSubmittedAt: string | null
-  }> => {
+  } | null> => {
     try {
       const query = new URLSearchParams({ tagId })
       if (sessionId) {
@@ -311,6 +307,9 @@ export default function PerUserReviewPage({
         cache: "no-store",
       })
       if (!res.ok) {
+        if (res.status >= 500) {
+          return null
+        }
         return { items: [], firstSubmittedAt: null }
       }
 
@@ -362,7 +361,7 @@ export default function PerUserReviewPage({
             : null,
       }
     } catch {
-      return { items: [], firstSubmittedAt: null }
+      return null
     }
   }
 
@@ -385,9 +384,13 @@ export default function PerUserReviewPage({
         loadSubmittedItems(),
       ])
 
-      applyPendingState(pendingCart)
-      setSubmittedItems(submitted.items)
-      setFirstSubmittedAt(submitted.firstSubmittedAt)
+      if (pendingCart) {
+        applyPendingState(pendingCart)
+      }
+      if (submitted) {
+        setSubmittedItems(submitted.items)
+        setFirstSubmittedAt(submitted.firstSubmittedAt)
+      }
     } finally {
       if (showSpinner) {
         setLoading(false)
@@ -708,7 +711,9 @@ export default function PerUserReviewPage({
       }
 
       const pending = await loadCartItems()
-      applyPendingState(pending)
+      if (pending) {
+        applyPendingState(pending)
+      }
     } catch (confirmError: any) {
       setError(
         `Could not ${nextConfirmed ? "confirm" : "unconfirm"} your items (${confirmError?.message ?? "unknown"}).`
@@ -960,8 +965,10 @@ export default function PerUserReviewPage({
         }
 
         const submitted = await loadSubmittedItems()
-        setSubmittedItems(submitted.items)
-        setFirstSubmittedAt(submitted.firstSubmittedAt)
+        if (submitted) {
+          setSubmittedItems(submitted.items)
+          setFirstSubmittedAt(submitted.firstSubmittedAt)
+        }
       } else {
         if (!canEditPendingItem(editingItem)) {
           throw new Error(
