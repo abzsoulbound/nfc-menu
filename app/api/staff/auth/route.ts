@@ -6,6 +6,8 @@ import {
   staffAuthCookies,
   type StaffRole,
 } from "@/lib/staffAuth"
+import { prisma } from "@/lib/prisma"
+import { resolveRestaurantFromRequest } from "@/lib/restaurants"
 
 const MAX_FAILED_ATTEMPTS = 3
 const cookieBase = {
@@ -57,12 +59,14 @@ function readCookie(req: Request, key: string) {
 
 function setAuthorizedCookies(
   res: NextResponse,
-  role: StaffRole
+  role: StaffRole,
+  restaurantSlug: string
 ) {
   const authToken = process.env.STAFF_AUTH_SECRET
   if (!authToken) return
   res.cookies.set(staffAuthCookies.auth, authToken, cookieBase)
   res.cookies.set(staffAuthCookies.role, role, cookieBase)
+  res.cookies.set(staffAuthCookies.restaurant, restaurantSlug, cookieBase)
   res.cookies.set(staffAuthCookies.failures, "0", cookieBase)
   res.cookies.set(staffAuthCookies.locked, "", {
     ...cookieBase,
@@ -87,6 +91,10 @@ function clearAuthCookies(res: NextResponse) {
     ...cookieBase,
     expires: new Date(0),
   })
+  res.cookies.set(staffAuthCookies.restaurant, "", {
+    ...cookieBase,
+    expires: new Date(0),
+  })
   res.cookies.set(staffAuthCookies.failures, "0", cookieBase)
   res.cookies.set(staffAuthCookies.locked, "", {
     ...cookieBase,
@@ -94,7 +102,22 @@ function clearAuthCookies(res: NextResponse) {
   })
 }
 
-function validateRoleAuth(role: StaffRole, passcode: string) {
+async function validateRoleAuth(
+  role: StaffRole,
+  passcode: string,
+  restaurantId: string
+) {
+  const dbMatch = await prisma.staffUser.findFirst({
+    where: {
+      restaurantId,
+      role,
+      active: true,
+      passcode,
+    },
+    select: { id: true },
+  })
+  if (dbMatch) return true
+
   const expected = getRolePasscode(role)
   if (expected && passcode === expected) return true
 
@@ -107,7 +130,21 @@ function validateRoleAuth(role: StaffRole, passcode: string) {
   return false
 }
 
-function validateManagerUnlock(passcode: string) {
+async function validateManagerUnlock(
+  passcode: string,
+  restaurantId: string
+) {
+  const dbMatch = await prisma.staffUser.findFirst({
+    where: {
+      restaurantId,
+      role: "admin",
+      active: true,
+      passcode,
+    },
+    select: { id: true },
+  })
+  if (dbMatch) return true
+
   const expected = getManagerPasscode()
   return !!expected && passcode === expected
 }
@@ -115,6 +152,9 @@ function validateManagerUnlock(passcode: string) {
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url)
   const role = searchParams.get("role")
+  const restaurant = await resolveRestaurantFromRequest(req, {
+    restaurantSlug: searchParams.get("restaurantSlug"),
+  })
 
   if (!role || !isStaffRole(role)) {
     return NextResponse.json({ error: "INVALID_ROLE" }, { status: 400 })
@@ -134,12 +174,14 @@ export async function GET(req: Request) {
   const failures = readFailures(req)
   const token = readCookie(req, staffAuthCookies.auth)
   const sessionRole = readCookie(req, staffAuthCookies.role)
+  const sessionRestaurant = readCookie(req, staffAuthCookies.restaurant)
   const authorized =
     !!token &&
     !!sessionRole &&
     !!process.env.STAFF_AUTH_SECRET &&
     token === process.env.STAFF_AUTH_SECRET &&
-    sessionRole === role
+    sessionRole === role &&
+    sessionRestaurant === restaurant.slug
 
   return NextResponse.json({
     authorized,
@@ -147,11 +189,18 @@ export async function GET(req: Request) {
     failures,
     remaining: Math.max(0, MAX_FAILED_ATTEMPTS - failures),
     demoBypass: false,
+    restaurantSlug: restaurant.slug,
   })
 }
 
 export async function POST(req: Request) {
   const body = await req.json()
+  const restaurant = await resolveRestaurantFromRequest(req, {
+    restaurantSlug:
+      typeof body?.restaurantSlug === "string"
+        ? body.restaurantSlug
+        : null,
+  })
 
   if (isAuthDemoBypassEnabled()) {
     if (body?.action === "unlock") {
@@ -170,14 +219,15 @@ export async function POST(req: Request) {
     const res = NextResponse.json({
       ok: true,
       demoBypass: true,
+      restaurantSlug: restaurant.slug,
     })
-    setAuthorizedCookies(res, role)
+    setAuthorizedCookies(res, role, restaurant.slug)
     return res
   }
 
   if (body?.action === "unlock") {
     const managerPasscode = String(body?.managerPasscode ?? "")
-    if (!validateManagerUnlock(managerPasscode)) {
+    if (!(await validateManagerUnlock(managerPasscode, restaurant.id))) {
       return NextResponse.json({ error: "INVALID_MANAGER_PASSCODE" }, { status: 401 })
     }
 
@@ -208,7 +258,7 @@ export async function POST(req: Request) {
     )
   }
 
-  if (!validateRoleAuth(role, passcode)) {
+  if (!(await validateRoleAuth(role, passcode, restaurant.id))) {
     const failedAttempts = readFailures(req) + 1
     const res = NextResponse.json(
       {
@@ -222,8 +272,11 @@ export async function POST(req: Request) {
     return res
   }
 
-  const res = NextResponse.json({ ok: true })
-  setAuthorizedCookies(res, role)
+  const res = NextResponse.json({
+    ok: true,
+    restaurantSlug: restaurant.slug,
+  })
+  setAuthorizedCookies(res, role, restaurant.slug)
 
   return res
 }

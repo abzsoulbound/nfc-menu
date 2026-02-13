@@ -3,6 +3,7 @@
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { useEffect, useMemo, useState } from "react"
+import { DEFAULT_RESTAURANT_SLUG } from "@/lib/restaurantConstants"
 import { useSessionStore } from "@/store/useSessionStore"
 import styles from "./Header.module.css"
 
@@ -41,21 +42,96 @@ export function Header() {
   const sessionId = useSessionStore(s => s.sessionId)
   const ensureClientKey = useSessionStore(s => s.ensureClientKey)
   const [cartCount, setCartCount] = useState(0)
+  const [branding, setBranding] = useState({
+    name: "Marlo's Kitchen",
+    logoUrl: "/images/marlos-wordmark-alpha.svg",
+    primaryColor: "#12649a",
+    secondaryColor: "#d5e4ee",
+  })
 
   const routeContext = useMemo(() => {
-    const tagMatch = pathname.match(/^\/t\/([^/]+)/)
+    const tenantMatch = pathname.match(/^\/r\/([^/]+)(\/.*)?$/)
+    const orderTenantMatch = pathname.match(/^\/order\/r\/([^/]+)(\/.*)?$/)
+
+    const tenantSlug = tenantMatch?.[1]
+      ? safeDecode(tenantMatch[1])
+      : orderTenantMatch?.[1]
+      ? safeDecode(orderTenantMatch[1])
+      : null
+
+    const normalizedPath = tenantMatch
+      ? tenantMatch[2] || "/"
+      : orderTenantMatch
+      ? orderTenantMatch[2] || "/order"
+      : pathname
+
+    const tagMatch = normalizedPath.match(/^\/t\/([^/]+)/)
     const tagId = tagMatch?.[1] ? safeDecode(tagMatch[1]) : null
+    const basePrefix = tenantSlug ? `/r/${encodeURIComponent(tenantSlug)}` : ""
 
     return {
+      tenantSlug,
       tagId,
       isOrderingRoute:
-        pathname === "/menu" ||
-        pathname === "/order" ||
-        pathname.startsWith("/t/"),
-      homeHref: tagId ? `/t/${encodeURIComponent(tagId)}` : "/menu",
-      cartHref: tagId ? `/t/${encodeURIComponent(tagId)}/review` : "/menu",
+        normalizedPath === "/menu" ||
+        normalizedPath === "/order" ||
+        normalizedPath.startsWith("/t/"),
+      homeHref: tagId
+        ? `${basePrefix}/t/${encodeURIComponent(tagId)}`
+        : `${basePrefix}/menu`,
+      cartHref: tagId
+        ? `${basePrefix}/t/${encodeURIComponent(tagId)}/review`
+        : `${basePrefix}/menu`,
     }
   }, [pathname])
+
+  useEffect(() => {
+    let active = true
+
+    async function loadBranding() {
+      try {
+        const slug = routeContext.tenantSlug || DEFAULT_RESTAURANT_SLUG
+        const res = await fetch(
+          `/api/restaurant/current?restaurantSlug=${encodeURIComponent(slug)}`,
+          { cache: "no-store" }
+        )
+        if (!res.ok) return
+        const payload = (await res.json()) as {
+          restaurant?: {
+            name?: string
+            logoUrl?: string
+            primaryColor?: string
+            secondaryColor?: string
+          }
+        }
+        if (!active || !payload.restaurant) return
+
+        setBranding(current => ({
+          name: payload.restaurant?.name || current.name,
+          logoUrl: payload.restaurant?.logoUrl || current.logoUrl,
+          primaryColor: payload.restaurant?.primaryColor || current.primaryColor,
+          secondaryColor:
+            payload.restaurant?.secondaryColor || current.secondaryColor,
+        }))
+      } catch {
+        // keep fallback branding
+      }
+    }
+
+    void loadBranding()
+
+    return () => {
+      active = false
+    }
+  }, [routeContext.tenantSlug])
+
+  useEffect(() => {
+    if (typeof document === "undefined") return
+    document.documentElement.style.setProperty(
+      "--accent-action",
+      branding.primaryColor
+    )
+  }, [branding.primaryColor])
 
   useEffect(() => {
     if (!routeContext.isOrderingRoute) {
@@ -132,11 +208,11 @@ export function Header() {
         <Link
           href={routeContext.homeHref}
           className={styles.brand}
-          aria-label="Marlo's Kitchen"
+          aria-label={branding.name}
         >
           <img
-            src="/images/marlos-wordmark-alpha.svg"
-            alt="Marlo's Kitchen"
+            src={branding.logoUrl || "/images/marlos-wordmark-alpha.svg"}
+            alt={branding.name}
             className={styles.logo}
             loading="eager"
             decoding="async"

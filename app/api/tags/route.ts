@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma"
 import { requireStaff } from "@/lib/auth"
 import { appendSystemEvent } from "@/lib/events"
 import { getTableGroupByTableNo } from "@/lib/tableGroups"
+import { resolveRestaurantFromRequest } from "@/lib/restaurants"
 
 export async function GET(req: Request) {
   try {
@@ -10,12 +11,15 @@ export async function GET(req: Request) {
   } catch {
     return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 })
   }
+  const restaurant = await resolveRestaurantFromRequest(req)
 
   const tags = await prisma.nfcTag.findMany({
+    where: { restaurantId: restaurant.id },
     include: {
       assignment: true,
       sessions: {
         where: {
+          restaurantId: restaurant.id,
           status: "ACTIVE",
         },
         orderBy: { lastActivityAt: "desc" },
@@ -47,6 +51,7 @@ export async function POST(req: Request) {
   } catch {
     return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 })
   }
+  const restaurant = await resolveRestaurantFromRequest(req)
 
   const body = await req.json().catch(() => ({}))
   const tagId =
@@ -60,21 +65,34 @@ export async function POST(req: Request) {
 
   const existing = await prisma.nfcTag.findUnique({
     where: { id: tagId },
-    select: { id: true },
+    select: { id: true, restaurantId: true },
   })
-  if (existing) {
+  if (existing && existing.restaurantId === restaurant.id) {
     return NextResponse.json({
       ok: true,
       created: false,
       tagId,
     })
   }
+  if (existing && existing.restaurantId !== restaurant.id) {
+    return NextResponse.json(
+      { error: "TAG_ALREADY_USED_BY_ANOTHER_RESTAURANT" },
+      { status: 409 }
+    )
+  }
 
   await prisma.nfcTag.create({
-    data: { id: tagId },
+    data: {
+      id: tagId,
+      restaurantId: restaurant.id,
+    },
   })
 
-  await appendSystemEvent("tag_registered", { tagId }, { req })
+  await appendSystemEvent(
+    "tag_registered",
+    { tagId },
+    { req, restaurantId: restaurant.id }
+  )
 
   return NextResponse.json(
     {
@@ -92,6 +110,7 @@ export async function PATCH(req: Request) {
   } catch {
     return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 })
   }
+  const restaurant = await resolveRestaurantFromRequest(req)
 
   const body = await req.json()
   const tagId =
@@ -116,17 +135,20 @@ export async function PATCH(req: Request) {
 
   const tag = await prisma.nfcTag.findUnique({
     where: { id: tagId },
-    select: { id: true },
+    select: { id: true, restaurantId: true },
   })
-  if (!tag) {
+  if (!tag || tag.restaurantId !== restaurant.id) {
     return NextResponse.json(
       { error: "TAG_NOT_REGISTERED" },
       { status: 404 }
     )
   }
 
-  const previousAssignment = await prisma.tableAssignment.findUnique({
-    where: { tagId },
+  const previousAssignment = await prisma.tableAssignment.findFirst({
+    where: {
+      tagId,
+      restaurantId: restaurant.id,
+    },
     select: {
       tableNo: true,
     },
@@ -134,10 +156,14 @@ export async function PATCH(req: Request) {
 
   if (tableId === null) {
     await prisma.tableAssignment.deleteMany({
-      where: { tagId },
+      where: {
+        tagId,
+        restaurantId: restaurant.id,
+      },
     })
     await prisma.session.updateMany({
       where: {
+        restaurantId: restaurant.id,
         tagId,
         status: "ACTIVE",
       },
@@ -148,7 +174,8 @@ export async function PATCH(req: Request) {
 
     if (previousAssignment) {
       const previousGroup = await getTableGroupByTableNo(
-        previousAssignment.tableNo
+        previousAssignment.tableNo,
+        restaurant.id
       )
       if (previousGroup) {
         const previousGroupTagIds = previousGroup.assignments.map(
@@ -156,6 +183,7 @@ export async function PATCH(req: Request) {
         )
         await prisma.session.updateMany({
           where: {
+            restaurantId: restaurant.id,
             tagId: { in: previousGroupTagIds },
             status: "ACTIVE",
           },
@@ -169,29 +197,40 @@ export async function PATCH(req: Request) {
     await appendSystemEvent(
       "tag_unassigned",
       { tagId },
-      { req }
+      { req, restaurantId: restaurant.id }
     )
     return NextResponse.json({ ok: true, unassigned: true })
   }
 
   const table = await prisma.tableAssignment.findUnique({
     where: { id: tableId },
-    select: { tableNo: true },
+    select: { tableNo: true, restaurantId: true },
   })
-  if (!table) {
+  if (!table || table.restaurantId !== restaurant.id) {
     return NextResponse.json({ error: "TABLE_NOT_FOUND" }, { status: 404 })
   }
 
   const assignment = await prisma.tableAssignment.upsert({
     where: { tagId },
-    update: { tableNo: table.tableNo },
-    create: { tagId, tableNo: table.tableNo },
+    update: {
+      restaurantId: restaurant.id,
+      tableNo: table.tableNo,
+    },
+    create: {
+      restaurantId: restaurant.id,
+      tagId,
+      tableNo: table.tableNo,
+    },
   })
-  const tableGroup = await getTableGroupByTableNo(table.tableNo)
+  const tableGroup = await getTableGroupByTableNo(
+    table.tableNo,
+    restaurant.id
+  )
   const masterTableId = tableGroup?.master.id ?? assignment.id
 
   await prisma.session.updateMany({
     where: {
+      restaurantId: restaurant.id,
       tagId,
       status: "ACTIVE",
     },
@@ -205,7 +244,8 @@ export async function PATCH(req: Request) {
     previousAssignment.tableNo !== table.tableNo
   ) {
     const previousGroup = await getTableGroupByTableNo(
-      previousAssignment.tableNo
+      previousAssignment.tableNo,
+      restaurant.id
     )
     if (previousGroup) {
       const previousGroupTagIds = previousGroup.assignments.map(
@@ -213,6 +253,7 @@ export async function PATCH(req: Request) {
       )
       await prisma.session.updateMany({
         where: {
+          restaurantId: restaurant.id,
           tagId: { in: previousGroupTagIds },
           status: "ACTIVE",
         },
@@ -231,7 +272,7 @@ export async function PATCH(req: Request) {
       tableNo: table.tableNo,
       assignmentId: assignment.id,
     },
-    { req, tableId: masterTableId }
+    { req, restaurantId: restaurant.id, tableId: masterTableId }
   )
 
   return NextResponse.json(assignment)

@@ -1,21 +1,26 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { useRouter } from "next/navigation"
+import { usePathname, useRouter } from "next/navigation"
 import { Card } from "@/components/ui/Card"
 import { Button } from "@/components/ui/Button"
 import { Divider } from "@/components/ui/Divider"
 import type { StaffRole } from "@/lib/staffAuth"
 
-const roleRoutes: Record<StaffRole, string> = {
-  admin: "/admin",
-  waiter: "/staff",
-  bar: "/bar",
-  kitchen: "/kitchen",
-}
-
 export default function StaffLoginPage() {
   const router = useRouter()
+  const pathname = usePathname() ?? "/staff/login"
+  const tenantSlugMatch = pathname.match(/^\/r\/([^/]+)/)
+  const tenantPrefix = tenantSlugMatch?.[1]
+    ? `/r/${encodeURIComponent(tenantSlugMatch[1])}`
+    : ""
+  const tenantSlug = tenantSlugMatch?.[1] ?? "marlos"
+  const roleRoutes: Record<StaffRole, string> = {
+    admin: tenantPrefix ? `${tenantPrefix}/dashboard` : "/admin",
+    waiter: tenantPrefix ? `${tenantPrefix}/staff` : "/staff",
+    bar: tenantPrefix ? `${tenantPrefix}/bar` : "/bar",
+    kitchen: tenantPrefix ? `${tenantPrefix}/kitchen` : "/kitchen",
+  }
   const [role, setRole] = useState<StaffRole>("admin")
   const [passcode, setPasscode] = useState("")
   const [authBypassEnabled, setAuthBypassEnabled] = useState(false)
@@ -27,9 +32,14 @@ export default function StaffLoginPage() {
 
     async function loadBypassStatus() {
       try {
-        const res = await fetch(`/api/staff/auth?role=${role}`, {
-          cache: "no-store",
-        })
+        const res = await fetch(
+          `/api/staff/auth?role=${role}&restaurantSlug=${encodeURIComponent(
+            tenantSlug
+          )}`,
+          {
+            cache: "no-store",
+          }
+        )
         if (!res.ok) return
 
         const payload = (await res.json()) as {
@@ -47,7 +57,7 @@ export default function StaffLoginPage() {
     return () => {
       active = false
     }
-  }, [role])
+  }, [role, tenantSlug])
 
   async function login() {
     if (submitting) return
@@ -59,7 +69,7 @@ export default function StaffLoginPage() {
       const res = await fetch("/api/staff/auth", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ role, passcode }),
+        body: JSON.stringify({ role, passcode, restaurantSlug: tenantSlug }),
       })
 
       if (!res.ok) {
@@ -138,7 +148,7 @@ export default function StaffLoginPage() {
       <Button
         variant="secondary"
         className="w-full"
-        onClick={() => router.push("/menu")}
+        onClick={() => router.push(tenantPrefix ? `${tenantPrefix}/menu` : "/menu")}
       >
         Back to menu
       </Button>

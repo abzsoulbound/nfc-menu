@@ -3,6 +3,7 @@ import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { appendSystemEvent } from '@/lib/events'
 import { ASSIST_EDIT_UNLOCK_MS } from '@/lib/constants'
+import { resolveRestaurantFromRequest } from '@/lib/restaurants'
 import {
   buildModifierSummary,
   calculateModifierDelta,
@@ -44,6 +45,7 @@ function toJson(value: unknown): Prisma.InputJsonValue {
 }
 
 export async function POST(req: Request) {
+  const restaurant = await resolveRestaurantFromRequest(req)
   let body: unknown
   try {
     body = await req.json()
@@ -83,7 +85,12 @@ export async function POST(req: Request) {
         }
       }
     })
-    if (!item || item.cart.sessionId !== sessionId) {
+    if (
+      !item ||
+      item.restaurantId !== restaurant.id ||
+      item.cart.session.restaurantId !== restaurant.id ||
+      item.cart.sessionId !== sessionId
+    ) {
       return NextResponse.json({ error: 'FORBIDDEN' }, { status: 403 })
     }
 
@@ -147,6 +154,7 @@ export async function POST(req: Request) {
             },
         {
           req,
+          restaurantId: restaurant.id,
           sessionId,
           tableId: item.cart.session.tableId
         }
@@ -167,7 +175,7 @@ export async function POST(req: Request) {
         where: { id: item.menuItemId },
       })
 
-      if (menuItem) {
+      if (menuItem && menuItem.restaurantId === restaurant.id) {
         const customization = getMenuItemCustomization({
           id: menuItem.id,
           name: menuItem.name,
@@ -281,6 +289,7 @@ export async function POST(req: Request) {
             },
         {
           req,
+          restaurantId: restaurant.id,
           sessionId,
           tableId: item.cart.session.tableId
         }
@@ -302,6 +311,7 @@ export async function POST(req: Request) {
             },
         {
           req,
+          restaurantId: restaurant.id,
           sessionId,
           tableId: item.cart.session.tableId
         }

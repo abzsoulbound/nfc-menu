@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { requireStaff } from "@/lib/auth"
 import { getFixedTableNumbers } from "@/lib/tableCatalog"
+import { resolveRestaurantFromRequest } from "@/lib/restaurants"
 
 export async function GET(req: Request) {
   try {
@@ -12,12 +13,14 @@ export async function GET(req: Request) {
       { status: 401 }
     )
   }
+  const restaurant = await resolveRestaurantFromRequest(req)
 
   const fixedTableNumbers = getFixedTableNumbers()
   const fixedSet = new Set(fixedTableNumbers)
 
   const activeAssignments = await prisma.tableAssignment.findMany({
     where: {
+      restaurantId: restaurant.id,
       closedAt: null,
     },
     select: {

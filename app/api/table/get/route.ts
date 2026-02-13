@@ -3,8 +3,10 @@ import { prisma } from '@/lib/prisma'
 import { requireStaff } from '@/lib/auth'
 import { SESSION_IDLE_TIMEOUT_MS } from '@/lib/constants'
 import { getTableGroupByAssignmentId } from '@/lib/tableGroups'
+import { resolveRestaurantFromRequest } from '@/lib/restaurants'
 
 export async function POST(req: Request) {
+  const restaurant = await resolveRestaurantFromRequest(req)
   const body = await req.json()
   const tableId =
     typeof body?.tableId === 'string'
@@ -38,12 +40,19 @@ export async function POST(req: Request) {
       where: { id: sessionId },
       select: {
         id: true,
+        restaurantId: true,
         tableId: true,
         status: true,
         lastActivityAt: true,
       },
     })
-    const requestedTableGroup = await getTableGroupByAssignmentId(tableId)
+    if (session && session.restaurantId !== restaurant.id) {
+      return NextResponse.json({ error: 'FORBIDDEN' }, { status: 403 })
+    }
+    const requestedTableGroup = await getTableGroupByAssignmentId(
+      tableId,
+      restaurant.id
+    )
     if (
       !session ||
       !session.tableId ||
@@ -73,7 +82,10 @@ export async function POST(req: Request) {
   }
 
   const drafts = await prisma.tableDraft.findMany({
-    where: { tableId },
+    where: {
+      tableId,
+      restaurantId: restaurant.id,
+    },
     include: { items: true }
   })
 

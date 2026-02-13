@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { requireStaff } from "@/lib/auth"
 import { getTableGroupByTableNo } from "@/lib/tableGroups"
+import { resolveRestaurantFromRequest } from "@/lib/restaurants"
 
 type BillingLineItem = {
   orderId: string
@@ -101,6 +102,7 @@ export async function GET(req: Request) {
   } catch {
     return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 })
   }
+  const restaurant = await resolveRestaurantFromRequest(req)
 
   const { searchParams } = new URL(req.url)
   const tableNumber = Number(searchParams.get("tableNumber"))
@@ -108,7 +110,10 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: "BAD_REQUEST" }, { status: 400 })
   }
 
-  const tableGroup = await getTableGroupByTableNo(tableNumber)
+  const tableGroup = await getTableGroupByTableNo(
+    tableNumber,
+    restaurant.id
+  )
   if (!tableGroup) {
     return NextResponse.json({ error: "TABLE_NOT_FOUND" }, { status: 404 })
   }
@@ -116,6 +121,7 @@ export async function GET(req: Request) {
 
   const orders = await prisma.order.findMany({
     where: {
+      restaurantId: restaurant.id,
       tableId: { in: tableIds },
       status: {
         in: ["PENDING", "IN_PROGRESS", "COMPLETED"],
@@ -131,6 +137,7 @@ export async function GET(req: Request) {
       items: {
         orderBy: { createdAt: "asc" },
         where: {
+          restaurantId: restaurant.id,
           status: {
             in: ["PENDING", "IN_PROGRESS", "COMPLETED"],
           },

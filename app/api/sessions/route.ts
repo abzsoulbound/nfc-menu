@@ -8,6 +8,7 @@ import {
   getTableGroupForTag,
   isTableGroupClosed,
 } from "@/lib/tableGroups"
+import { resolveRestaurantFromRequest } from "@/lib/restaurants"
 
 function inferOrigin(tagId: string) {
   return tagId.startsWith("staff-") ? "STAFF" : "CUSTOMER"
@@ -55,14 +56,15 @@ class SessionRouteError extends Error {
 
 async function ensureTagId(
   tagId: string | undefined,
-  origin: string | undefined
+  origin: string | undefined,
+  restaurantId: string
 ) {
   if (tagId) {
     const existing = await prisma.nfcTag.findUnique({
       where: { id: tagId },
-      select: { id: true },
+      select: { id: true, restaurantId: true },
     })
-    if (!existing) {
+    if (!existing || existing.restaurantId !== restaurantId) {
       throw new SessionRouteError(404, {
         error: "TAG_NOT_REGISTERED",
       })
@@ -73,7 +75,10 @@ async function ensureTagId(
   if (origin === "STAFF") {
     const staffTagId = `staff-${crypto.randomUUID()}`
     await prisma.nfcTag.create({
-      data: { id: staffTagId },
+      data: {
+        id: staffTagId,
+        restaurantId,
+      },
     })
     return staffTagId
   }
@@ -96,9 +101,11 @@ export async function GET(req: Request) {
   } catch {
     return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 })
   }
+  const restaurant = await resolveRestaurantFromRequest(req)
 
   const sessions = await prisma.session.findMany({
     where: {
+      restaurantId: restaurant.id,
       status: "ACTIVE",
     },
     orderBy: { openedAt: "desc" },
@@ -116,6 +123,7 @@ export async function GET(req: Request) {
 }
 
 export async function POST(req: Request) {
+  const restaurant = await resolveRestaurantFromRequest(req)
   const body = await req.json()
   const sessionId =
     typeof body?.sessionId === "string"
@@ -176,7 +184,7 @@ export async function POST(req: Request) {
         cart: true,
       },
     })
-    if (!existing) {
+    if (!existing || existing.restaurantId !== restaurant.id) {
       return NextResponse.json({ error: "SESSION_NOT_FOUND" }, { status: 404 })
     }
 
@@ -198,18 +206,29 @@ export async function POST(req: Request) {
       await appendSystemEvent(
         "session_closed_stale",
         { sessionId: existing.id },
-        { req, sessionId: existing.id, tableId: existing.tableId }
+        {
+          req,
+          restaurantId: restaurant.id,
+          sessionId: existing.id,
+          tableId: existing.tableId,
+        }
       )
       return NextResponse.json({ error: "SESSION_STALE" }, { status: 410 })
     }
 
     if (!existing.cart) {
       await prisma.sessionCart.create({
-        data: { sessionId: existing.id },
+        data: {
+          sessionId: existing.id,
+          restaurantId: restaurant.id,
+        },
       })
     }
 
-    const existingTableGroup = await getTableGroupForTag(existing.tagId)
+    const existingTableGroup = await getTableGroupForTag(
+      existing.tagId,
+      restaurant.id
+    )
     const tableRequired = !existing.tagId.startsWith("staff-")
     if (tableRequired && !existingTableGroup) {
       await prisma.session.update({
@@ -245,7 +264,12 @@ export async function POST(req: Request) {
     await appendSystemEvent(
       "session_resumed",
       { sessionId: resumed.id },
-      { req, sessionId: resumed.id, tableId: resumed.tableId }
+      {
+        req,
+        restaurantId: restaurant.id,
+        sessionId: resumed.id,
+        tableId: resumed.tableId,
+      }
     )
 
     return NextResponse.json(toSessionDto(resumed))
@@ -253,7 +277,7 @@ export async function POST(req: Request) {
 
   let resolvedTagId: string
   try {
-    resolvedTagId = await ensureTagId(tagId, origin)
+    resolvedTagId = await ensureTagId(tagId, origin, restaurant.id)
   } catch (error) {
     if (error instanceof SessionRouteError) {
       return NextResponse.json(error.payload, {
@@ -263,11 +287,15 @@ export async function POST(req: Request) {
     throw error
   }
 
-  const tagTableGroup = await getTableGroupForTag(resolvedTagId)
+  const tagTableGroup = await getTableGroupForTag(
+    resolvedTagId,
+    restaurant.id
+  )
   const tableRequired = !resolvedTagId.startsWith("staff-")
   if (tableRequired && !tagTableGroup) {
     await prisma.session.updateMany({
       where: {
+        restaurantId: restaurant.id,
         tagId: resolvedTagId,
         status: "ACTIVE",
       },
@@ -292,6 +320,7 @@ export async function POST(req: Request) {
 
   const activeForTag = await prisma.session.findFirst({
     where: {
+      restaurantId: restaurant.id,
       tagId: resolvedTagId,
       status: "ACTIVE",
     },
@@ -310,7 +339,10 @@ export async function POST(req: Request) {
   if (activeForTag && !isStale(activeForTag.lastActivityAt)) {
     if (!activeForTag.cart) {
       await prisma.sessionCart.create({
-        data: { sessionId: activeForTag.id },
+        data: {
+          sessionId: activeForTag.id,
+          restaurantId: restaurant.id,
+        },
       })
     }
     const resumed = await prisma.session.update({
@@ -332,7 +364,12 @@ export async function POST(req: Request) {
     await appendSystemEvent(
       "session_reused_for_tag",
       { sessionId: resumed.id, tagId: resolvedTagId },
-      { req, sessionId: resumed.id, tableId: resumed.tableId }
+      {
+        req,
+        restaurantId: restaurant.id,
+        sessionId: resumed.id,
+        tableId: resumed.tableId,
+      }
     )
 
     return NextResponse.json(toSessionDto(resumed))
@@ -349,12 +386,18 @@ export async function POST(req: Request) {
     await appendSystemEvent(
       "session_closed_stale",
       { sessionId: activeForTag.id, tagId: resolvedTagId },
-      { req, sessionId: activeForTag.id, tableId: activeForTag.tableId }
+      {
+        req,
+        restaurantId: restaurant.id,
+        sessionId: activeForTag.id,
+        tableId: activeForTag.tableId,
+      }
     )
   }
 
   const session = await prisma.session.create({
     data: {
+      restaurantId: restaurant.id,
       tagId: resolvedTagId,
       tableId,
       status: "ACTIVE",
@@ -372,7 +415,10 @@ export async function POST(req: Request) {
   })
 
   await prisma.sessionCart.create({
-    data: { sessionId: session.id },
+    data: {
+      sessionId: session.id,
+      restaurantId: restaurant.id,
+    },
   })
 
   await appendSystemEvent(
@@ -382,7 +428,12 @@ export async function POST(req: Request) {
       tagId: resolvedTagId,
       origin: origin ?? inferOrigin(resolvedTagId),
     },
-    { req, sessionId: session.id, tableId: session.tableId }
+    {
+      req,
+      restaurantId: restaurant.id,
+      sessionId: session.id,
+      tableId: session.tableId,
+    }
   )
 
   return NextResponse.json(toSessionDto(session))

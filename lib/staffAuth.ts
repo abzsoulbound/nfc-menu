@@ -2,6 +2,7 @@ export type StaffRole = "admin" | "waiter" | "bar" | "kitchen"
 
 const COOKIE_STAFF_AUTH = "staff_auth"
 const COOKIE_STAFF_ROLE = "staff_role"
+const COOKIE_STAFF_RESTAURANT = "staff_restaurant"
 const COOKIE_FAILURES = "staff_auth_failures"
 const COOKIE_LOCKED = "staff_auth_locked"
 
@@ -15,6 +16,7 @@ const ROLE_ENV: Record<StaffRole, string> = {
 export const staffAuthCookies = {
   auth: COOKIE_STAFF_AUTH,
   role: COOKIE_STAFF_ROLE,
+  restaurant: COOKIE_STAFF_RESTAURANT,
   failures: COOKIE_FAILURES,
   locked: COOKIE_LOCKED,
 }

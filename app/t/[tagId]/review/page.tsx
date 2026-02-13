@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useMemo, useRef, useState } from "react"
-import { useRouter } from "next/navigation"
+import { usePathname, useRouter } from "next/navigation"
 import { Card } from "@/components/ui/Card"
 import { Divider } from "@/components/ui/Divider"
 import { Button } from "@/components/ui/Button"
@@ -21,6 +21,7 @@ import {
   readApiErrorInfo,
   sessionConnectErrorMessage,
 } from "@/lib/clientApiErrors"
+import { tenantTagPath } from "@/lib/tenantPaths"
 
 type ReviewStatus = "pending" | "in_progress" | "completed"
 
@@ -130,6 +131,7 @@ export default function PerUserReviewPage({
   params: { tagId: string }
 }) {
   const router = useRouter()
+  const pathname = usePathname()
   const tagId = params.tagId
   const sessionId = useSessionStore(s => s.sessionId)
   const setSession = useSessionStore(s => s.setSession)
@@ -417,7 +419,7 @@ export default function PerUserReviewPage({
         if (!res.ok) {
           const errorInfo = await readApiErrorInfo(res)
           if (res.status === 409 && errorInfo.code === "TABLE_CLOSED") {
-            router.replace(`/t/${tagId}/closed`)
+            router.replace(tenantTagPath(pathname, tagId, "/closed"))
           } else {
             setError(
               sessionConnectErrorMessage(errorInfo, tagId)
@@ -1044,7 +1046,7 @@ export default function PerUserReviewPage({
         </div>
         <Button
           variant="secondary"
-          onClick={() => router.push(`/t/${tagId}`)}
+          onClick={() => router.push(tenantTagPath(pathname, tagId))}
         >
           Back
         </Button>
@@ -1419,7 +1421,7 @@ export default function PerUserReviewPage({
       <div className="grid grid-cols-2 gap-2">
         <Button
           variant="secondary"
-          onClick={() => router.push(`/t/${tagId}`)}
+          onClick={() => router.push(tenantTagPath(pathname, tagId))}
           disabled={submitting}
         >
           Back

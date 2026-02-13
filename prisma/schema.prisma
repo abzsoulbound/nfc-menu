@@ -24,193 +24,293 @@ enum Station {
   BAR
 }
 
+model Restaurant {
+  id             String   @id
+  slug           String   @unique
+  name           String
+  logoUrl        String?
+  primaryColor   String?
+  secondaryColor String?
+  domain         String?  @unique
+  vatRate        Float    @default(0.2)
+  serviceCharge  Float    @default(0)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  nfcTags        NfcTag[]
+  tableAssignments TableAssignment[]
+  sessions       Session[]
+  sessionCarts   SessionCart[]
+  cartItems      CartItem[]
+  tableDrafts    TableDraft[]
+  draftItems     DraftItem[]
+  kitchenTickets KitchenTicket[]
+  ticketItems    TicketItem[]
+  menuCategories MenuCategory[]
+  menuItems      MenuItem[]
+  orders         Order[]
+  orderItems     OrderItem[]
+  deviceSessions DeviceSession[]
+  staffUsers     StaffUser[]
+  systemEvents   SystemEvent[]
+}
+
 model NfcTag {
-  id         String   @id @default(uuid())
-  createdAt  DateTime @default(now())
-  assignment TableAssignment?
-  sessions   Session[]
+  id           String     @id @default(uuid())
+  restaurantId String     @default("marlos")
+  restaurant   Restaurant @relation(fields: [restaurantId], references: [id])
+  createdAt    DateTime   @default(now())
+  assignment   TableAssignment?
+  sessions     Session[]
+
+  @@index([restaurantId])
 }
 
 model TableAssignment {
-  id         String   @id @default(uuid())
-  tableNo    Int
-  tagId      String   @unique
-  tag        NfcTag   @relation(fields: [tagId], references: [id])
-  locked     Boolean  @default(false)
-  closedAt   DateTime?
-  closedPaid Boolean?
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
-  drafts     TableDraft[]
-  tickets    KitchenTicket[]
-  sessions   Session[]
-  orders     Order[]
+  id           String     @id @default(uuid())
+  restaurantId String     @default("marlos")
+  restaurant   Restaurant @relation(fields: [restaurantId], references: [id])
+  tableNo      Int
+  tagId        String     @unique
+  tag          NfcTag     @relation(fields: [tagId], references: [id])
+  locked       Boolean    @default(false)
+  closedAt     DateTime?
+  closedPaid   Boolean?
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+  drafts       TableDraft[]
+  tickets      KitchenTicket[]
+  sessions     Session[]
+  orders       Order[]
 
+  @@index([restaurantId])
   @@index([tableNo])
 }
 
 model Session {
-  id             String        @id @default(uuid())
+  id             String           @id @default(uuid())
+  restaurantId   String           @default("marlos")
+  restaurant     Restaurant       @relation(fields: [restaurantId], references: [id])
   tagId          String
-  tag            NfcTag        @relation(fields: [tagId], references: [id])
+  tag            NfcTag           @relation(fields: [tagId], references: [id])
   tableId        String?
   table          TableAssignment? @relation(fields: [tableId], references: [id])
-  openedAt       DateTime      @default(now())
-  lastActivityAt DateTime      @default(now())
-  status         SessionStatus @default(ACTIVE)
+  openedAt       DateTime         @default(now())
+  lastActivityAt DateTime         @default(now())
+  status         SessionStatus    @default(ACTIVE)
   closedAt       DateTime?
   cart           SessionCart?
   orders         Order[]
 
+  @@index([restaurantId])
   @@index([tagId, status])
   @@index([tableId, status])
 }
 
 model SessionCart {
-  id        String   @id @default(uuid())
-  sessionId String   @unique
-  session   Session  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-  items     CartItem[]
-  updatedAt DateTime @updatedAt
+  id           String     @id @default(uuid())
+  restaurantId String     @default("marlos")
+  restaurant   Restaurant @relation(fields: [restaurantId], references: [id])
+  sessionId    String     @unique
+  session      Session    @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  items        CartItem[]
+  updatedAt    DateTime   @updatedAt
+
+  @@index([restaurantId])
 }
 
 model CartItem {
-  id        String      @id @default(uuid())
-  cartId     String
-  cart       SessionCart @relation(fields: [cartId], references: [id], onDelete: Cascade)
-  menuItemId String?
-  menuItem   MenuItem?   @relation(fields: [menuItemId], references: [id])
-  name       String
-  quantity   Int
-  unitPrice  Float
-  vatRate    Float
-  allergens  Json
-  station    Station
-  edits      Json?
-  createdAt  DateTime    @default(now())
-  updatedAt  DateTime    @updatedAt
+  id           String      @id @default(uuid())
+  restaurantId String      @default("marlos")
+  restaurant   Restaurant  @relation(fields: [restaurantId], references: [id])
+  cartId       String
+  cart         SessionCart @relation(fields: [cartId], references: [id], onDelete: Cascade)
+  menuItemId   String?
+  menuItem     MenuItem?   @relation(fields: [menuItemId], references: [id])
+  name         String
+  quantity     Int
+  unitPrice    Float
+  vatRate      Float
+  allergens    Json
+  station      Station
+  edits        Json?
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+
+  @@index([restaurantId])
 }
 
 model TableDraft {
-  id        String   @id @default(uuid())
-  tableId   String
-  table     TableAssignment @relation(fields: [tableId], references: [id])
-  createdAt DateTime @default(now())
-  items     DraftItem[]
+  id           String          @id @default(uuid())
+  restaurantId String          @default("marlos")
+  restaurant   Restaurant      @relation(fields: [restaurantId], references: [id])
+  tableId      String
+  table        TableAssignment @relation(fields: [tableId], references: [id])
+  createdAt    DateTime        @default(now())
+  items        DraftItem[]
+
+  @@index([restaurantId])
 }
 
 model DraftItem {
-  id        String     @id @default(uuid())
-  draftId  String
-  draft    TableDraft @relation(fields: [draftId], references: [id])
-  memberId Int
-  name     String
-  quantity Int
+  id           String      @id @default(uuid())
+  restaurantId String      @default("marlos")
+  restaurant   Restaurant  @relation(fields: [restaurantId], references: [id])
+  draftId      String
+  draft        TableDraft  @relation(fields: [draftId], references: [id])
+  memberId     Int
+  name         String
+  quantity     Int
+
+  @@index([restaurantId])
 }
 
 model KitchenTicket {
-  id        String   @id @default(uuid())
-  tableId   String
-  table     TableAssignment @relation(fields: [tableId], references: [id])
-  createdAt DateTime @default(now())
-  readyAt   DateTime?
-  items     TicketItem[]
+  id           String          @id @default(uuid())
+  restaurantId String          @default("marlos")
+  restaurant   Restaurant      @relation(fields: [restaurantId], references: [id])
+  tableId      String
+  table        TableAssignment @relation(fields: [tableId], references: [id])
+  createdAt    DateTime        @default(now())
+  readyAt      DateTime?
+  items        TicketItem[]
+
+  @@index([restaurantId])
 }
 
 model TicketItem {
-  id        String         @id @default(uuid())
-  ticketId String
-  ticket   KitchenTicket @relation(fields: [ticketId], references: [id])
-  name     String
-  quantity Int
-  station  String
+  id           String        @id @default(uuid())
+  restaurantId String        @default("marlos")
+  restaurant   Restaurant    @relation(fields: [restaurantId], references: [id])
+  ticketId     String
+  ticket       KitchenTicket @relation(fields: [ticketId], references: [id])
+  name         String
+  quantity     Int
+  station      String
+
+  @@index([restaurantId])
 }
 
 model MenuCategory {
-  id        String     @id @default(uuid())
-  slug      String     @unique
-  name      String
-  sortOrder Int        @default(0)
-  createdAt DateTime   @default(now())
-  updatedAt DateTime   @updatedAt
-  items     MenuItem[]
+  id           String      @id @default(uuid())
+  restaurantId String      @default("marlos")
+  restaurant   Restaurant  @relation(fields: [restaurantId], references: [id])
+  slug         String
+  name         String
+  sortOrder    Int         @default(0)
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+  items        MenuItem[]
+
+  @@unique([restaurantId, slug])
+  @@index([restaurantId])
 }
 
 model MenuItem {
-  id          String      @id
-  categoryId  String
-  category    MenuCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
-  sortOrder   Int         @default(0)
-  name        String
-  description String
-  image       String?
-  basePrice   Float
-  vatRate     Float
-  allergens   Json
-  station     Station
-  available   Boolean     @default(true)
-  createdAt   DateTime    @default(now())
-  updatedAt   DateTime    @updatedAt
-  cartItems   CartItem[]
-  orderItems  OrderItem[]
+  id           String       @id
+  restaurantId String       @default("marlos")
+  restaurant   Restaurant   @relation(fields: [restaurantId], references: [id])
+  categoryId   String
+  category     MenuCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  sortOrder    Int          @default(0)
+  name         String
+  description  String
+  image        String?
+  basePrice    Float
+  vatRate      Float
+  allergens    Json
+  station      Station
+  available    Boolean      @default(true)
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+  cartItems    CartItem[]
+  orderItems   OrderItem[]
 
+  @@index([restaurantId])
   @@index([categoryId, available])
 }
 
 model Order {
-  id           String      @id @default(uuid())
-  sessionId    String
-  session      Session     @relation(fields: [sessionId], references: [id])
-  tableId      String
-  table        TableAssignment @relation(fields: [tableId], references: [id])
+  id            String          @id @default(uuid())
+  restaurantId  String          @default("marlos")
+  restaurant    Restaurant      @relation(fields: [restaurantId], references: [id])
+  sessionId     String
+  session       Session         @relation(fields: [sessionId], references: [id])
+  tableId       String
+  table         TableAssignment @relation(fields: [tableId], references: [id])
   targetStation Station
-  status       OrderStatus @default(PENDING)
-  createdAt    DateTime    @default(now())
-  updatedAt    DateTime    @updatedAt
-  completedAt  DateTime?
-  items        OrderItem[]
+  status        OrderStatus      @default(PENDING)
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+  completedAt   DateTime?
+  items         OrderItem[]
 
+  @@index([restaurantId])
   @@index([tableId, status, createdAt])
   @@index([targetStation, status, createdAt])
 }
 
 model OrderItem {
-  id         String      @id @default(uuid())
-  orderId    String
-  order      Order       @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  menuItemId String?
-  menuItem   MenuItem?   @relation(fields: [menuItemId], references: [id])
-  name       String
-  quantity   Int
-  unitPrice  Float
-  vatRate    Float
-  allergens  Json
-  edits      Json?
-  station    Station
-  status     OrderStatus @default(PENDING)
-  createdAt  DateTime    @default(now())
+  id           String      @id @default(uuid())
+  restaurantId String      @default("marlos")
+  restaurant   Restaurant  @relation(fields: [restaurantId], references: [id])
+  orderId      String
+  order        Order       @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  menuItemId   String?
+  menuItem     MenuItem?   @relation(fields: [menuItemId], references: [id])
+  name         String
+  quantity     Int
+  unitPrice    Float
+  vatRate      Float
+  allergens    Json
+  edits        Json?
+  station      Station
+  status       OrderStatus @default(PENDING)
+  createdAt    DateTime    @default(now())
   completedAt DateTime?
 
+  @@index([restaurantId])
   @@index([station, status])
 }
 
 model DeviceSession {
-  id        String   @id @default(uuid())
-  role      String
-  revoked   Boolean  @default(false)
-  createdAt DateTime @default(now())
+  id           String      @id @default(uuid())
+  restaurantId String      @default("marlos")
+  restaurant   Restaurant  @relation(fields: [restaurantId], references: [id])
+  role         String
+  revoked      Boolean     @default(false)
+  createdAt    DateTime    @default(now())
+
+  @@index([restaurantId])
+}
+
+model StaffUser {
+  id           String      @id @default(uuid())
+  restaurantId String      @default("marlos")
+  restaurant   Restaurant  @relation(fields: [restaurantId], references: [id])
+  name         String
+  role         String
+  passcode     String?
+  active       Boolean     @default(true)
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+
+  @@index([restaurantId, role])
+  @@unique([restaurantId, name])
 }
 
 model SystemEvent {
-  id        String   @id @default(uuid())
-  type      String
-  payload   Json
-  actor     String?
-  sessionId String?
-  tableId   String?
-  orderId   String?
-  createdAt DateTime @default(now())
+  id           String      @id @default(uuid())
+  restaurantId String      @default("marlos")
+  restaurant   Restaurant  @relation(fields: [restaurantId], references: [id])
+  type         String
+  payload      Json
+  actor        String?
+  sessionId    String?
+  tableId      String?
+  orderId      String?
+  createdAt    DateTime    @default(now())
 
+  @@index([restaurantId])
   @@index([createdAt])
   @@index([type])
   @@index([sessionId])

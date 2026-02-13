@@ -7,6 +7,7 @@ import {
   getFixedTableNumbers,
   isAllowedTemporaryTableNumber,
 } from "@/lib/tableCatalog"
+import { resolveRestaurantFromRequest } from "@/lib/restaurants"
 
 type SeatingErrorPayload = {
   error: string
@@ -41,6 +42,7 @@ export async function POST(req: Request) {
   } catch {
     return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 })
   }
+  const restaurant = await resolveRestaurantFromRequest(req)
 
   const body = await req.json().catch(() => ({}))
   const tableNo = Number(body?.tableNo)
@@ -83,6 +85,7 @@ export async function POST(req: Request) {
 
   const registeredTags = await prisma.nfcTag.findMany({
     where: {
+      restaurantId: restaurant.id,
       id: {
         in: tagIds,
       },
@@ -108,6 +111,7 @@ export async function POST(req: Request) {
       async tx => {
         const previousAssignments = await tx.tableAssignment.findMany({
           where: {
+            restaurantId: restaurant.id,
             OR: [
               {
                 tagId: {
@@ -156,12 +160,14 @@ export async function POST(req: Request) {
           await tx.tableAssignment.upsert({
             where: { tagId },
             update: {
+              restaurantId: restaurant.id,
               tableNo,
               locked: false,
               closedAt: null,
               closedPaid: null,
             },
             create: {
+              restaurantId: restaurant.id,
               tagId,
               tableNo,
               locked: false,
@@ -174,6 +180,7 @@ export async function POST(req: Request) {
         if (tagsToUnassign.length > 0) {
           await tx.tableAssignment.deleteMany({
             where: {
+              restaurantId: restaurant.id,
               tableNo,
               tagId: {
                 in: tagsToUnassign,
@@ -192,6 +199,7 @@ export async function POST(req: Request) {
         for (const impactedTableNo of impactedTableNumbers) {
           const assignments = await tx.tableAssignment.findMany({
             where: {
+              restaurantId: restaurant.id,
               tableNo: impactedTableNo,
             },
             orderBy: [{ createdAt: "asc" }, { id: "asc" }],
@@ -210,6 +218,7 @@ export async function POST(req: Request) {
 
           await tx.tableAssignment.updateMany({
             where: {
+              restaurantId: restaurant.id,
               tableNo: impactedTableNo,
             },
             data: {
@@ -221,6 +230,7 @@ export async function POST(req: Request) {
 
           await tx.session.updateMany({
             where: {
+              restaurantId: restaurant.id,
               tagId: {
                 in: assignments.map(assignment => assignment.tagId),
               },
@@ -235,6 +245,7 @@ export async function POST(req: Request) {
         if (tagsToUnassign.length > 0) {
           await tx.session.updateMany({
             where: {
+              restaurantId: restaurant.id,
               tagId: {
                 in: tagsToUnassign,
               },
@@ -270,7 +281,11 @@ export async function POST(req: Request) {
         unassignedTagIds: result.unassignedTagIds,
         masterTableId: result.masterTableId,
       },
-      { req, tableId: result.masterTableId }
+      {
+        req,
+        restaurantId: restaurant.id,
+        tableId: result.masterTableId,
+      }
     )
 
     return NextResponse.json({

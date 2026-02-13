@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma"
 import { requireStaff } from "@/lib/auth"
 import { appendSystemEvent } from "@/lib/events"
 import { getTableGroupByAssignmentId } from "@/lib/tableGroups"
+import { resolveRestaurantFromRequest } from "@/lib/restaurants"
 
 export async function POST(req: Request) {
   try {
@@ -10,13 +11,17 @@ export async function POST(req: Request) {
   } catch {
     return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 })
   }
+  const restaurant = await resolveRestaurantFromRequest(req)
 
   const { action, tableId } = await req.json()
   if (typeof action !== "string" || typeof tableId !== "string") {
     return NextResponse.json({ error: "BAD_REQUEST" }, { status: 400 })
   }
 
-  const tableGroup = await getTableGroupByAssignmentId(tableId)
+  const tableGroup = await getTableGroupByAssignmentId(
+    tableId,
+    restaurant.id
+  )
   if (!tableGroup) {
     return NextResponse.json(
       { error: "TABLE_NOT_FOUND" },
@@ -30,13 +35,16 @@ export async function POST(req: Request) {
 
   if (action === "LOCK_TABLE") {
     await prisma.tableAssignment.updateMany({
-      where: { id: { in: groupTableIds } },
+      where: {
+        restaurantId: restaurant.id,
+        id: { in: groupTableIds },
+      },
       data: { locked: true },
     })
     await appendSystemEvent(
       "table_locked",
       { tableId: masterTableId, groupedTableIds: groupTableIds },
-      { req, tableId: masterTableId }
+      { req, restaurantId: restaurant.id, tableId: masterTableId }
     )
     return NextResponse.json({
       ok: true,
@@ -50,13 +58,16 @@ export async function POST(req: Request) {
 
   if (action === "UNLOCK_TABLE") {
     await prisma.tableAssignment.updateMany({
-      where: { id: { in: groupTableIds } },
+      where: {
+        restaurantId: restaurant.id,
+        id: { in: groupTableIds },
+      },
       data: { locked: false },
     })
     await appendSystemEvent(
       "table_unlocked",
       { tableId: masterTableId, groupedTableIds: groupTableIds },
-      { req, tableId: masterTableId }
+      { req, restaurantId: restaurant.id, tableId: masterTableId }
     )
     return NextResponse.json({
       ok: true,
@@ -76,7 +87,10 @@ export async function POST(req: Request) {
     )
 
     await prisma.tableAssignment.updateMany({
-      where: { id: { in: groupTableIds } },
+      where: {
+        restaurantId: restaurant.id,
+        id: { in: groupTableIds },
+      },
       data: {
         closedAt,
         closedPaid: paid,
@@ -86,6 +100,7 @@ export async function POST(req: Request) {
 
     await prisma.session.updateMany({
       where: {
+        restaurantId: restaurant.id,
         tableId: { in: groupTableIds },
         status: "ACTIVE",
       },
@@ -96,6 +111,7 @@ export async function POST(req: Request) {
     })
     await prisma.session.updateMany({
       where: {
+        restaurantId: restaurant.id,
         tagId: { in: groupTagIds },
         status: "ACTIVE",
       },
@@ -106,7 +122,10 @@ export async function POST(req: Request) {
     })
 
     await prisma.tableAssignment.deleteMany({
-      where: { id: { in: groupTableIds } },
+      where: {
+        restaurantId: restaurant.id,
+        id: { in: groupTableIds },
+      },
     })
 
     await appendSystemEvent(
@@ -118,7 +137,7 @@ export async function POST(req: Request) {
         groupedTagIds: groupTagIds,
         unassignedOnClose: true,
       },
-      { req, tableId: masterTableId }
+      { req, restaurantId: restaurant.id, tableId: masterTableId }
     )
 
     return NextResponse.json({
@@ -145,13 +164,17 @@ export async function PUT(req: Request) {
   } catch {
     return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 })
   }
+  const restaurant = await resolveRestaurantFromRequest(req)
 
   const { tableId, target, message } = await req.json()
   if (!tableId || !target || !message) {
     return NextResponse.json({ error: "BAD_REQUEST" }, { status: 400 })
   }
 
-  const tableGroup = await getTableGroupByAssignmentId(tableId)
+  const tableGroup = await getTableGroupByAssignmentId(
+    tableId,
+    restaurant.id
+  )
   if (!tableGroup) {
     return NextResponse.json(
       { error: "TABLE_NOT_FOUND" },
@@ -167,7 +190,7 @@ export async function PUT(req: Request) {
       target,
       message,
     },
-    { req, tableId: masterTableId }
+    { req, restaurantId: restaurant.id, tableId: masterTableId }
   )
 
   return NextResponse.json({ sent: true })

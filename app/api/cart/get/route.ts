@@ -13,6 +13,7 @@ import {
   stripInternalEditMeta,
 } from '@/lib/itemEdits'
 import { appendSystemEvent } from '@/lib/events'
+import { resolveRestaurantFromRequest } from '@/lib/restaurants'
 
 function normalizeClientKey(value: unknown): string | null {
   if (typeof value !== 'string') return null
@@ -21,6 +22,7 @@ function normalizeClientKey(value: unknown): string | null {
 }
 
 export async function POST(req: Request) {
+  const restaurant = await resolveRestaurantFromRequest(req)
   const body = await req.json()
   const sessionId = String(body?.sessionId ?? '')
   const requesterClientKey = normalizeClientKey(
@@ -31,8 +33,11 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'BAD_REQUEST' }, { status: 400 })
   }
 
-  const cart = await prisma.sessionCart.findUnique({
-    where: { sessionId },
+  const cart = await prisma.sessionCart.findFirst({
+    where: {
+      sessionId,
+      restaurantId: restaurant.id,
+    },
     include: {
       items: true,
       session: true
@@ -45,8 +50,11 @@ export async function POST(req: Request) {
 
   const previousLastActivityAt = cart.session.lastActivityAt
   const touchedAt = new Date()
-  await prisma.session.update({
-    where: { id: sessionId },
+  await prisma.session.updateMany({
+    where: {
+      id: sessionId,
+      restaurantId: restaurant.id,
+    },
     data: { lastActivityAt: touchedAt }
   })
 
@@ -74,6 +82,7 @@ export async function POST(req: Request) {
   if (expiredUnconfirmedItemIds.length > 0) {
     await prisma.cartItem.deleteMany({
       where: {
+        restaurantId: restaurant.id,
         cartId: cart.id,
         id: { in: expiredUnconfirmedItemIds },
       },
@@ -91,6 +100,7 @@ export async function POST(req: Request) {
       },
       {
         req,
+        restaurantId: restaurant.id,
         sessionId,
         tableId: cart.session.tableId,
       }

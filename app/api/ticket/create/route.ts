@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { requireStaff } from '@/lib/auth'
+import { resolveRestaurantFromRequest } from '@/lib/restaurants'
 
 export async function POST(req: Request) {
   try {
@@ -8,6 +9,7 @@ export async function POST(req: Request) {
   } catch {
     return NextResponse.json({ error: 'UNAUTHORIZED' }, { status: 401 })
   }
+  const restaurant = await resolveRestaurantFromRequest(req)
 
   const { tableId } = await req.json()
   if (!tableId) {
@@ -15,7 +17,10 @@ export async function POST(req: Request) {
   }
 
   const drafts = await prisma.tableDraft.findMany({
-    where: { tableId },
+    where: {
+      tableId,
+      restaurantId: restaurant.id,
+    },
     include: { items: true }
   })
 
@@ -25,10 +30,12 @@ export async function POST(req: Request) {
 
   const ticket = await prisma.kitchenTicket.create({
     data: {
+      restaurantId: restaurant.id,
       tableId,
       items: {
         create: drafts.flatMap(d =>
           d.items.map(i => ({
+            restaurantId: restaurant.id,
             name: i.name,
             quantity: i.quantity,
             station: 'kitchen'
@@ -39,11 +46,17 @@ export async function POST(req: Request) {
   })
 
   await prisma.draftItem.deleteMany({
-    where: { draftId: { in: drafts.map(d => d.id) } }
+    where: {
+      restaurantId: restaurant.id,
+      draftId: { in: drafts.map(d => d.id) },
+    }
   })
 
   await prisma.tableDraft.deleteMany({
-    where: { tableId }
+    where: {
+      restaurantId: restaurant.id,
+      tableId,
+    }
   })
 
   return NextResponse.json({ ticketId: ticket.id })

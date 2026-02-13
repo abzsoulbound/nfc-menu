@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma'
 import { requireStaff } from '@/lib/auth'
 import { appendSystemEvent } from '@/lib/events'
 import { getTableGroupByTableNo } from '@/lib/tableGroups'
+import { resolveRestaurantFromRequest } from '@/lib/restaurants'
 
 export async function POST(req: Request) {
   try {
@@ -10,6 +11,7 @@ export async function POST(req: Request) {
   } catch {
     return NextResponse.json({ error: 'UNAUTHORIZED' }, { status: 401 })
   }
+  const restaurant = await resolveRestaurantFromRequest(req)
 
   const body = await req.json()
   const tagId =
@@ -29,30 +31,44 @@ export async function POST(req: Request) {
 
   const tag = await prisma.nfcTag.findUnique({
     where: { id: tagId },
-    select: { id: true }
+    select: { id: true, restaurantId: true }
   })
-  if (!tag) {
+  if (!tag || tag.restaurantId !== restaurant.id) {
     return NextResponse.json(
       { error: 'TAG_NOT_REGISTERED' },
       { status: 404 }
     )
   }
 
-  const previousAssignment = await prisma.tableAssignment.findUnique({
-    where: { tagId },
+  const previousAssignment = await prisma.tableAssignment.findFirst({
+    where: {
+      tagId,
+      restaurantId: restaurant.id,
+    },
     select: { tableNo: true }
   })
 
   const assignment = await prisma.tableAssignment.upsert({
     where: { tagId },
-    update: { tableNo },
-    create: { tagId, tableNo }
+    update: {
+      restaurantId: restaurant.id,
+      tableNo,
+    },
+    create: {
+      restaurantId: restaurant.id,
+      tagId,
+      tableNo,
+    }
   })
-  const tableGroup = await getTableGroupByTableNo(tableNo)
+  const tableGroup = await getTableGroupByTableNo(
+    tableNo,
+    restaurant.id
+  )
   const masterTableId = tableGroup?.master.id ?? assignment.id
 
   await prisma.session.updateMany({
     where: {
+      restaurantId: restaurant.id,
       tagId,
       status: 'ACTIVE'
     },
@@ -66,7 +82,8 @@ export async function POST(req: Request) {
     previousAssignment.tableNo !== tableNo
   ) {
     const previousGroup = await getTableGroupByTableNo(
-      previousAssignment.tableNo
+      previousAssignment.tableNo,
+      restaurant.id
     )
     if (previousGroup) {
       const previousGroupTagIds = previousGroup.assignments.map(
@@ -74,6 +91,7 @@ export async function POST(req: Request) {
       )
       await prisma.session.updateMany({
         where: {
+          restaurantId: restaurant.id,
           tagId: { in: previousGroupTagIds },
           status: 'ACTIVE'
         },
@@ -93,6 +111,7 @@ export async function POST(req: Request) {
     },
     {
       req,
+      restaurantId: restaurant.id,
       tableId: masterTableId
     }
   )

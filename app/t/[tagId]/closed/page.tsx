@@ -1,13 +1,18 @@
+"use client"
+
 import Link from "next/link"
+import { usePathname } from "next/navigation"
 import { Card } from "@/components/ui/Card"
 import { Divider } from "@/components/ui/Divider"
 import { Button } from "@/components/ui/Button"
+import { tenantTagPath } from "@/lib/tenantPaths"
 
 export default function TableClosedPage({
   params,
 }: {
   params: { tagId: string }
 }) {
+  const pathname = usePathname()
   const tagId = params.tagId
 
   return (
@@ -47,7 +52,7 @@ export default function TableClosedPage({
 
       <Divider />
 
-      <Link href={`/t/${tagId}`}>
+      <Link href={tenantTagPath(pathname, tagId)}>
         <Button className="w-full" variant="secondary">
           Back to your items
         </Button>

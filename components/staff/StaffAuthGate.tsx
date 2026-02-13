@@ -20,19 +20,36 @@ const ROLE_LABELS: Record<StaffRole, string> = {
   kitchen: "Kitchen",
 }
 
+function restaurantSlugFromPath(pathname: string) {
+  const tenantMatch = pathname.match(/^\/r\/([^/]+)/)
+  return tenantMatch?.[1] ?? "marlos"
+}
+
+function normalizeStaffPath(pathname: string) {
+  const tenantMatch = pathname.match(/^\/r\/[^/]+(\/.*)?$/)
+  return tenantMatch?.[1] || "/"
+}
+
 function roleFromPath(pathname: string): StaffRole | null {
-  if (pathname.startsWith("/staff/login")) return null
-  if (pathname.startsWith("/staff")) return "waiter"
-  if (pathname.startsWith("/admin")) return "admin"
-  if (pathname.startsWith("/waiter")) return "waiter"
-  if (pathname.startsWith("/bar")) return "bar"
-  if (pathname.startsWith("/kitchen")) return "kitchen"
+  const normalizedPath = normalizeStaffPath(pathname)
+
+  if (normalizedPath.startsWith("/staff/login")) return null
+  if (normalizedPath.startsWith("/dashboard")) return "admin"
+  if (normalizedPath.startsWith("/staff")) return "waiter"
+  if (normalizedPath.startsWith("/admin")) return "admin"
+  if (normalizedPath.startsWith("/waiter")) return "waiter"
+  if (normalizedPath.startsWith("/bar")) return "bar"
+  if (normalizedPath.startsWith("/kitchen")) return "kitchen"
   return null
 }
 
 export function StaffAuthGate({ children }: { children: ReactNode }) {
   const pathname = usePathname()
   const role = useMemo(() => roleFromPath(pathname), [pathname])
+  const restaurantSlug = useMemo(
+    () => restaurantSlugFromPath(pathname),
+    [pathname]
+  )
   const [loading, setLoading] = useState(true)
   const [authorized, setAuthorized] = useState(false)
   const [locked, setLocked] = useState(false)
@@ -43,9 +60,14 @@ export function StaffAuthGate({ children }: { children: ReactNode }) {
   const [error, setError] = useState<string | null>(null)
 
   async function fetchStatus(targetRole: StaffRole) {
-    const res = await fetch(`/api/staff/auth?role=${targetRole}`, {
-      cache: "no-store",
-    })
+    const res = await fetch(
+      `/api/staff/auth?role=${targetRole}&restaurantSlug=${encodeURIComponent(
+        restaurantSlug
+      )}`,
+      {
+        cache: "no-store",
+      }
+    )
     if (!res.ok) {
       setAuthorized(false)
       setLocked(false)
@@ -72,7 +94,7 @@ export function StaffAuthGate({ children }: { children: ReactNode }) {
         setRemaining(3)
       })
       .finally(() => setLoading(false))
-  }, [role])
+  }, [role, restaurantSlug])
 
   async function submitRolePasscode(e: FormEvent<HTMLFormElement>) {
     e.preventDefault()
@@ -84,7 +106,11 @@ export function StaffAuthGate({ children }: { children: ReactNode }) {
       const res = await fetch("/api/staff/auth", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ role, passcode }),
+        body: JSON.stringify({
+          role,
+          passcode,
+          restaurantSlug,
+        }),
       })
       const data = await res.json()
       if (res.ok) {
@@ -117,6 +143,7 @@ export function StaffAuthGate({ children }: { children: ReactNode }) {
         body: JSON.stringify({
           action: "unlock",
           managerPasscode,
+          restaurantSlug,
         }),
       })
 

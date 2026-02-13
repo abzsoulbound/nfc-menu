@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { usePathname, useRouter } from 'next/navigation'
 import { MenuSection } from "@/components/menu/MenuSection"
 import { MenuItemCard } from "@/components/menu/MenuItemCard"
 import { useSessionStore } from "@/store/useSessionStore"
@@ -27,6 +27,7 @@ import {
   type ModifierSelections,
   validateModifierSelections,
 } from "@/lib/menuCustomizations"
+import { tenantTagPath } from "@/lib/tenantPaths"
 
 type MenuItem = {
   id: string
@@ -78,6 +79,18 @@ type PendingSyncEntry = {
   revision: number
 }
 
+type CustomizerSectionKey = "removals" | "additions" | "allergens"
+type CustomizerGroup = MenuCustomization["groups"][number]
+
+type CustomizerSection = {
+  key: CustomizerSectionKey
+  title: string
+  hint: string
+  groups: CustomizerGroup[]
+  selectedCount: number
+  maxCount: number
+}
+
 function isObject(value: unknown): value is Record<string, unknown> {
   return (
     value !== null &&
@@ -103,8 +116,70 @@ function modifierSignatureFromEdits(edits: unknown): string {
   return buildModifierSignature(normalized) || 'base'
 }
 
+function groupSelectionMin(group: CustomizerGroup): number {
+  if (typeof group.min === "number" && group.min >= 0) {
+    return group.min
+  }
+  return group.required ? 1 : 0
+}
+
+function groupSelectionMax(group: CustomizerGroup): number {
+  if (typeof group.max === "number" && group.max > 0) {
+    return group.max
+  }
+  if (group.type === "single") return 1
+  return group.options.length
+}
+
+function classifyGroup(group: CustomizerGroup): CustomizerSectionKey {
+  const haystack = `${group.id} ${group.name}`.toLowerCase()
+  const hasRemovalOptions = group.options.some(
+    option => (option.removeIngredientIds?.length ?? 0) > 0
+  )
+
+  if (
+    haystack.includes("remove") ||
+    haystack.includes("without") ||
+    hasRemovalOptions
+  ) {
+    return "removals"
+  }
+
+  if (
+    /allergen|allergy|diet|intolerance|gluten|dairy|nut|vegan|vegetarian|halal|kosher/.test(
+      haystack
+    )
+  ) {
+    return "allergens"
+  }
+
+  return "additions"
+}
+
+function ingredientToken(label: string): string {
+  const normalized = label.toLowerCase()
+  if (
+    /bacon|sausage|chicken|beef|steak|salmon|tuna|prawn|fish|egg/.test(
+      normalized
+    )
+  ) {
+    return "P"
+  }
+  if (/cheese|milk|cream|butter|yoghurt|yogurt/.test(normalized)) {
+    return "D"
+  }
+  if (/toast|bread|bun|pasta|rice|potato|chips|fries|pancake/.test(normalized)) {
+    return "C"
+  }
+  if (/tomato|avocado|lettuce|mushroom|onion|beans|pepper|salad/.test(normalized)) {
+    return "V"
+  }
+  return "I"
+}
+
 export default function TagPage({ params }: { params: { tagId: string } }) {
   const router = useRouter()
+  const pathname = usePathname()
   const setGlobalSession = useSessionStore(s => s.setSession)
   const ensureClientKey = useSessionStore(s => s.ensureClientKey)
 
@@ -263,7 +338,9 @@ export default function TagPage({ params }: { params: { tagId: string } }) {
         if (!res.ok) {
           const errorInfo = await readApiErrorInfo(res)
           if (res.status === 409 && errorInfo.code === 'TABLE_CLOSED') {
-            router.replace(`/t/${params.tagId}/closed`)
+            router.replace(
+              tenantTagPath(pathname, params.tagId, "/closed")
+            )
             return
           }
           setError(
@@ -651,41 +728,76 @@ export default function TagPage({ params }: { params: { tagId: string } }) {
     return Number((customizer.item.basePrice + delta).toFixed(2))
   }, [customizer, customizerValidation])
 
-  const customizerGroupedSelections = useMemo(() => {
+  const customizerLayout = useMemo(() => {
+    const sectionMeta: Array<Omit<CustomizerSection, "groups" | "selectedCount" | "maxCount">> = [
+      {
+        key: "removals",
+        title: "Removals",
+        hint: "Turn ingredients off with one tap.",
+      },
+      {
+        key: "additions",
+        title: "Additions",
+        hint: "Extras and substitutions for this dish.",
+      },
+      {
+        key: "allergens",
+        title: "Allergens",
+        hint: "Dietary-related switches, if available.",
+      },
+    ]
+
     if (!customizer || !hasCustomization(customizer.item.customization)) {
       return {
-        mandatoryGroups: [] as MenuCustomization["groups"],
-        optionalGroups: [] as MenuCustomization["groups"],
         includedLines: [] as string[],
         defaultChoiceLines: [] as string[],
+        sections: sectionMeta.map(section => ({
+          ...section,
+          groups: [] as CustomizerGroup[],
+          selectedCount: 0,
+          maxCount: 0,
+        })),
       }
     }
 
     const customization = customizer.item.customization
-    const mandatoryGroups = customization.groups.filter(group => {
-      const min =
-        typeof group.min === 'number'
-          ? group.min
-          : group.required
-          ? 1
-          : 0
-      return min > 0 || group.required === true
-    })
-    const optionalGroups = customization.groups.filter(
-      group => !mandatoryGroups.some(value => value.id === group.id)
-    )
+    const buckets: Record<CustomizerSectionKey, CustomizerGroup[]> = {
+      removals: [],
+      additions: [],
+      allergens: [],
+    }
 
-    const includedLines = getBaseIngredientLabels(customization)
-    const defaultChoiceLines = buildModifierSummary(
-      customization,
-      defaultModifierSelections(customization)
-    )
+    for (const group of customization.groups) {
+      buckets[classifyGroup(group)].push(group)
+    }
+
+    const sections = sectionMeta.map(section => {
+      const groups = buckets[section.key]
+      const selectedCount = groups.reduce(
+        (total, group) =>
+          total + (customizer.selections[group.id]?.length ?? 0),
+        0
+      )
+      const maxCount = groups.reduce(
+        (total, group) => total + groupSelectionMax(group),
+        0
+      )
+
+      return {
+        ...section,
+        groups,
+        selectedCount,
+        maxCount,
+      }
+    })
 
     return {
-      mandatoryGroups,
-      optionalGroups,
-      includedLines,
-      defaultChoiceLines,
+      includedLines: getBaseIngredientLabels(customization),
+      defaultChoiceLines: buildModifierSummary(
+        customization,
+        defaultModifierSelections(customization)
+      ),
+      sections,
     }
   }, [customizer])
 
@@ -706,6 +818,14 @@ export default function TagPage({ params }: { params: { tagId: string } }) {
       )
     ).sort((a, b) => a.localeCompare(b))
   }, [customizer, customizerValidation])
+
+  const customizerTitleId = customizer
+    ? `customizer-title-${customizer.item.id}`
+    : 'customizer-title'
+  const customizerDescriptionId = customizer
+    ? `customizer-description-${customizer.item.id}`
+    : 'customizer-description'
+  const customizerImageSrc = customizer?.item.image ?? '/images/replace.png'
 
   if (loading || menuLoading) {
     return (
@@ -766,232 +886,435 @@ export default function TagPage({ params }: { params: { tagId: string } }) {
       )}
 
       {customizer && (
-        <div className="modal-overlay">
-          <div className="w-full max-w-md">
-            <div className="card space-y-3 customizer-sheet">
-              <div className="customizer-title">
-                {customizer.item.name}
-              </div>
-              {customizer.item.description && (
-                <div className="customizer-description">
-                  {customizer.item.description}
-                </div>
-              )}
+        <div
+          className="modal-overlay customizer-overlay"
+          onClick={closeCustomizer}
+        >
+          <section
+            className="customizer-shell"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby={customizerTitleId}
+            aria-describedby={customizerDescriptionId}
+            onClick={event => event.stopPropagation()}
+          >
+            <header className="customizer-hero">
+              <img
+                className="customizer-hero-image"
+                src={customizerImageSrc}
+                alt={`${customizer.item.name} preview`}
+                onError={event => {
+                  const el = event.currentTarget
+                  if (el.dataset.fallbackApplied === "1") return
+                  el.dataset.fallbackApplied = "1"
+                  el.src = '/images/replace.png'
+                }}
+              />
+              <button
+                type="button"
+                onClick={closeCustomizer}
+                className="customizer-close-btn"
+                aria-label="Close item details"
+              >
+                X
+              </button>
+            </header>
 
-              {customizerGroupedSelections.includedLines.length > 0 && (
-                <div className="customizer-info-block">
-                  <div className="customizer-info-title">
-                    Included
-                  </div>
-                  <div className="customizer-list">
-                    {customizerGroupedSelections.includedLines.map(line => (
-                      <div key={line} className="customizer-list-row">
+            <div className="customizer-scroll">
+              <section className="customizer-summary">
+                <div className="customizer-summary-head">
+                  <h2 id={customizerTitleId} className="customizer-title">
+                    {customizer.item.name}
+                  </h2>
+                  <span className="customizer-base-price">
+                    From £{customizer.item.basePrice.toFixed(2)}
+                  </span>
+                </div>
+                <p
+                  id={customizerDescriptionId}
+                  className="customizer-description"
+                >
+                  {customizer.item.description ||
+                    "Customize ingredients and quantity before adding to your order."}
+                </p>
+
+                {customizerLayout.defaultChoiceLines.length > 0 && (
+                  <div className="customizer-default-wrap" aria-label="Default choices">
+                    {customizerLayout.defaultChoiceLines.map(line => (
+                      <span key={line} className="customizer-default-chip">
                         {line}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {customizerGroupedSelections.defaultChoiceLines.length > 0 && (
-                <div className="customizer-info-block">
-                  <div className="customizer-info-title">
-                    Default choices
-                  </div>
-                  <div className="customizer-list">
-                    {customizerGroupedSelections.defaultChoiceLines.map(line => (
-                      <div key={line} className="customizer-list-row">
-                        {line}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {customizerGroupedSelections.mandatoryGroups.length > 0 && (
-                <div className="customizer-info-block">
-                  <div className="customizer-info-title">
-                    Mandatory selections
-                  </div>
-                  <div className="customizer-chip-wrap">
-                    {customizerGroupedSelections.mandatoryGroups.map(group => (
-                      <span key={group.id} className="customizer-chip">
-                        {group.name}
                       </span>
                     ))}
                   </div>
-                </div>
-              )}
+                )}
+              </section>
 
-              {customizerGroupedSelections.optionalGroups.length > 0 && (
-                <div className="customizer-info-block">
-                  <div className="customizer-info-title">
-                    Optional additions
-                  </div>
-                  <div className="customizer-chip-wrap">
-                    {customizerGroupedSelections.optionalGroups.map(group => (
-                      <span key={group.id} className="customizer-chip">
-                        {group.name}
-                      </span>
+              <section
+                className="customizer-panel"
+                aria-labelledby="included-ingredients-heading"
+              >
+                <div className="customizer-panel-head">
+                  <h3
+                    id="included-ingredients-heading"
+                    className="customizer-panel-title"
+                  >
+                    Included Ingredients
+                  </h3>
+                  <span className="customizer-panel-badge">
+                    {customizerLayout.includedLines.length}
+                  </span>
+                </div>
+
+                {customizerLayout.includedLines.length > 0 ? (
+                  <div className="customizer-ingredient-grid">
+                    {customizerLayout.includedLines.map(line => (
+                      <div key={line} className="customizer-ingredient-chip">
+                        <span
+                          className="customizer-ingredient-icon"
+                          aria-hidden="true"
+                        >
+                          {ingredientToken(line)}
+                        </span>
+                        <span className="customizer-ingredient-label">{line}</span>
+                      </div>
                     ))}
                   </div>
-                </div>
-              )}
+                ) : (
+                  <p className="customizer-empty-copy">
+                    Ingredient list is currently unavailable for this item.
+                  </p>
+                )}
+              </section>
 
-              {!hasCustomization(customizer.item.customization) && (
-                <div className="customizer-info-block">
-                  <div className="customizer-info-title">
-                    Item options
-                  </div>
-                  <div className="customizer-list-row">
+              <section
+                className="customizer-panel"
+                aria-labelledby="customizations-heading"
+              >
+                <div className="customizer-panel-head">
+                  <h3 id="customizations-heading" className="customizer-panel-title">
+                    Customizations
+                  </h3>
+                  <span className="customizer-panel-badge">
+                    {customizerLayout.sections.reduce(
+                      (total, section) => total + section.groups.length,
+                      0
+                    )}
+                  </span>
+                </div>
+
+                {!hasCustomization(customizer.item.customization) && (
+                  <p className="customizer-empty-copy">
                     {resolveEditPolicy(customizer.item.customization) === "none"
-                      ? "No substitutions configured for this item."
-                      : "No additional options for this item."}
-                  </div>
-                </div>
-              )}
+                      ? "No substitutions are configured for this item."
+                      : "No additional options are available right now."}
+                  </p>
+                )}
 
-              {hasCustomization(customizer.item.customization) &&
-                customizer.item.customization.groups.map(group => {
-                  const selected = customizer.selections[group.id] ?? []
-                  const min =
-                    typeof group.min === 'number'
-                      ? group.min
-                      : group.required
-                      ? 1
-                      : 0
-                  const max =
-                    typeof group.max === 'number'
-                      ? group.max
-                      : group.type === 'single'
-                      ? 1
-                      : group.options.length
+                {hasCustomization(customizer.item.customization) && (
+                  <div className="customizer-section-stack">
+                    {customizerLayout.sections.map(section => {
+                      if (section.groups.length === 0) return null
 
-                  return (
-                    <div key={group.id} className="customizer-group">
-                      <div className="customizer-group-head">
-                        <div className="customizer-group-label">{group.name}</div>
-                        <div className="customizer-group-meta">
-                          {min > 0 ? `Required · ` : "Optional · "}
-                          {group.type === 'single'
-                            ? 'Choose 1'
-                            : `Choose ${min}${max > min ? `-${max}` : ''}`}
-                        </div>
-                      </div>
-                      <div className="customizer-options">
-                        {group.options.map(option => {
-                          const active = selected.includes(option.id)
-                          return (
-                            <button
-                              key={option.id}
-                              type="button"
-                              className={
-                                active
-                                  ? 'customizer-option active'
-                                  : 'customizer-option'
-                              }
-                              onClick={() =>
-                                updateCustomizerSelection(
-                                  group.id,
-                                  option.id,
-                                  !active
-                                )
-                              }
+                      return (
+                        <section
+                          key={section.key}
+                          className="customizer-group-section"
+                          aria-labelledby={`customizer-section-${section.key}`}
+                        >
+                          <div className="customizer-group-section-head">
+                            <h4
+                              id={`customizer-section-${section.key}`}
+                              className="customizer-group-section-title"
                             >
-                              <span className="customizer-option-copy">
-                                <span>{option.label}</span>
-                                {option.allergens && option.allergens.length > 0 && (
-                                  <span className="customizer-option-allergens">
-                                    Allergens: {option.allergens.join(', ')}
-                                  </span>
-                                )}
-                              </span>
-                              {option.priceDelta !== 0 && (
-                                <span className="customizer-option-price">
-                                  {option.priceDelta > 0 ? '+' : ''}£
-                                  {option.priceDelta.toFixed(2)}
-                                </span>
-                              )}
-                            </button>
-                          )
-                        })}
-                      </div>
-                    </div>
-                  )
-                })}
+                              {section.title}
+                            </h4>
+                            <span className="customizer-group-section-count">
+                              {section.selectedCount}/{section.maxCount || section.selectedCount}
+                            </span>
+                          </div>
+                          <p className="customizer-group-section-hint">
+                            {section.hint}
+                          </p>
 
-              <div className="customizer-allergen-banner">
-                Allergens:{" "}
-                {customizerAllergens.length > 0
-                  ? customizerAllergens.join(", ")
-                  : "none"}
-              </div>
+                          <div className="customizer-group-list">
+                            {section.groups.map(group => {
+                              const selected = customizer.selections[group.id] ?? []
+                              const min = groupSelectionMin(group)
+                              const max = groupSelectionMax(group)
+                              const requiredUnmet =
+                                min > 0 && selected.length < min
+                              const maxReached =
+                                group.type === "multi" &&
+                                selected.length >= max
 
-              <div className="customizer-qty-row">
-                <div className="customizer-qty-control">
-                  <button
-                    type="button"
-                    className="menu-qty-btn"
-                    onClick={() =>
-                      setCustomizer(current =>
-                        current
-                          ? {
-                              ...current,
-                              quantity: Math.max(1, current.quantity - 1),
-                            }
-                          : current
+                              return (
+                                <fieldset key={group.id} className="customizer-group-card">
+                                  <legend className="customizer-sr-only">
+                                    {group.name}
+                                  </legend>
+                                  <div className="customizer-group-head">
+                                    <div>
+                                      <div className="customizer-group-label">
+                                        {group.name}
+                                      </div>
+                                      <div className="customizer-group-meta">
+                                        {min > 0 ? "Required" : "Optional"} ·{" "}
+                                        {group.type === "single"
+                                          ? "Choose 1"
+                                          : `Choose ${min}${max > min ? `-${max}` : ""}`}
+                                      </div>
+                                    </div>
+                                    <div className="customizer-group-feedback">
+                                      <span className="customizer-group-count-badge">
+                                        {selected.length}/{max}
+                                      </span>
+                                      {maxReached && (
+                                        <span className="customizer-limit-badge">
+                                          Max reached
+                                        </span>
+                                      )}
+                                    </div>
+                                  </div>
+
+                                  {group.type === "single" &&
+                                    min === 0 &&
+                                    selected.length > 0 && (
+                                      <button
+                                        type="button"
+                                        className="customizer-clear-btn"
+                                        onClick={() =>
+                                          updateCustomizerSelection(
+                                            group.id,
+                                            selected[0],
+                                            false
+                                          )
+                                        }
+                                      >
+                                        Clear selection
+                                      </button>
+                                    )}
+
+                                  <div
+                                    className={
+                                      group.type === "single"
+                                        ? "customizer-options customizer-options--chips"
+                                        : "customizer-options customizer-options--checks"
+                                    }
+                                  >
+                                    {group.options.map(option => {
+                                      const active = selected.includes(option.id)
+                                      const disabled =
+                                        group.type === "multi" &&
+                                        !active &&
+                                        selected.length >= max
+
+                                      if (group.type === "multi") {
+                                        return (
+                                          <label
+                                            key={option.id}
+                                            className={
+                                              active
+                                                ? "customizer-check-option is-active"
+                                                : disabled
+                                                ? "customizer-check-option is-disabled"
+                                                : "customizer-check-option"
+                                            }
+                                          >
+                                            <input
+                                              type="checkbox"
+                                              className="customizer-check-input"
+                                              checked={active}
+                                              disabled={disabled}
+                                              onChange={event =>
+                                                updateCustomizerSelection(
+                                                  group.id,
+                                                  option.id,
+                                                  event.target.checked
+                                                )
+                                              }
+                                            />
+                                            <span
+                                              className="customizer-check-mark"
+                                              aria-hidden="true"
+                                            />
+                                            <span className="customizer-option-copy">
+                                              <span>{option.label}</span>
+                                              {option.allergens &&
+                                                option.allergens.length > 0 && (
+                                                  <span className="customizer-option-allergens">
+                                                    Allergens:{" "}
+                                                    {option.allergens.join(", ")}
+                                                  </span>
+                                                )}
+                                            </span>
+                                            {option.priceDelta !== 0 && (
+                                              <span className="customizer-option-price">
+                                                {option.priceDelta > 0 ? "+" : ""}£
+                                                {option.priceDelta.toFixed(2)}
+                                              </span>
+                                            )}
+                                          </label>
+                                        )
+                                      }
+
+                                      return (
+                                        <button
+                                          key={option.id}
+                                          type="button"
+                                          className={
+                                            active
+                                              ? "customizer-chip-option is-active"
+                                              : "customizer-chip-option"
+                                          }
+                                          aria-pressed={active}
+                                          onClick={() =>
+                                            updateCustomizerSelection(
+                                              group.id,
+                                              option.id,
+                                              !active
+                                            )
+                                          }
+                                        >
+                                          <span className="customizer-option-copy">
+                                            <span>{option.label}</span>
+                                            {option.allergens &&
+                                              option.allergens.length > 0 && (
+                                                <span className="customizer-option-allergens">
+                                                  Allergens:{" "}
+                                                  {option.allergens.join(", ")}
+                                                </span>
+                                              )}
+                                          </span>
+                                          {option.priceDelta !== 0 && (
+                                            <span className="customizer-option-price">
+                                              {option.priceDelta > 0 ? "+" : ""}£
+                                              {option.priceDelta.toFixed(2)}
+                                            </span>
+                                          )}
+                                        </button>
+                                      )
+                                    })}
+                                  </div>
+
+                                  {requiredUnmet && (
+                                    <div className="customizer-group-warning">
+                                      Select at least {min} option
+                                      {min > 1 ? "s" : ""}.
+                                    </div>
+                                  )}
+                                </fieldset>
+                              )
+                            })}
+                          </div>
+                        </section>
                       )
-                    }
-                    disabled={customizer.quantity <= 1}
-                  >
-                    −
-                  </button>
-                  <div className="menu-qty-value">{customizer.quantity}</div>
-                  <button
-                    type="button"
-                    className="menu-qty-btn"
-                    onClick={() =>
-                      setCustomizer(current =>
-                        current
-                          ? {
-                              ...current,
-                              quantity: Math.min(20, current.quantity + 1),
-                            }
-                          : current
-                      )
+                    })}
+                  </div>
+                )}
+              </section>
+
+              <section className="customizer-panel" aria-labelledby="allergens-heading">
+                <div className="customizer-panel-head">
+                  <h3 id="allergens-heading" className="customizer-panel-title">
+                    Allergens
+                  </h3>
+                  <span
+                    className={
+                      customizerAllergens.length > 0
+                        ? "customizer-allergen-state customizer-allergen-state--warn"
+                        : "customizer-allergen-state"
                     }
                   >
-                    +
-                  </button>
+                    {customizerAllergens.length > 0
+                      ? `${customizerAllergens.length} present`
+                      : "None detected"}
+                  </span>
                 </div>
-                <div className="customizer-total">
-                  £{(customizerUnitPrice * customizer.quantity).toFixed(2)}
-                </div>
-              </div>
+
+                {customizerAllergens.length > 0 ? (
+                  <div className="customizer-allergen-chip-wrap">
+                    {customizerAllergens.map(allergen => (
+                      <span key={allergen} className="customizer-allergen-chip">
+                        {allergen}
+                      </span>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="customizer-empty-copy">
+                    No tracked allergens in the current configuration.
+                  </p>
+                )}
+              </section>
 
               {customizerError && (
-                <div className="customizer-error">{customizerError}</div>
+                <div className="customizer-error" role="status" aria-live="polite">
+                  {customizerError}
+                </div>
               )}
+            </div>
 
-              <div className="flex gap-2 justify-end">
+            <footer className="customizer-footer">
+              <div className="customizer-qty-control">
                 <button
                   type="button"
-                  onClick={closeCustomizer}
-                  className="px-3 py-2 rounded text-sm font-medium btn-secondary"
+                  className="menu-qty-btn"
+                  onClick={() =>
+                    setCustomizer(current =>
+                      current
+                        ? {
+                            ...current,
+                            quantity: Math.max(1, current.quantity - 1),
+                          }
+                        : current
+                    )
+                  }
+                  disabled={customizer.quantity <= 1}
                 >
-                  Cancel
+                  −
                 </button>
+                <div className="menu-qty-value">{customizer.quantity}</div>
                 <button
                   type="button"
-                  onClick={applyCustomizedItem}
-                  disabled={Boolean(customizerValidation && !customizerValidation.ok)}
-                  className="px-3 py-2 rounded text-sm font-medium btn-primary"
+                  className="menu-qty-btn"
+                  onClick={() =>
+                    setCustomizer(current =>
+                      current
+                        ? {
+                            ...current,
+                            quantity: Math.min(20, current.quantity + 1),
+                          }
+                        : current
+                    )
+                  }
                 >
-                  Add to order £{(customizerUnitPrice * customizer.quantity).toFixed(2)}
+                  +
                 </button>
               </div>
-            </div>
-          </div>
+
+              <div className="customizer-footer-total">
+                <span>Total</span>
+                <strong>
+                  £{(customizerUnitPrice * customizer.quantity).toFixed(2)}
+                </strong>
+              </div>
+
+              <button
+                type="button"
+                onClick={closeCustomizer}
+                className="customizer-footer-cancel"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={applyCustomizedItem}
+                disabled={Boolean(customizerValidation && !customizerValidation.ok)}
+                className="customizer-footer-primary"
+              >
+                Add to order
+              </button>
+            </footer>
+          </section>
         </div>
       )}
     </div>

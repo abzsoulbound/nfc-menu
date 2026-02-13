@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma'
 import { findMenuItemForCart } from '@/lib/menuCatalog'
 import { appendSystemEvent } from '@/lib/events'
 import { withEditConfirmation } from '@/lib/itemEdits'
+import { resolveRestaurantFromRequest } from '@/lib/restaurants'
 import {
   buildModifierSummary,
   calculateModifierDelta,
@@ -34,6 +35,7 @@ function isObject(value: unknown): value is Record<string, unknown> {
 }
 
 export async function POST(req: Request) {
+  const restaurant = await resolveRestaurantFromRequest(req)
   const body = await req.json()
   const sessionId = String(body?.sessionId ?? '')
   const quantity = Number(body?.quantity ?? 0)
@@ -42,8 +44,11 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'BAD_REQUEST' }, { status: 400 })
   }
 
-  const cart = await prisma.sessionCart.findUnique({
-    where: { sessionId },
+  const cart = await prisma.sessionCart.findFirst({
+    where: {
+      sessionId,
+      restaurantId: restaurant.id,
+    },
     include: { session: true }
   })
   if (!cart) {
@@ -52,7 +57,9 @@ export async function POST(req: Request) {
 
   const menuItem = await findMenuItemForCart({
     menuItemId: typeof body?.menuItemId === 'string' ? body.menuItemId : undefined,
-    name: typeof body?.name === 'string' ? body.name : undefined
+    name: typeof body?.name === 'string' ? body.name : undefined,
+    restaurantId: restaurant.id,
+    restaurantSlug: restaurant.slug,
   })
 
   if (menuItem && !menuItem.available) {
@@ -148,6 +155,7 @@ export async function POST(req: Request) {
 
   const item = await prisma.cartItem.create({
     data: {
+      restaurantId: restaurant.id,
       cartId: cart.id,
       menuItemId: menuItem?.id ?? null,
       name: itemName,
@@ -163,8 +171,11 @@ export async function POST(req: Request) {
     }
   })
 
-  await prisma.session.update({
-    where: { id: cart.sessionId },
+  await prisma.session.updateMany({
+    where: {
+      id: cart.sessionId,
+      restaurantId: restaurant.id,
+    },
     data: {
       lastActivityAt: new Date()
     }
@@ -181,6 +192,7 @@ export async function POST(req: Request) {
     },
     {
       req,
+      restaurantId: restaurant.id,
       sessionId: cart.sessionId,
       tableId: cart.session.tableId
     }

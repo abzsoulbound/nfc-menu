@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react"
 import Link from "next/link"
+import { usePathname } from "next/navigation"
 import { Card } from "@/components/ui/Card"
 import { Badge } from "@/components/ui/Badge"
 import { Divider } from "@/components/ui/Divider"
@@ -30,6 +31,11 @@ type Session = {
 }
 
 export default function StaffDashboard() {
+  const pathname = usePathname() ?? "/staff"
+  const tenantSlugMatch = pathname.match(/^\/r\/([^/]+)/)
+  const tenantPrefix = tenantSlugMatch?.[1]
+    ? `/r/${encodeURIComponent(tenantSlugMatch[1])}`
+    : ""
   const [tags, setTags] = useState<Tag[]>([])
   const [tables, setTables] = useState<Table[]>([])
   const [sessions, setSessions] = useState<Session[]>([])
@@ -88,7 +94,7 @@ export default function StaffDashboard() {
   return (
     <div className="p-4 space-y-6">
       <div className="grid grid-cols-3 gap-4">
-        <Link href="/staff/tables">
+        <Link href={tenantPrefix ? `${tenantPrefix}/staff/tables` : "/staff/tables"}>
           <Card className="cursor-pointer">
             <div className="text-lg font-semibold">Tables</div>
             <div className="text-sm opacity-70">
@@ -97,7 +103,7 @@ export default function StaffDashboard() {
           </Card>
         </Link>
 
-        <Link href="/staff/tags">
+        <Link href={tenantPrefix ? `${tenantPrefix}/staff/tags` : "/staff/tags"}>
           <Card className="cursor-pointer">
             <div className="text-lg font-semibold">NFC Tags</div>
             <div className="text-sm opacity-70">
@@ -106,7 +112,9 @@ export default function StaffDashboard() {
           </Card>
         </Link>
 
-        <Link href="/staff/sessions">
+        <Link
+          href={tenantPrefix ? `${tenantPrefix}/staff/sessions` : "/staff/sessions"}
+        >
           <Card className="cursor-pointer">
             <div className="text-lg font-semibold">Sessions</div>
             <div className="text-sm opacity-70">
@@ -120,7 +128,12 @@ export default function StaffDashboard() {
         <Card className="text-sm opacity-70">
           No active sessions yet. Opening <code>/menu</code> does not create a
           table session. Sessions appear when guests open a tag URL like{" "}
-          <code>/t/&lt;tagId&gt;</code>.
+          <code>
+            {tenantPrefix
+              ? `${tenantPrefix}/t/<tagId>`
+              : "/r/marlos/t/<tagId>"}
+          </code>
+          .
         </Card>
       )}
 

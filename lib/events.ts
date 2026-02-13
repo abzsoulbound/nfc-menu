@@ -8,6 +8,7 @@ type EventMeta = {
   tableId?: string | null
   orderId?: string | null
   actor?: string
+  restaurantId?: string | null
 }
 
 function toJson(payload: unknown): Prisma.InputJsonValue {
@@ -25,6 +26,7 @@ export async function appendSystemEvent(
       data: {
         type,
         payload: toJson(payload),
+        restaurantId: meta.restaurantId ?? "marlos",
         actor: meta.actor ?? (meta.req ? getActorType(meta.req) : "system"),
         sessionId: meta.sessionId ?? null,
         tableId: meta.tableId ?? null,

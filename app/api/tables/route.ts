@@ -5,6 +5,7 @@ import {
   CONTRIBUTION_WINDOW_MS,
   SESSION_IDLE_TIMEOUT_MS,
 } from "@/lib/constants"
+import { resolveRestaurantFromRequest } from "@/lib/restaurants"
 
 export async function GET(req: Request) {
   try {
@@ -12,12 +13,15 @@ export async function GET(req: Request) {
   } catch {
     return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 })
   }
+  const restaurant = await resolveRestaurantFromRequest(req)
 
   const assignments = await prisma.tableAssignment.findMany({
+    where: { restaurantId: restaurant.id },
     orderBy: [{ tableNo: "asc" }, { createdAt: "asc" }, { id: "asc" }],
     include: {
       sessions: {
         where: {
+          restaurantId: restaurant.id,
           status: "ACTIVE",
         },
         orderBy: {

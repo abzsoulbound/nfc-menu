@@ -24,7 +24,11 @@ Development:
 - set TABLE_NUMBERS to fixed table numbers (example: `1-20,30,32`)
 - npm run prisma:migrate:deploy
 - npm run db:check
+- npm run test
 - npm run dev
+
+Health checks:
+- `GET /api/health` returns service/db status plus latency and request id.
 
 Online DB Cutover:
 1. Provision a managed Postgres database (Neon/Supabase/RDS).

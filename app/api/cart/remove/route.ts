@@ -6,6 +6,7 @@ import {
   getEditClientKey,
   getEditHardActivityAt,
 } from '@/lib/itemEdits'
+import { resolveRestaurantFromRequest } from '@/lib/restaurants'
 
 function normalizeClientKey(value: unknown): string | null {
   if (typeof value !== 'string') return null
@@ -14,6 +15,7 @@ function normalizeClientKey(value: unknown): string | null {
 }
 
 export async function POST(req: Request) {
+  const restaurant = await resolveRestaurantFromRequest(req)
   const { sessionId, itemId, clientKey } = await req.json()
   if (!sessionId || !itemId) {
     return NextResponse.json({ error: 'BAD_REQUEST' }, { status: 400 })
@@ -27,7 +29,12 @@ export async function POST(req: Request) {
       }
     }
   })
-  if (!item || item.cart.sessionId !== sessionId) {
+  if (
+    !item ||
+    item.restaurantId !== restaurant.id ||
+    item.cart.session.restaurantId !== restaurant.id ||
+    item.cart.sessionId !== sessionId
+  ) {
     return NextResponse.json({ error: 'FORBIDDEN' }, { status: 403 })
   }
 
@@ -59,8 +66,11 @@ export async function POST(req: Request) {
     where: { id: itemId }
   })
 
-  await prisma.session.update({
-    where: { id: sessionId },
+  await prisma.session.updateMany({
+    where: {
+      id: sessionId,
+      restaurantId: restaurant.id,
+    },
     data: { lastActivityAt: new Date() }
   })
 
@@ -80,6 +90,7 @@ export async function POST(req: Request) {
         },
     {
       req,
+      restaurantId: restaurant.id,
       sessionId,
       tableId: item.cart.session.tableId
     }

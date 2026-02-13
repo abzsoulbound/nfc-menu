@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma"
+import { DEFAULT_RESTAURANT_ID } from "@/lib/restaurantConstants"
 
 export type TableGroupAssignment = {
   id: string
@@ -29,10 +30,14 @@ const assignmentSelect = {
 } as const
 
 export async function getTableGroupByTableNo(
-  tableNo: number
+  tableNo: number,
+  restaurantId: string = DEFAULT_RESTAURANT_ID
 ): Promise<TableGroup | null> {
   const assignments = await prisma.tableAssignment.findMany({
-    where: { tableNo },
+    where: {
+      tableNo,
+      restaurantId,
+    },
     orderBy: [{ createdAt: "asc" }, { id: "asc" }],
     select: assignmentSelect,
   })
@@ -47,25 +52,32 @@ export async function getTableGroupByTableNo(
 }
 
 export async function getTableGroupByAssignmentId(
-  tableId: string
+  tableId: string,
+  restaurantId: string = DEFAULT_RESTAURANT_ID
 ): Promise<TableGroup | null> {
   const assignment = await prisma.tableAssignment.findUnique({
     where: { id: tableId },
-    select: { tableNo: true },
+    select: { tableNo: true, restaurantId: true },
   })
-  if (!assignment) return null
-  return getTableGroupByTableNo(assignment.tableNo)
+  if (!assignment || assignment.restaurantId !== restaurantId) return null
+  return getTableGroupByTableNo(assignment.tableNo, restaurantId)
 }
 
 export async function getTableGroupForTag(
-  tagId: string
+  tagId: string,
+  restaurantId: string = DEFAULT_RESTAURANT_ID
 ): Promise<TableGroup | null> {
-  const assignment = await prisma.tableAssignment.findUnique({
-    where: { tagId },
-    select: { tableNo: true },
+  const assignment = await prisma.tableAssignment.findFirst({
+    where: {
+      tagId,
+      restaurantId,
+    },
+    select: {
+      tableNo: true,
+    },
   })
   if (!assignment) return null
-  return getTableGroupByTableNo(assignment.tableNo)
+  return getTableGroupByTableNo(assignment.tableNo, restaurantId)
 }
 
 export function isTableGroupClosed(group: TableGroup) {

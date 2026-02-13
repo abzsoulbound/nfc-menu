@@ -1,9 +1,16 @@
 import { cookies, headers } from "next/headers"
+import {
+  DEFAULT_RESTAURANT_SLUG,
+  RESTAURANT_COOKIE,
+} from "@/lib/restaurantConstants"
+import { staffAuthCookies } from "@/lib/staffAuth"
 
 export type ActorType = "customer" | "staff" | "system"
 export type StaffIdentity = {
   id: string
   authToken: string
+  role: string | null
+  restaurantSlug: string
 }
 
 function isStaffAuthBypassed() {
@@ -61,10 +68,23 @@ export function getActorType(req?: Request): ActorType {
 }
 
 export function requireStaff(req?: Request): StaffIdentity {
+  const requestedRestaurantSlug =
+    readHeader(req, "x-restaurant-slug") ??
+    readCookie(req, RESTAURANT_COOKIE) ??
+    DEFAULT_RESTAURANT_SLUG
+  const authRestaurantSlug =
+    readHeader(req, "x-staff-restaurant") ??
+    readCookie(req, staffAuthCookies.restaurant) ??
+    requestedRestaurantSlug
+
   if (isStaffAuthBypassed()) {
     return {
       id: readHeader(req, "x-staff-id") ?? "staff-demo",
       authToken: "demo-bypass",
+      role:
+        readHeader(req, "x-staff-role") ??
+        readCookie(req, staffAuthCookies.role),
+      restaurantSlug: authRestaurantSlug,
     }
   }
 
@@ -76,9 +96,22 @@ export function requireStaff(req?: Request): StaffIdentity {
   if (!authToken || !secret || authToken !== secret) {
     throw new Error("Unauthorized: staff only")
   }
+
+  if (
+    authRestaurantSlug &&
+    requestedRestaurantSlug &&
+    authRestaurantSlug !== requestedRestaurantSlug
+  ) {
+    throw new Error("Unauthorized: cross-restaurant access denied")
+  }
+
   return {
     id: readHeader(req, "x-staff-id") ?? "staff-unknown",
     authToken,
+    role:
+      readHeader(req, "x-staff-role") ??
+      readCookie(req, staffAuthCookies.role),
+    restaurantSlug: authRestaurantSlug || DEFAULT_RESTAURANT_SLUG,
   }
 }
 

@@ -6,6 +6,7 @@ import {
   getEditClientKey,
   withEditConfirmation,
 } from "@/lib/itemEdits"
+import { resolveRestaurantFromRequest } from "@/lib/restaurants"
 
 function normalizeClientKey(value: unknown): string | null {
   if (typeof value !== "string") return null
@@ -14,6 +15,7 @@ function normalizeClientKey(value: unknown): string | null {
 }
 
 export async function POST(req: Request) {
+  const restaurant = await resolveRestaurantFromRequest(req)
   const body = await req.json()
   const sessionId = String(body?.sessionId ?? "")
   const requesterClientKey = normalizeClientKey(
@@ -28,8 +30,11 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "BAD_REQUEST" }, { status: 400 })
   }
 
-  const cart = await prisma.sessionCart.findUnique({
-    where: { sessionId },
+  const cart = await prisma.sessionCart.findFirst({
+    where: {
+      sessionId,
+      restaurantId: restaurant.id,
+    },
     include: {
       items: true,
       session: true,
@@ -74,8 +79,11 @@ export async function POST(req: Request) {
     })
   }
 
-  await prisma.session.update({
-    where: { id: sessionId },
+  await prisma.session.updateMany({
+    where: {
+      id: sessionId,
+      restaurantId: restaurant.id,
+    },
     data: {
       lastActivityAt: new Date(),
     },
@@ -91,6 +99,7 @@ export async function POST(req: Request) {
     },
     {
       req,
+      restaurantId: restaurant.id,
       sessionId,
       tableId: cart.session.tableId,
     }
