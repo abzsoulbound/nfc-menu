@@ -95,6 +95,10 @@ export function MenuItemCard({
       )}
     </div>
   )
+  const hasStepperControls =
+    typeof quantity === "number" && Boolean(onIncrease && onDecrease)
+  const resolvedControls =
+    children ?? (hasStepperControls ? stepper : null)
 
   if (mode === "editor") {
     return (
@@ -158,17 +162,18 @@ export function MenuItemCard({
             {name}
           </h3>
           {description && (
-            <p className="menu-item-desc">{description}</p>
+            <p className="menu-item-desc menu-item-desc--clamp">
+              {description}
+            </p>
           )}
-          <p className="menu-item-allergens">{allergenCopy}</p>
         </div>
       </div>
 
       <div className="menu-item-side">
         <div className="menu-item-price">£{price.toFixed(2)}</div>
-        <div className="menu-item-controls">
-          {children ?? stepper}
-        </div>
+        {resolvedControls ? (
+          <div className="menu-item-controls">{resolvedControls}</div>
+        ) : null}
       </div>
     </div>
   )

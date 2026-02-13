@@ -1,7 +1,5 @@
 import { create } from "zustand"
 
-const STAFF_KEY = "nfc-pos.staff.v1"
-
 type StaffState = {
   selectedTable: string | null
   selectedTag: string | null
@@ -12,54 +10,17 @@ type StaffState = {
   hydrate: () => void
 }
 
-function persist(state: {
-  selectedTable: string | null
-  selectedTag: string | null
-  selectedSession: string | null
-}) {
-  if (typeof window === "undefined") return
-  window.localStorage.setItem(STAFF_KEY, JSON.stringify(state))
-}
-
 export const useStaffStore = create<StaffState>((set) => ({
   selectedTable: null,
   selectedTag: null,
   selectedSession: null,
   setSelectedTable: id =>
-    set(s => {
-      const next = { ...s, selectedTable: id }
-      persist(next)
-      return { selectedTable: id }
-    }),
+    set(() => ({ selectedTable: id })),
   setSelectedTag: id =>
-    set(s => {
-      const next = { ...s, selectedTag: id }
-      persist(next)
-      return { selectedTag: id }
-    }),
+    set(() => ({ selectedTag: id })),
   setSelectedSession: id =>
-    set(s => {
-      const next = { ...s, selectedSession: id }
-      persist(next)
-      return { selectedSession: id }
-    }),
+    set(() => ({ selectedSession: id })),
   hydrate: () => {
-    if (typeof window === "undefined") return
-    const raw = window.localStorage.getItem(STAFF_KEY)
-    if (!raw) return
-    try {
-      const parsed = JSON.parse(raw)
-      set({
-        selectedTable: parsed.selectedTable ?? null,
-        selectedTag: parsed.selectedTag ?? null,
-        selectedSession: parsed.selectedSession ?? null,
-      })
-    } catch {
-      set({
-        selectedTable: null,
-        selectedTag: null,
-        selectedSession: null,
-      })
-    }
+    // Local persistence is intentionally disabled for full online mode.
   },
 }))

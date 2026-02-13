@@ -1,11 +1,32 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { MenuSection } from "@/components/menu/MenuSection"
 import { MenuItemCard } from "@/components/menu/MenuItemCard"
 import { useSessionStore } from "@/store/useSessionStore"
-import { menu as bootstrapMenu } from "@/lib/menu-data"
+import {
+  cartLoadErrorMessage,
+  cartSyncErrorMessage,
+  menuLoadErrorMessage,
+  networkErrorMessage,
+  readApiErrorInfo,
+  sessionConnectErrorMessage,
+} from "@/lib/clientApiErrors"
+import {
+  buildModifierSignature,
+  buildModifierSummary,
+  calculateModifierDelta,
+  collectModifierAllergens,
+  defaultModifierSelections,
+  getBaseIngredientLabels,
+  hasCustomization,
+  normalizeModifierSelections,
+  resolveEditPolicy,
+  type MenuCustomization,
+  type ModifierSelections,
+  validateModifierSelections,
+} from "@/lib/menuCustomizations"
 
 type MenuItem = {
   id: string
@@ -17,8 +38,7 @@ type MenuItem = {
   allergens: string[]
   station?: "KITCHEN" | "BAR"
   available?: boolean
-  editable?: boolean
-  editableOptions?: unknown
+  customization?: MenuCustomization | null
 }
 
 type MenuSectionType = {
@@ -29,6 +49,7 @@ type MenuSectionType = {
 
 type CartItem = {
   id: string
+  lineKey: string
   name: string
   quantity: number
   menuItemId?: string
@@ -36,30 +57,72 @@ type CartItem = {
   vatRate?: number
   allergens?: string[]
   station?: "KITCHEN" | "BAR"
+  edits?: unknown
+}
+
+type CustomizerState = {
+  item: MenuItem
+  quantity: number
+  selections: ModifierSelections
+}
+
+type PendingSyncEntry = {
+  lineKey: string
+  sessionId: string
+  clientKey: string | null
+  item: MenuItem
+  allergens: string[]
+  quantity: number
+  edits: unknown
+  unitPrice: number
+  revision: number
+}
+
+function isObject(value: unknown): value is Record<string, unknown> {
+  return (
+    value !== null &&
+    typeof value === 'object' &&
+    !Array.isArray(value)
+  )
+}
+
+function modifierSignatureFromEdits(edits: unknown): string {
+  if (!isObject(edits)) return 'base'
+  const modifiers = edits.modifiers
+  if (!isObject(modifiers)) return 'base'
+
+  const normalized: ModifierSelections = {}
+  for (const [groupId, value] of Object.entries(modifiers)) {
+    if (!Array.isArray(value)) continue
+    normalized[groupId] = value.filter(
+      (optionId): optionId is string =>
+        typeof optionId === 'string'
+    )
+  }
+
+  return buildModifierSignature(normalized) || 'base'
 }
 
 export default function TagPage({ params }: { params: { tagId: string } }) {
   const router = useRouter()
   const setGlobalSession = useSessionStore(s => s.setSession)
-  const menuCacheKey = "nfc-pos.menu-cache.v1"
-  const sessionCacheKey = `nfc-pos.tag-session.${params.tagId}`
-  const localCartKey = `nfc-pos.local-cart.${params.tagId}`
-  const tableNumberCacheKey = `nfc-pos.table-number.${params.tagId}`
-  const currentTableNumberKey = "nfc-pos.table-number.current"
-  const clientKeyStorage = "nfc-pos.client-key.v1"
+  const ensureClientKey = useSessionStore(s => s.ensureClientKey)
+
   const [menu, setMenu] = useState<MenuSectionType[]>([])
   const [menuLocked, setMenuLocked] = useState(false)
   const [menuLoading, setMenuLoading] = useState(true)
-  const [selectedCategoryId, setSelectedCategoryId] = useState(
-    null as string | null
-  )
+  const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null)
   const [sessionId, setSessionId] = useState<string | null>(null)
   const [cartByKey, setCartByKey] = useState<Record<string, CartItem>>({})
-  const [usingLocalCart, setUsingLocalCart] = useState(false)
-  const [editNotice, setEditNotice] = useState<string | null>(null)
+  const [customizer, setCustomizer] = useState<CustomizerState | null>(null)
+  const [customizerError, setCustomizerError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
-  const [clientKey, setClientKey] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
+
   const cartByKeyRef = useRef<Record<string, CartItem>>({})
+  const syncTimersRef = useRef<Record<string, number>>({})
+  const syncInFlightRef = useRef<Record<string, boolean>>({})
+  const pendingSyncRef = useRef<Record<string, PendingSyncEntry>>({})
 
   const activeSection = menu.find(
     section => section.id === selectedCategoryId
@@ -69,114 +132,16 @@ export default function TagPage({ params }: { params: { tagId: string } }) {
     cartByKeyRef.current = cartByKey
   }, [cartByKey])
 
-  const isLocalSessionId = (value: string | null) =>
-    Boolean(value && value.startsWith("local:"))
-
-  const createLocalSessionId = () => `local:${params.tagId}:${Date.now()}`
-  const notifyHeader = (
-    eventName: "nfc-cart-updated" | "nfc-table-updated"
-  ) => {
-    if (typeof window === "undefined") return
-    window.dispatchEvent(new Event(eventName))
+  const notifyHeader = () => {
+    if (typeof window === 'undefined') return
+    window.dispatchEvent(new Event('nfc-cart-updated'))
   }
 
-  const ensureClientKey = () => {
-    if (typeof window === "undefined") return null
-
-    try {
-      const existing = localStorage.getItem(clientKeyStorage)
-      if (existing && existing.trim().length > 0) {
-        if (clientKey !== existing) {
-          setClientKey(existing)
-        }
-        return existing
-      }
-
-      const next = crypto.randomUUID()
-      localStorage.setItem(clientKeyStorage, next)
-      setClientKey(next)
-      return next
-    } catch {
-      return null
-    }
-  }
-
-  const persistTableNumber = (value: unknown) => {
-    const nextTableNumber = Number(value)
-
-    try {
-      if (Number.isInteger(nextTableNumber) && nextTableNumber > 0) {
-        localStorage.setItem(
-          tableNumberCacheKey,
-          String(nextTableNumber)
-        )
-        localStorage.setItem(
-          currentTableNumberKey,
-          String(nextTableNumber)
-        )
-      } else {
-        localStorage.removeItem(tableNumberCacheKey)
-      }
-    } catch {
-      // best-effort cache only
-    } finally {
-      notifyHeader("nfc-table-updated")
-    }
-  }
-
-  const readLocalCart = () => {
-    try {
-      const raw = localStorage.getItem(localCartKey)
-      if (!raw) return {} as Record<string, CartItem>
-      const parsed = JSON.parse(raw) as CartItem[]
-      const items = Array.isArray(parsed) ? parsed : []
-      const next: Record<string, CartItem> = {}
-      for (const item of items) {
-        const key = item.menuItemId ?? item.name
-        next[key] = item
-      }
-      return next
-    } catch {
-      return {} as Record<string, CartItem>
-    }
-  }
-
-  const writeLocalCart = (cart: Record<string, CartItem>) => {
-    try {
-      localStorage.setItem(
-        localCartKey,
-        JSON.stringify(Object.values(cart))
-      )
-    } catch {
-      // best-effort local cache only
-    } finally {
-      notifyHeader("nfc-cart-updated")
-    }
-  }
-
-  const sameCartLine = (localItem: CartItem, serverItem: CartItem) => {
-    const localKey = localItem.menuItemId ?? localItem.name
-    const serverKey = serverItem.menuItemId ?? serverItem.name
-
-    return (
-      localKey === serverKey &&
-      localItem.quantity === serverItem.quantity &&
-      Number(localItem.unitPrice ?? 0) === Number(serverItem.unitPrice ?? 0) &&
-      Number(localItem.vatRate ?? 0) === Number(serverItem.vatRate ?? 0) &&
-      (localItem.station ?? "KITCHEN") === (serverItem.station ?? "KITCHEN")
-    )
-  }
+  useEffect(() => {
+    notifyHeader()
+  }, [cartByKey])
 
   const loadCart = async (sid: string) => {
-    if (isLocalSessionId(sid)) {
-      const local = readLocalCart()
-      cartByKeyRef.current = local
-      setCartByKey(local)
-      setUsingLocalCart(true)
-      notifyHeader("nfc-cart-updated")
-      return false
-    }
-
     try {
       const activeClientKey = ensureClientKey()
       const res = await fetch('/api/cart/get', {
@@ -185,127 +150,146 @@ export default function TagPage({ params }: { params: { tagId: string } }) {
         body: JSON.stringify({
           sessionId: sid,
           clientKey: activeClientKey,
-        })
+        }),
       })
 
       if (!res.ok) {
-        throw new Error("cart_fetch_failed")
+        const errorInfo = await readApiErrorInfo(res)
+        setError(cartLoadErrorMessage(errorInfo))
+        return false
       }
 
       const payload = await res.json()
-      const items = (payload?.items ?? []) as (CartItem & {
+      const items = (payload?.items ?? []) as Array<CartItem & {
         isMine?: boolean
-      })[]
-      const ownItems = items.filter(
-        item => item.isMine !== false
-      )
+      }>
+      const ownItems = items.filter(item => item.isMine !== false)
+
       const next: Record<string, CartItem> = {}
       for (const item of ownItems) {
-        const key = item.menuItemId ?? item.name
-        next[key] = item
+        const key =
+          item.menuItemId && typeof item.menuItemId === 'string'
+            ? `${item.menuItemId}::${modifierSignatureFromEdits(item.edits)}`
+            : item.id
+
+        const existing = next[key]
+        if (existing) {
+          next[key] = {
+            ...existing,
+            quantity:
+              Number(existing.quantity ?? 0) +
+              Number(item.quantity ?? 0),
+          }
+          continue
+        }
+
+        next[key] = {
+          ...item,
+          lineKey: key,
+        }
       }
 
-      const localSnapshot = readLocalCart()
-      const merged = { ...next }
-      let hasUnmatchedLocal = false
-      const serverItems = Object.values(next)
-
-      for (const localItem of Object.values(localSnapshot)) {
-        const matchesServer = serverItems.some(serverItem =>
-          sameCartLine(localItem, serverItem)
-        )
-        if (matchesServer) continue
-
-        hasUnmatchedLocal = true
-        const key = localItem.menuItemId ?? localItem.name
-        merged[key] = localItem
-      }
-
-      const finalCart = hasUnmatchedLocal ? merged : next
-      cartByKeyRef.current = finalCart
-      setCartByKey(finalCart)
-      writeLocalCart(finalCart)
-      setUsingLocalCart(false)
+      setCartByKey(next)
+      setError(current =>
+        current &&
+        (current.toLowerCase().includes('cart') ||
+          current.toLowerCase().includes('session'))
+          ? null
+          : current
+      )
       return true
     } catch {
-      const local = readLocalCart()
-      cartByKeyRef.current = local
-      setCartByKey(local)
-      setUsingLocalCart(true)
-      notifyHeader("nfc-cart-updated")
+      setError(networkErrorMessage('load your cart'))
       return false
+    }
+  }
+
+  const loadMenu = async () => {
+    try {
+      const res = await fetch('/api/menu', {
+        cache: 'no-store',
+      })
+      if (!res.ok) {
+        const errorInfo = await readApiErrorInfo(res)
+        setError(menuLoadErrorMessage(errorInfo))
+        return
+      }
+
+      const payload = await res.json()
+      const incoming = Array.isArray(payload?.menu)
+        ? (payload.menu as MenuSectionType[])
+        : []
+      const visible = incoming.map(section => ({
+        ...section,
+        items: section.items.filter(item => item.available !== false),
+      }))
+
+      setMenu(visible)
+      setMenuLocked(Boolean(payload?.locked))
+      setSelectedCategoryId(current => {
+        if (current && visible.some(s => s.id === current)) {
+          return current
+        }
+        return visible[0]?.id ?? null
+      })
+      setError(current =>
+        current &&
+        current.toLowerCase().includes('menu')
+          ? null
+          : current
+      )
+    } catch {
+      setError(networkErrorMessage('load the menu'))
+    } finally {
+      setMenuLoading(false)
     }
   }
 
   useEffect(() => {
     ensureClientKey()
-  }, [])
+  }, [ensureClientKey])
 
   useEffect(() => {
     let mounted = true
 
-    const readSessionCache = () => {
-      try {
-        return (
-          localStorage.getItem(sessionCacheKey) ??
-          localStorage.getItem('sessionId')
-        )
-      } catch {
-        return null
-      }
-    }
-
-    const writeSessionCache = (sid: string) => {
-      try {
-        localStorage.setItem(sessionCacheKey, sid)
-        localStorage.setItem('sessionId', sid)
-      } catch {
-        // best-effort cache only
-      }
-    }
-
     const init = async () => {
-      const existing = readSessionCache()
-
       try {
         const res = await fetch('/api/session', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ tagId: params.tagId })
+          body: JSON.stringify({ tagId: params.tagId }),
         })
+
         if (!res.ok) {
-          const payload = await res
-            .json()
-            .catch(() => ({} as { error?: string }))
-          if (res.status === 409 && payload?.error === 'TABLE_CLOSED') {
+          const errorInfo = await readApiErrorInfo(res)
+          if (res.status === 409 && errorInfo.code === 'TABLE_CLOSED') {
             router.replace(`/t/${params.tagId}/closed`)
             return
           }
-          throw new Error('session_bootstrap_failed')
+          setError(
+            sessionConnectErrorMessage(errorInfo, params.tagId)
+          )
+          return
         }
 
         const payload = await res.json()
         if (!mounted) return
+
         const sid = payload.sessionId as string
-        persistTableNumber(payload?.tableNumber)
-        writeSessionCache(sid)
         setSessionId(sid)
-        setGlobalSession(sid, "customer")
+        setGlobalSession(sid, 'customer')
         await loadCart(sid)
-        if (mounted) setLoading(false)
       } catch {
         if (!mounted) return
-        const fallbackSessionId = existing ?? createLocalSessionId()
-        writeSessionCache(fallbackSessionId)
-        setSessionId(fallbackSessionId)
-        setGlobalSession(fallbackSessionId, "customer")
-        await loadCart(fallbackSessionId)
-        setUsingLocalCart(true)
-        if (mounted) setLoading(false)
+        setError(networkErrorMessage('connect this table'))
+      } finally {
+        if (mounted) {
+          setLoading(false)
+        }
       }
     }
 
-    init()
+    void init()
 
     return () => {
       mounted = false
@@ -313,218 +297,415 @@ export default function TagPage({ params }: { params: { tagId: string } }) {
   }, [params.tagId, router, setGlobalSession])
 
   useEffect(() => {
-    let cancelled = false
+    void loadMenu()
+    const interval = window.setInterval(() => {
+      void loadMenu()
+    }, 15000)
 
-    const bootstrapVisibleMenu = () =>
-      bootstrapMenu.map(section => ({
-        id: section.id,
-        name: section.name,
-        items: section.items,
-      }))
+    return () => window.clearInterval(interval)
+  }, [params.tagId])
 
-    const readCache = () => {
-      try {
-        const cached = localStorage.getItem(menuCacheKey)
-        if (!cached) return null
-        const parsed = JSON.parse(cached) as {
-          menu?: MenuSectionType[]
-          locked?: boolean
-        }
-        return {
-          menu: Array.isArray(parsed.menu) ? parsed.menu : [],
-          locked: Boolean(parsed.locked),
-        }
-      } catch {
-        return null
-      }
-    }
+  useEffect(() => {
+    if (!sessionId) return
 
-    const writeCache = (value: {
-      menu: MenuSectionType[]
-      locked: boolean
-    }) => {
-      try {
-        localStorage.setItem(
-          menuCacheKey,
-          JSON.stringify({
-            menu: value.menu,
-            locked: value.locked,
-            ts: Date.now()
-          })
-        )
-      } catch {
-        // best-effort cache only
-      }
-    }
+    const interval = window.setInterval(() => {
+      void loadCart(sessionId)
+    }, 3000)
 
-    async function loadMenu() {
-      try {
-        const res = await fetch('/api/menu', {
-          cache: 'no-store'
-        })
-        if (!res.ok) throw new Error('menu_fetch_failed')
+    return () => window.clearInterval(interval)
+  }, [sessionId])
 
-        const payload = await res.json()
-        const incoming = Array.isArray(payload?.menu)
-          ? (payload.menu as MenuSectionType[])
-          : []
-        const visible =
-          incoming.length > 0
-            ? incoming.map(section => ({
-                ...section,
-                items: section.items.filter(item => item.available !== false)
-              }))
-            : bootstrapVisibleMenu()
-
-        if (cancelled) return
-
-        setMenu(visible)
-        setMenuLocked(Boolean(payload?.locked))
-        setSelectedCategoryId(current => {
-          if (current && visible.some(s => s.id === current)) {
-            return current
-          }
-          return visible[0]?.id ?? null
-        })
-        writeCache({
-          menu: visible,
-          locked: Boolean(payload?.locked),
-        })
-        setMenuLoading(false)
-      } catch {
-        const cached = readCache()
-        if (!cached) {
-          const visible = bootstrapVisibleMenu()
-          setMenu(visible)
-          setMenuLocked(false)
-          setSelectedCategoryId(current => {
-            if (current && visible.some(s => s.id === current)) {
-              return current
-            }
-            return visible[0]?.id ?? null
-          })
-          setMenuLoading(false)
-          return
-        }
-        setMenu(cached.menu)
-        setMenuLocked(cached.locked)
-        setSelectedCategoryId(current => {
-          if (current && cached.menu.some(s => s.id === current)) {
-            return current
-          }
-          return cached.menu[0]?.id ?? null
-        })
-        setMenuLoading(false)
-      }
-    }
-
-    loadMenu()
-    const interval = setInterval(loadMenu, 15000)
+  useEffect(() => {
     return () => {
-      cancelled = true
-      clearInterval(interval)
+      for (const timer of Object.values(syncTimersRef.current)) {
+        window.clearTimeout(timer)
+      }
+      syncTimersRef.current = {}
+      syncInFlightRef.current = {}
+      pendingSyncRef.current = {}
     }
   }, [])
 
-  const findCartEntry = (
-    source: Record<string, CartItem>,
-    item: MenuItem
-  ) => {
-    const entries = Object.entries(source)
-    const found =
-      entries.find(([key]) => key === item.id) ??
-      entries.find(([, value]) => value.menuItemId === item.id) ??
-      entries.find(([, value]) => value.name === item.name)
+  const flushPendingSync = async (lineKey: string) => {
+    if (syncInFlightRef.current[lineKey]) return
 
-    if (!found) return null
-    return {
-      key: found[0],
-      item: found[1],
+    const pending = pendingSyncRef.current[lineKey]
+    if (!pending) return
+
+    syncInFlightRef.current[lineKey] = true
+    const requestedRevision = pending.revision
+
+    try {
+      const existing = cartByKeyRef.current[lineKey]
+      const hasServerId = Boolean(
+        existing?.id && !existing.id.startsWith('temp:')
+      )
+
+      let ok = false
+      let createdId: string | null = null
+      let syncError: string | null = null
+
+      if (pending.quantity <= 0) {
+        if (hasServerId && existing) {
+          const res = await fetch('/api/cart/update', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              sessionId: pending.sessionId,
+              itemId: existing.id,
+              quantity: 0,
+              clientKey: pending.clientKey,
+            }),
+          })
+          ok = res.ok
+          if (!res.ok) {
+            const errorInfo = await readApiErrorInfo(res)
+            syncError = cartSyncErrorMessage(errorInfo)
+          }
+        } else {
+          ok = true
+        }
+      } else if (hasServerId && existing) {
+        const res = await fetch('/api/cart/update', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            sessionId: pending.sessionId,
+            itemId: existing.id,
+            quantity: pending.quantity,
+            edits: pending.edits,
+            clientKey: pending.clientKey,
+          }),
+        })
+        ok = res.ok
+        if (!res.ok) {
+          const errorInfo = await readApiErrorInfo(res)
+          syncError = cartSyncErrorMessage(errorInfo)
+        }
+      } else {
+        const res = await fetch('/api/cart/add', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            sessionId: pending.sessionId,
+            menuItemId: pending.item.id,
+            name: pending.item.name,
+            unitPrice: pending.unitPrice,
+            vatRate: pending.item.vatRate,
+            allergens: pending.allergens,
+            station: pending.item.station ?? 'KITCHEN',
+            quantity: pending.quantity,
+            edits: pending.edits,
+            clientKey: pending.clientKey,
+          }),
+        })
+
+        ok = res.ok
+        if (!res.ok) {
+          const errorInfo = await readApiErrorInfo(res)
+          syncError = cartSyncErrorMessage(errorInfo)
+        }
+        if (res.ok) {
+          const payload = await res
+            .json()
+            .catch(() => null as { id?: unknown } | null)
+          if (payload?.id && typeof payload.id === 'string') {
+            createdId = payload.id
+          }
+        }
+      }
+
+      if (!ok) {
+        setError(syncError ?? 'Could not sync cart. Refreshing your cart now.')
+        await loadCart(pending.sessionId)
+        return
+      }
+
+      if (createdId) {
+        setCartByKey(current => {
+          const currentItem = current[lineKey]
+          if (!currentItem) return current
+          return {
+            ...current,
+            [lineKey]: {
+              ...currentItem,
+              id: createdId,
+            },
+          }
+        })
+      }
+    } catch {
+      setError(networkErrorMessage('sync your cart'))
+      await loadCart(pending.sessionId)
+    } finally {
+      syncInFlightRef.current[lineKey] = false
+
+      const latest = pendingSyncRef.current[lineKey]
+      if (!latest) return
+
+      if (latest.revision !== requestedRevision) {
+        window.setTimeout(() => {
+          void flushPendingSync(lineKey)
+        }, 0)
+        return
+      }
+
+      delete pendingSyncRef.current[lineKey]
+      const timer = syncTimersRef.current[lineKey]
+      if (timer) {
+        window.clearTimeout(timer)
+        delete syncTimersRef.current[lineKey]
+      }
     }
   }
 
-  const changeQty = (item: MenuItem, delta: 1 | -1) => {
-    if (menuLocked) return
+  const scheduleSync = (
+    lineKey: string,
+    sessionForSync: string,
+    clientKeyForSync: string | null,
+    item: MenuItem,
+    allergens: string[],
+    quantity: number,
+    edits: unknown,
+    unitPrice: number
+  ) => {
+    const existing = pendingSyncRef.current[lineKey]
+    const nextRevision = (existing?.revision ?? 0) + 1
 
-    let activeSessionId = sessionId
-    if (!activeSessionId) {
-      activeSessionId = createLocalSessionId()
-      setSessionId(activeSessionId)
-      setGlobalSession(activeSessionId, "customer")
-      try {
-        localStorage.setItem(sessionCacheKey, activeSessionId)
-        localStorage.setItem("sessionId", activeSessionId)
-      } catch {
-        // best-effort cache only
-      }
+    pendingSyncRef.current[lineKey] = {
+      lineKey,
+      sessionId: sessionForSync,
+      clientKey: clientKeyForSync,
+      item,
+      allergens,
+      quantity,
+      edits,
+      unitPrice,
+      revision: nextRevision,
     }
 
-    if (!activeSessionId) return
-    const current = cartByKeyRef.current
-    const optimistic = { ...current }
-    const found = findCartEntry(current, item)
-    const existingKey = found?.key ?? null
-    const existing = found?.item
+    const existingTimer = syncTimersRef.current[lineKey]
+    if (existingTimer) {
+      window.clearTimeout(existingTimer)
+    }
 
-    if (delta === 1) {
-      const targetKey = item.id
-      const base: CartItem = existing ?? {
-        id: `local:${item.id}`,
-        name: item.name,
-        quantity: 0,
-        menuItemId: item.id,
-        unitPrice: item.basePrice,
-        vatRate: item.vatRate,
-        allergens: item.allergens,
-        station: item.station ?? "KITCHEN",
-      }
+    syncTimersRef.current[lineKey] = window.setTimeout(() => {
+      void flushPendingSync(lineKey)
+    }, 24)
+  }
 
-      const nextQty = (base.quantity ?? 0) + 1
-      optimistic[targetKey] = {
-        ...base,
-        name: item.name,
-        menuItemId: item.id,
-        unitPrice: item.basePrice,
-        vatRate: item.vatRate,
-        allergens: item.allergens,
-        station: item.station ?? "KITCHEN",
-        quantity: nextQty,
-      }
-      if (existingKey && existingKey !== targetKey) {
-        delete optimistic[existingKey]
-      }
-    } else if (existing && existingKey) {
-      const nextQty = existing.quantity - 1
-      if (nextQty <= 0) {
-        delete optimistic[existingKey]
+  const applyOptimisticLine = (
+    lineKey: string,
+    nextItem: CartItem | null
+  ) => {
+    setCartByKey(current => {
+      const next = { ...current }
+      if (!nextItem || nextItem.quantity <= 0) {
+        delete next[lineKey]
       } else {
-        optimistic[existingKey] = {
-          ...existing,
-          quantity: nextQty,
-        }
+        next[lineKey] = nextItem
       }
-    } else {
+      cartByKeyRef.current = next
+      return next
+    })
+  }
+
+  const openCustomizer = (item: MenuItem) => {
+    if (menuLocked) return
+    if (!sessionId) {
+      setError('Live connection required. Please reload table.')
       return
     }
 
-    cartByKeyRef.current = optimistic
-    setCartByKey(optimistic)
-    writeLocalCart(optimistic)
+    setCustomizer({
+      item,
+      quantity: 1,
+      selections: defaultModifierSelections(item.customization),
+    })
+    setCustomizerError(null)
   }
 
-  const requestItemEdit = (item: MenuItem) => {
-    setEditNotice(
-      `Edit options for ${item.name} are not configured yet.`
+  const closeCustomizer = () => {
+    setCustomizer(null)
+    setCustomizerError(null)
+  }
+
+  const updateCustomizerSelection = (
+    groupId: string,
+    optionId: string,
+    selected: boolean
+  ) => {
+    setCustomizer(current => {
+      if (!current) return current
+      const customization = current.item.customization
+      if (!hasCustomization(customization)) return current
+
+      const group = customization.groups.find(value => value.id === groupId)
+      if (!group) return current
+
+      const existing = current.selections[groupId] ?? []
+      let nextForGroup = [...existing]
+
+      if (group.type === 'single') {
+        nextForGroup = selected ? [optionId] : []
+      } else if (selected) {
+        nextForGroup = [...existing, optionId]
+      } else {
+        nextForGroup = existing.filter(value => value !== optionId)
+      }
+
+      const normalized = normalizeModifierSelections(customization, {
+        ...current.selections,
+        [groupId]: nextForGroup,
+      })
+
+      return {
+        ...current,
+        selections: normalized,
+      }
+    })
+  }
+
+  const applyCustomizedItem = () => {
+    if (!customizer) return
+    if (!sessionId) {
+      setError('Live connection required. Please reload table.')
+      return
+    }
+
+    const item = customizer.item
+    const customization = item.customization
+
+    const validation = validateModifierSelections(customization, customizer.selections)
+    if (!validation.ok) {
+      setCustomizerError(validation.error ?? 'Invalid selection')
+      return
+    }
+
+    const normalized = validation.normalized
+    const modifierSummary = buildModifierSummary(customization, normalized)
+    const modifierDelta = calculateModifierDelta(customization, normalized)
+    const lineAllergens = collectModifierAllergens(
+      customization,
+      normalized,
+      item.allergens ?? []
     )
+    const unitPrice = Number((item.basePrice + modifierDelta).toFixed(2))
+    const lineSignature =
+      hasCustomization(customization)
+        ? buildModifierSignature(normalized) || 'base'
+        : 'base'
+    const lineKey = `${item.id}::${lineSignature}`
+
+    const existing = cartByKeyRef.current[lineKey]
+    const nextQty = Number(existing?.quantity ?? 0) + customizer.quantity
+    const edits = hasCustomization(customization)
+      ? {
+          modifiers: normalized,
+          modifierPriceDelta: modifierDelta,
+          modifierSummary,
+        }
+      : null
+
+    applyOptimisticLine(lineKey, {
+      id: existing?.id ?? `temp:${lineKey}`,
+      lineKey,
+      name: item.name,
+      quantity: nextQty,
+      menuItemId: item.id,
+      unitPrice,
+      vatRate: item.vatRate,
+      allergens: lineAllergens,
+      station: item.station ?? 'KITCHEN',
+      edits,
+    })
+
+    scheduleSync(
+      lineKey,
+      sessionId,
+      ensureClientKey(),
+      item,
+      lineAllergens,
+      nextQty,
+      edits,
+      unitPrice
+    )
+
+    closeCustomizer()
   }
 
-  useEffect(() => {
-    if (!editNotice) return
-    const timer = window.setTimeout(() => {
-      setEditNotice(null)
-    }, 3200)
-    return () => window.clearTimeout(timer)
-  }, [editNotice])
+  const customizerValidation = useMemo(() => {
+    if (!customizer) return null
+    return validateModifierSelections(
+      customizer.item.customization,
+      customizer.selections
+    )
+  }, [customizer])
+
+  const customizerUnitPrice = useMemo(() => {
+    if (!customizer) return 0
+    const delta = calculateModifierDelta(
+      customizer.item.customization,
+      customizerValidation?.normalized ?? {}
+    )
+    return Number((customizer.item.basePrice + delta).toFixed(2))
+  }, [customizer, customizerValidation])
+
+  const customizerGroupedSelections = useMemo(() => {
+    if (!customizer || !hasCustomization(customizer.item.customization)) {
+      return {
+        mandatoryGroups: [] as MenuCustomization["groups"],
+        optionalGroups: [] as MenuCustomization["groups"],
+        includedLines: [] as string[],
+        defaultChoiceLines: [] as string[],
+      }
+    }
+
+    const customization = customizer.item.customization
+    const mandatoryGroups = customization.groups.filter(group => {
+      const min =
+        typeof group.min === 'number'
+          ? group.min
+          : group.required
+          ? 1
+          : 0
+      return min > 0 || group.required === true
+    })
+    const optionalGroups = customization.groups.filter(
+      group => !mandatoryGroups.some(value => value.id === group.id)
+    )
+
+    const includedLines = getBaseIngredientLabels(customization)
+    const defaultChoiceLines = buildModifierSummary(
+      customization,
+      defaultModifierSelections(customization)
+    )
+
+    return {
+      mandatoryGroups,
+      optionalGroups,
+      includedLines,
+      defaultChoiceLines,
+    }
+  }, [customizer])
+
+  const customizerAllergens = useMemo(() => {
+    if (!customizer) return []
+    const baseAllergens = customizer.item.allergens ?? []
+    const fromSelections = collectModifierAllergens(
+      customizer.item.customization,
+      customizerValidation?.normalized ?? {},
+      baseAllergens
+    )
+
+    return Array.from(
+      new Set(
+        fromSelections
+          .map(value => value.trim().toLowerCase())
+          .filter(Boolean)
+      )
+    ).sort((a, b) => a.localeCompare(b))
+  }, [customizer, customizerValidation])
 
   if (loading || menuLoading) {
     return (
@@ -536,6 +717,10 @@ export default function TagPage({ params }: { params: { tagId: string } }) {
 
   return (
     <div className="menu-page">
+      {error && (
+        <div className="menu-lock-banner">{error}</div>
+      )}
+
       <div className="category-bar">
         {menu.map(section => (
           <button
@@ -543,8 +728,8 @@ export default function TagPage({ params }: { params: { tagId: string } }) {
             onClick={() => setSelectedCategoryId(section.id)}
             className={
               section.id === selectedCategoryId
-                ? "category-pill active"
-                : "category-pill"
+                ? 'category-pill active'
+                : 'category-pill'
             }
           >
             {section.name}
@@ -557,23 +742,10 @@ export default function TagPage({ params }: { params: { tagId: string } }) {
           Ordering is temporarily paused by staff.
         </div>
       )}
-      {usingLocalCart && !menuLocked && (
-        <div className="menu-lock-banner">
-          Working in local mode. Items are cached on this device.
-        </div>
-      )}
-      {editNotice && !menuLocked && (
-        <div className="menu-lock-banner">{editNotice}</div>
-      )}
 
       {activeSection && (
         <MenuSection title={activeSection.name}>
           {activeSection.items.map(item => {
-            const cartItem =
-              cartByKey[item.id] ??
-              Object.values(cartByKey).find(i => i.name === item.name)
-            const quantity = cartItem?.quantity ?? 0
-
             return (
               <MenuItemCard
                 key={item.id}
@@ -582,17 +754,245 @@ export default function TagPage({ params }: { params: { tagId: string } }) {
                 image={item.image}
                 price={item.basePrice}
                 allergens={item.allergens}
-                quantity={quantity}
-                onIncrease={() => changeQty(item, 1)}
-                onDecrease={() => changeQty(item, -1)}
-                showEditButton={item.editable ?? true}
-                onEdit={() => requestItemEdit(item)}
-                editDisabled={menuLocked}
-                controlsDisabled={menuLocked}
+                onClick={menuLocked ? undefined : () => openCustomizer(item)}
               />
             )
           })}
         </MenuSection>
+      )}
+
+      {!activeSection && (
+        <div className="menu-empty-state">Menu unavailable</div>
+      )}
+
+      {customizer && (
+        <div className="modal-overlay">
+          <div className="w-full max-w-md">
+            <div className="card space-y-3 customizer-sheet">
+              <div className="customizer-title">
+                {customizer.item.name}
+              </div>
+              {customizer.item.description && (
+                <div className="customizer-description">
+                  {customizer.item.description}
+                </div>
+              )}
+
+              {customizerGroupedSelections.includedLines.length > 0 && (
+                <div className="customizer-info-block">
+                  <div className="customizer-info-title">
+                    Included
+                  </div>
+                  <div className="customizer-list">
+                    {customizerGroupedSelections.includedLines.map(line => (
+                      <div key={line} className="customizer-list-row">
+                        {line}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {customizerGroupedSelections.defaultChoiceLines.length > 0 && (
+                <div className="customizer-info-block">
+                  <div className="customizer-info-title">
+                    Default choices
+                  </div>
+                  <div className="customizer-list">
+                    {customizerGroupedSelections.defaultChoiceLines.map(line => (
+                      <div key={line} className="customizer-list-row">
+                        {line}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {customizerGroupedSelections.mandatoryGroups.length > 0 && (
+                <div className="customizer-info-block">
+                  <div className="customizer-info-title">
+                    Mandatory selections
+                  </div>
+                  <div className="customizer-chip-wrap">
+                    {customizerGroupedSelections.mandatoryGroups.map(group => (
+                      <span key={group.id} className="customizer-chip">
+                        {group.name}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {customizerGroupedSelections.optionalGroups.length > 0 && (
+                <div className="customizer-info-block">
+                  <div className="customizer-info-title">
+                    Optional additions
+                  </div>
+                  <div className="customizer-chip-wrap">
+                    {customizerGroupedSelections.optionalGroups.map(group => (
+                      <span key={group.id} className="customizer-chip">
+                        {group.name}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {!hasCustomization(customizer.item.customization) && (
+                <div className="customizer-info-block">
+                  <div className="customizer-info-title">
+                    Item options
+                  </div>
+                  <div className="customizer-list-row">
+                    {resolveEditPolicy(customizer.item.customization) === "none"
+                      ? "No substitutions configured for this item."
+                      : "No additional options for this item."}
+                  </div>
+                </div>
+              )}
+
+              {hasCustomization(customizer.item.customization) &&
+                customizer.item.customization.groups.map(group => {
+                  const selected = customizer.selections[group.id] ?? []
+                  const min =
+                    typeof group.min === 'number'
+                      ? group.min
+                      : group.required
+                      ? 1
+                      : 0
+                  const max =
+                    typeof group.max === 'number'
+                      ? group.max
+                      : group.type === 'single'
+                      ? 1
+                      : group.options.length
+
+                  return (
+                    <div key={group.id} className="customizer-group">
+                      <div className="customizer-group-head">
+                        <div className="customizer-group-label">{group.name}</div>
+                        <div className="customizer-group-meta">
+                          {min > 0 ? `Required · ` : "Optional · "}
+                          {group.type === 'single'
+                            ? 'Choose 1'
+                            : `Choose ${min}${max > min ? `-${max}` : ''}`}
+                        </div>
+                      </div>
+                      <div className="customizer-options">
+                        {group.options.map(option => {
+                          const active = selected.includes(option.id)
+                          return (
+                            <button
+                              key={option.id}
+                              type="button"
+                              className={
+                                active
+                                  ? 'customizer-option active'
+                                  : 'customizer-option'
+                              }
+                              onClick={() =>
+                                updateCustomizerSelection(
+                                  group.id,
+                                  option.id,
+                                  !active
+                                )
+                              }
+                            >
+                              <span className="customizer-option-copy">
+                                <span>{option.label}</span>
+                                {option.allergens && option.allergens.length > 0 && (
+                                  <span className="customizer-option-allergens">
+                                    Allergens: {option.allergens.join(', ')}
+                                  </span>
+                                )}
+                              </span>
+                              {option.priceDelta !== 0 && (
+                                <span className="customizer-option-price">
+                                  {option.priceDelta > 0 ? '+' : ''}£
+                                  {option.priceDelta.toFixed(2)}
+                                </span>
+                              )}
+                            </button>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  )
+                })}
+
+              <div className="customizer-allergen-banner">
+                Allergens:{" "}
+                {customizerAllergens.length > 0
+                  ? customizerAllergens.join(", ")
+                  : "none"}
+              </div>
+
+              <div className="customizer-qty-row">
+                <div className="customizer-qty-control">
+                  <button
+                    type="button"
+                    className="menu-qty-btn"
+                    onClick={() =>
+                      setCustomizer(current =>
+                        current
+                          ? {
+                              ...current,
+                              quantity: Math.max(1, current.quantity - 1),
+                            }
+                          : current
+                      )
+                    }
+                    disabled={customizer.quantity <= 1}
+                  >
+                    −
+                  </button>
+                  <div className="menu-qty-value">{customizer.quantity}</div>
+                  <button
+                    type="button"
+                    className="menu-qty-btn"
+                    onClick={() =>
+                      setCustomizer(current =>
+                        current
+                          ? {
+                              ...current,
+                              quantity: Math.min(20, current.quantity + 1),
+                            }
+                          : current
+                      )
+                    }
+                  >
+                    +
+                  </button>
+                </div>
+                <div className="customizer-total">
+                  £{(customizerUnitPrice * customizer.quantity).toFixed(2)}
+                </div>
+              </div>
+
+              {customizerError && (
+                <div className="customizer-error">{customizerError}</div>
+              )}
+
+              <div className="flex gap-2 justify-end">
+                <button
+                  type="button"
+                  onClick={closeCustomizer}
+                  className="px-3 py-2 rounded text-sm font-medium btn-secondary"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={applyCustomizedItem}
+                  disabled={Boolean(customizerValidation && !customizerValidation.ok)}
+                  className="px-3 py-2 rounded text-sm font-medium btn-primary"
+                >
+                  Add to order £{(customizerUnitPrice * customizer.quantity).toFixed(2)}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )

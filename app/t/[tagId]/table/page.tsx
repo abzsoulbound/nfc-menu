@@ -11,46 +11,72 @@ export default function TablePage({
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    const tableId =
-      typeof window !== 'undefined'
-        ? localStorage.getItem('tableId')
-        : null
-    if (!tableId) return
+    let cancelled = false
 
-    const sessionId =
-      typeof window !== 'undefined'
-        ? (
-            localStorage.getItem(
-              `nfc-pos.tag-session.${params.tagId}`
-            ) ?? localStorage.getItem('sessionId')
-          )
-        : null
+    const loadDrafts = async () => {
+      try {
+        const sessionRes = await fetch('/api/session', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ tagId: params.tagId }),
+        })
 
-    fetch('/api/table/get', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        tableId,
-        sessionId,
-      })
-    })
-      .then(async r => {
-        if (!r.ok) {
-          const payload = await r
+        if (!sessionRes.ok) {
+          const payload = await sessionRes
+            .json()
+            .catch(() => ({} as { error?: string }))
+          throw new Error(payload.error ?? 'SESSION_BOOTSTRAP_FAILED')
+        }
+
+        const sessionPayload = await sessionRes.json()
+        const tableId =
+          typeof sessionPayload?.tableId === 'string'
+            ? sessionPayload.tableId
+            : ''
+        const sessionId =
+          typeof sessionPayload?.sessionId === 'string'
+            ? sessionPayload.sessionId
+            : ''
+
+        if (!tableId || !sessionId) {
+          throw new Error('TABLE_CONTEXT_MISSING')
+        }
+
+        const tableRes = await fetch('/api/table/get', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            tableId,
+            sessionId,
+          }),
+        })
+
+        if (!tableRes.ok) {
+          const payload = await tableRes
             .json()
             .catch(() => ({} as { error?: string }))
           throw new Error(payload.error ?? 'TABLE_FETCH_FAILED')
         }
-        return r.json()
-      })
-      .then(setDrafts)
-      .catch(fetchError => {
-        setError(
-          `Could not load table draft (${String(
-            fetchError?.message ?? 'unknown'
-          )}).`
-        )
-      })
+
+        const nextDrafts = await tableRes.json()
+        if (!cancelled) {
+          setDrafts(nextDrafts)
+        }
+      } catch (fetchError) {
+        if (!cancelled) {
+          setError(
+            `Could not load table draft (${String(
+              (fetchError as { message?: string })?.message ?? 'unknown'
+            )}).`
+          )
+        }
+      }
+    }
+
+    void loadDrafts()
+    return () => {
+      cancelled = true
+    }
   }, [params.tagId])
 
   return (

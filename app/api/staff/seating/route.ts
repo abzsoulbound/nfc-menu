@@ -67,6 +67,13 @@ export async function POST(req: Request) {
     )
   }
 
+  if (tableIsFixed && isTemporary) {
+    return NextResponse.json(
+      { error: "TABLE_FIXED_RESERVED", tableNo },
+      { status: 400 }
+    )
+  }
+
   if (!tableIsFixed && !isAllowedTemporaryTableNumber(tableNo)) {
     return NextResponse.json(
       { error: "TABLE_NOT_ALLOWED", tableNo },

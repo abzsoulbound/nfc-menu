@@ -1,6 +1,10 @@
 import { Prisma, Station } from "@prisma/client"
 import { prisma } from "@/lib/prisma"
 import { menu as bootstrapMenu } from "@/lib/menu-data"
+import {
+  getMenuItemCustomization,
+  type MenuCustomization,
+} from "@/lib/menuCustomizations"
 
 type MenuItemDto = {
   id: string
@@ -12,6 +16,7 @@ type MenuItemDto = {
   allergens: string[]
   station: Station
   available: boolean
+  customization?: MenuCustomization | null
 }
 
 type MenuSectionDto = {
@@ -112,6 +117,13 @@ export async function getCanonicalMenu() {
       allergens: parseAllergens(item.allergens),
       station: item.station,
       available: item.available,
+      customization: getMenuItemCustomization({
+        id: item.id,
+        name: item.name,
+        description: item.description,
+        station: item.station,
+        allergens: parseAllergens(item.allergens),
+      }),
     })),
   }))
 

@@ -25,7 +25,6 @@ type MenuSectionType = {
 }
 
 export default function PublicMenuPage() {
-  const menuCacheKey = "nfc-pos.menu-cache.v1"
   const [menu, setMenu] = useState<MenuSectionType[]>([])
   const [locked, setLocked] = useState(false)
   const [loading, setLoading] = useState(true)
@@ -43,41 +42,6 @@ export default function PublicMenuPage() {
         name: section.name,
         items: section.items,
       }))
-
-    const readCache = () => {
-      try {
-        const cached = localStorage.getItem(menuCacheKey)
-        if (!cached) return null
-        const parsed = JSON.parse(cached) as {
-          menu?: MenuSectionType[]
-          locked?: boolean
-        }
-        return {
-          menu: Array.isArray(parsed.menu) ? parsed.menu : [],
-          locked: Boolean(parsed.locked),
-        }
-      } catch {
-        return null
-      }
-    }
-
-    const writeCache = (value: {
-      menu: MenuSectionType[]
-      locked: boolean
-    }) => {
-      try {
-        localStorage.setItem(
-          menuCacheKey,
-          JSON.stringify({
-            menu: value.menu,
-            locked: value.locked,
-            ts: Date.now(),
-          })
-        )
-      } catch {
-        // best-effort cache only
-      }
-    }
 
     async function loadMenu() {
       try {
@@ -107,33 +71,16 @@ export default function PublicMenuPage() {
           }
           return visibleMenu[0]?.id ?? null
         })
-        writeCache({
-          menu: visibleMenu,
-          locked: Boolean(payload?.locked),
-        })
         setLoading(false)
       } catch {
-        const cached = readCache()
-        if (!cached) {
-          const visibleMenu = bootstrapVisibleMenu()
-          setMenu(visibleMenu)
-          setLocked(false)
-          setSelectedCategoryId(current => {
-            if (current && visibleMenu.some(s => s.id === current)) {
-              return current
-            }
-            return visibleMenu[0]?.id ?? null
-          })
-          setLoading(false)
-          return
-        }
-        setMenu(cached.menu)
-        setLocked(cached.locked)
+        const visibleMenu = bootstrapVisibleMenu()
+        setMenu(visibleMenu)
+        setLocked(false)
         setSelectedCategoryId(current => {
-          if (current && cached.menu.some(s => s.id === current)) {
+          if (current && visibleMenu.some(s => s.id === current)) {
             return current
           }
-          return cached.menu[0]?.id ?? null
+          return visibleMenu[0]?.id ?? null
         })
         setLoading(false)
       }

@@ -2,6 +2,10 @@
 
 import { useEffect, useMemo, useState } from "react"
 import { Button } from "@/components/ui/Button"
+import {
+  formatTableNumber,
+  parseTableReferenceInput,
+} from "@/lib/tableCatalog"
 import styles from "./TableAssignment.module.css"
 
 type TagOption = {
@@ -32,6 +36,8 @@ function getApiErrorMessage(
       return "At least one selected NFC is already assigned to another active table."
     case "TABLE_TEMPORARY_REQUIRED":
       return "This table number is not in the fixed list. Mark it as a temporary table."
+    case "TABLE_FIXED_RESERVED":
+      return "Fixed table numbers are reserved. Use a temporary reference instead."
     case "TABLE_NOT_ALLOWED":
       return "This table number is not allowed."
     case "SEATING_CONFLICT_RETRY":
@@ -69,6 +75,7 @@ export function TableAssignment({
   defaultTableNumber = null,
   initialTagIds = [],
   onCancel,
+  mode = "default",
 }: {
   fixedTableNumbers: number[]
   temporaryTableNumbers: number[]
@@ -77,12 +84,15 @@ export function TableAssignment({
   defaultTableNumber?: number | null
   initialTagIds?: string[]
   onCancel?: () => void
+  mode?: "default" | "manual-temporary"
 }) {
   const fixedSet = useMemo(
     () => new Set(fixedTableNumbers),
     [fixedTableNumbers]
   )
   const allowsTableSelection = defaultTableNumber === null
+  const usesManualTemporaryInput =
+    allowsTableSelection && mode === "manual-temporary"
   const defaultTableIsTemporary =
     defaultTableNumber !== null && !fixedSet.has(defaultTableNumber)
 
@@ -110,10 +120,18 @@ export function TableAssignment({
         )
       )
     })
+  const [manualTableReferenceInput, setManualTableReferenceInput] =
+    useState<string>(() =>
+      String(
+        defaultTemporaryNumber(
+          fixedTableNumbers,
+          temporaryTableNumbers
+        )
+      )
+    )
   const [selectedTagIds, setSelectedTagIds] = useState<string[]>(() =>
     Array.from(new Set(initialTagIds))
   )
-  const [confirmMode, setConfirmMode] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -135,7 +153,18 @@ export function TableAssignment({
     return map
   }, [sortedTags])
 
+  const parsedManualReference = useMemo(
+    () =>
+      usesManualTemporaryInput
+        ? parseTableReferenceInput(manualTableReferenceInput)
+        : null,
+    [usesManualTemporaryInput, manualTableReferenceInput]
+  )
+
   const resolvedTableNo = useMemo(() => {
+    if (parsedManualReference) {
+      return parsedManualReference.tableNo
+    }
     if (defaultTableNumber !== null) return defaultTableNumber
     if (selectionMode === "fixed") {
       return parseTableNo(fixedTableInput)
@@ -144,11 +173,13 @@ export function TableAssignment({
   }, [
     defaultTableNumber,
     fixedTableInput,
+    parsedManualReference,
     selectionMode,
     temporaryTableInput,
   ])
 
   const tableIsTemporary = useMemo(() => {
+    if (usesManualTemporaryInput) return true
     if (defaultTableNumber !== null) {
       return !fixedSet.has(defaultTableNumber)
     }
@@ -160,15 +191,18 @@ export function TableAssignment({
     fixedSet,
     resolvedTableNo,
     selectionMode,
+    usesManualTemporaryInput,
   ])
 
-  const selectedTableLabel = resolvedTableNo
-    ? `Table ${resolvedTableNo}`
-    : "No table selected"
-
-  const selectedTags = sortedTags.filter(tag =>
-    selectedTagIds.includes(tag.id)
-  )
+  const selectedTableLabel = useMemo(() => {
+    if (parsedManualReference?.displayLabel) {
+      return `Table ${parsedManualReference.displayLabel}`
+    }
+    if (resolvedTableNo) {
+      return `Table ${formatTableNumber(resolvedTableNo)}`
+    }
+    return "No table selected"
+  }, [parsedManualReference, resolvedTableNo])
 
   const canSelectTag = (tag: TagOption) => {
     if (!resolvedTableNo) return false
@@ -178,8 +212,25 @@ export function TableAssignment({
     )
   }
 
+  const fixedOverflowConflict = Boolean(
+    usesManualTemporaryInput &&
+      parsedManualReference &&
+      !parsedManualReference.encoded &&
+      resolvedTableNo &&
+      fixedSet.has(resolvedTableNo)
+  )
+  const existingTemporaryConflict = Boolean(
+    usesManualTemporaryInput &&
+      parsedManualReference &&
+      resolvedTableNo &&
+      temporaryTableNumbers.includes(resolvedTableNo)
+  )
+
   const canReview =
-    resolvedTableNo !== null && selectedTagIds.length > 0
+    resolvedTableNo !== null &&
+    selectedTagIds.length > 0 &&
+    !fixedOverflowConflict &&
+    !existingTemporaryConflict
 
   const toggleTag = (tagId: string) => {
     if (submitting) return
@@ -193,8 +244,12 @@ export function TableAssignment({
   }
 
   const resetAfterSuccess = (nextAssigned: string[]) => {
-    setConfirmMode(false)
     setError(null)
+    if (usesManualTemporaryInput) {
+      setSelectedTagIds([])
+      return
+    }
+
     if (defaultTableNumber === null) {
       setSelectedTagIds([])
     } else {
@@ -205,6 +260,18 @@ export function TableAssignment({
   async function submitSeating() {
     if (!canReview || !resolvedTableNo) {
       setError("Choose a table number and at least one NFC number.")
+      return
+    }
+
+    if (fixedOverflowConflict) {
+      setError(
+        "Use a temporary reference outside fixed tables (for example 26 or 9A)."
+      )
+      return
+    }
+
+    if (existingTemporaryConflict) {
+      setError("This table reference is already in use. Enter a new temporary table.")
       return
     }
 
@@ -258,70 +325,106 @@ export function TableAssignment({
     <div className={styles.wrapper}>
       {allowsTableSelection && (
         <>
-          <div className="text-sm opacity-70">
-            Select table type
-          </div>
-          <div className={styles.selectionMode}>
-            <label className={styles.modeLabel}>
+          {usesManualTemporaryInput ? (
+            <>
+              <div className="text-sm opacity-70">
+                Table number
+              </div>
               <input
-                type="radio"
-                name="table-mode"
-                checked={selectionMode === "fixed"}
-                onChange={() => {
-                  setSelectionMode("fixed")
+                className="input"
+                type="text"
+                value={manualTableReferenceInput}
+                onChange={event => {
+                  setManualTableReferenceInput(event.target.value)
                   setError(null)
                 }}
                 disabled={submitting}
+                placeholder="Example: 26 or 9A"
               />
-              Fixed table
-            </label>
-            <label className={styles.modeLabel}>
-              <input
-                type="radio"
-                name="table-mode"
-                checked={selectionMode === "temporary"}
-                onChange={() => {
-                  setSelectionMode("temporary")
-                  setError(null)
-                }}
-                disabled={submitting}
-              />
-              Temporary table
-            </label>
-          </div>
-
-          {selectionMode === "fixed" ? (
-            <select
-              className="input"
-              value={fixedTableInput}
-              onChange={event => {
-                setFixedTableInput(event.target.value)
-                setError(null)
-              }}
-              disabled={submitting}
-            >
-              {fixedTableNumbers.map(tableNumber => (
-                <option
-                  key={tableNumber}
-                  value={tableNumber}
-                >
-                  Table {tableNumber}
-                </option>
-              ))}
-            </select>
+              <div className="text-xs opacity-60">
+                Use a unique temporary reference, then select NFC tags and confirm.
+              </div>
+              {fixedOverflowConflict && (
+                <div className={styles.error}>
+                  This matches a fixed table. Use a temporary number (26+) or a
+                  letter suffix like 9A.
+                </div>
+              )}
+              {existingTemporaryConflict && (
+                <div className={styles.error}>
+                  This table reference is already in use. Enter a new temporary
+                  table.
+                </div>
+              )}
+            </>
           ) : (
-            <input
-              className="input"
-              type="number"
-              min={1}
-              value={temporaryTableInput}
-              onChange={event => {
-                setTemporaryTableInput(event.target.value)
-                setError(null)
-              }}
-              disabled={submitting}
-              placeholder="Temporary table number"
-            />
+            <>
+              <div className="text-sm opacity-70">
+                Select table type
+              </div>
+              <div className={styles.selectionMode}>
+                <label className={styles.modeLabel}>
+                  <input
+                    type="radio"
+                    name="table-mode"
+                    checked={selectionMode === "fixed"}
+                    onChange={() => {
+                      setSelectionMode("fixed")
+                      setError(null)
+                    }}
+                    disabled={submitting}
+                  />
+                  Fixed table
+                </label>
+                <label className={styles.modeLabel}>
+                  <input
+                    type="radio"
+                    name="table-mode"
+                    checked={selectionMode === "temporary"}
+                    onChange={() => {
+                      setSelectionMode("temporary")
+                      setError(null)
+                    }}
+                    disabled={submitting}
+                  />
+                  Temporary table
+                </label>
+              </div>
+
+              {selectionMode === "fixed" ? (
+                <select
+                  className="input"
+                  value={fixedTableInput}
+                  onChange={event => {
+                    setFixedTableInput(event.target.value)
+                    setError(null)
+                  }}
+                  disabled={submitting}
+                >
+                  {fixedTableNumbers.map(tableNumber => (
+                    <option
+                      key={tableNumber}
+                      value={tableNumber}
+                    >
+                      Table {formatTableNumber(tableNumber)}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <input
+                  className="input"
+                  type="number"
+                  min={1}
+                  value={temporaryTableInput}
+                  onChange={event => {
+                    setTemporaryTableInput(event.target.value)
+                    setError(null)
+                  }}
+                  disabled={submitting}
+                  placeholder="Temporary table number"
+                />
+              )}
+            </>
           )}
         </>
       )}
@@ -361,7 +464,9 @@ export function TableAssignment({
                 <span className={styles.tagMeta}>
                   {tag.tableNumber === null
                     ? "Unassigned"
-                    : `Assigned to table ${tag.tableNumber}`}
+                    : `Assigned to table ${formatTableNumber(
+                        tag.tableNumber
+                      )}`}
                 </span>
               </span>
             </label>
@@ -375,53 +480,15 @@ export function TableAssignment({
         </div>
       )}
 
-      {confirmMode && (
-        <div className={styles.summary}>
-          <div className="text-sm font-semibold">
-            Confirm seating
-          </div>
-          <div className="text-sm opacity-70">
-            {tableIsTemporary
-              ? `${selectedTableLabel} (temporary)`
-              : selectedTableLabel}
-          </div>
-          <div className={styles.summaryTags}>
-            {selectedTags.map(tag => (
-              <span key={tag.id} className={styles.summaryTag}>
-                {tag.id}
-              </span>
-            ))}
-          </div>
-        </div>
-      )}
-
       {error && <div className={styles.error}>{error}</div>}
 
       <div className={styles.actions}>
-        {!confirmMode ? (
-          <Button
-            onClick={() => setConfirmMode(true)}
-            disabled={!canReview || submitting}
-          >
-            Review seating
-          </Button>
-        ) : (
-          <>
-            <Button
-              onClick={submitSeating}
-              disabled={submitting}
-            >
-              {submitting ? "Saving..." : "Confirm and activate"}
-            </Button>
-            <Button
-              variant="secondary"
-              onClick={() => setConfirmMode(false)}
-              disabled={submitting}
-            >
-              Back
-            </Button>
-          </>
-        )}
+        <Button
+          onClick={submitSeating}
+          disabled={!canReview || submitting}
+        >
+          {submitting ? "Saving..." : "Confirm seating"}
+        </Button>
 
         {onCancel && (
           <Button

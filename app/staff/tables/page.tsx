@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { Card } from "@/components/ui/Card"
 import { Badge } from "@/components/ui/Badge"
 import { Divider } from "@/components/ui/Divider"
@@ -10,6 +10,8 @@ import {
   BillingData,
   BillingSplitPanel,
 } from "@/components/staff/BillingSplitPanel"
+import { formatTableNumber } from "@/lib/tableCatalog"
+import styles from "./page.module.css"
 
 type Table = {
   id: string
@@ -41,10 +43,25 @@ export default function StaffTablesPage() {
     temporaryTableNumbers: [],
   })
   const [activeTable, setActiveTable] = useState<Table | null>(null)
-  const [showSeatingPanel, setShowSeatingPanel] = useState(false)
+  const [seatingTableNumber, setSeatingTableNumber] = useState<number | null>(null)
+  const [showOverflowSeating, setShowOverflowSeating] = useState(false)
   const [billingData, setBillingData] = useState<BillingData | null>(null)
   const [billingLoading, setBillingLoading] = useState(false)
   const [billingError, setBillingError] = useState<string | null>(null)
+
+  const fixedTableNumbers = useMemo(() => {
+    if (tableCatalog.fixedTableNumbers.length > 0) {
+      return tableCatalog.fixedTableNumbers
+    }
+    return Array.from({ length: 25 }, (_, index) => index + 1)
+  }, [tableCatalog.fixedTableNumbers])
+
+  const selectedSeatingTagIds = useMemo(() => {
+    if (seatingTableNumber === null) return []
+    return tags
+      .filter(tag => tag.tableNumber === seatingTableNumber)
+      .map(tag => tag.id)
+  }, [seatingTableNumber, tags])
 
   async function parseArrayResponse<T>(
     res: Response
@@ -259,7 +276,8 @@ export default function StaffTablesPage() {
       return
     }
 
-    setShowSeatingPanel(false)
+    setSeatingTableNumber(tableNumber)
+    setShowOverflowSeating(false)
   }
 
   if (activeTable) {
@@ -272,7 +290,7 @@ export default function StaffTablesPage() {
         <Card>
           <div className="flex justify-between items-center">
             <div className="text-lg font-semibold">
-              Table {activeTable.number}
+              Table {formatTableNumber(activeTable.number)}
             </div>
             <div className="flex gap-2">
               {activeTable.locked && <Badge>locked</Badge>}
@@ -345,36 +363,132 @@ export default function StaffTablesPage() {
     <div className="p-4 space-y-4">
       <Card>
         <div className="space-y-3">
-          <div className="flex justify-between items-center">
-            <div className="space-y-1">
-              <div className="text-lg font-semibold">
-                Seat new table
-              </div>
-              <div className="text-sm opacity-70">
-                Select a table number, assign NFC numbers, and confirm.
-              </div>
+          <div className="space-y-1">
+            <div className="text-lg font-semibold">
+              Seat by table number
             </div>
-            <Button
-              variant={showSeatingPanel ? "secondary" : "primary"}
-              onClick={() => setShowSeatingPanel(current => !current)}
-            >
-              {showSeatingPanel ? "Hide seating" : "Start seating"}
-            </Button>
+            <div className="text-sm opacity-70">
+              Tap a table, then assign the NFC numbers staff placed there.
+            </div>
           </div>
 
-          {showSeatingPanel && (
+          <div className={styles.tableGrid}>
+            {fixedTableNumbers.map(tableNumber => {
+              const table = tables.find(
+                current => current.number === tableNumber
+              )
+              const assignedTagCount = tags.filter(
+                tag => tag.tableNumber === tableNumber
+              ).length
+              const selected = seatingTableNumber === tableNumber
+
+              return (
+                <button
+                  key={tableNumber}
+                  type="button"
+                  className={`${styles.tableTile} ${
+                    selected ? styles.tableTileActive : ""
+                  }`}
+                  onClick={() => {
+                    setSeatingTableNumber(tableNumber)
+                    setShowOverflowSeating(false)
+                  }}
+                >
+                  <span className={styles.tableTileNumber}>
+                    Table {tableNumber}
+                  </span>
+                  <span className={styles.tableTileMeta}>
+                    {assignedTagCount} NFC
+                  </span>
+                  <span className={styles.tableTileStatus}>
+                    {table?.closed
+                      ? "Closed"
+                      : table
+                      ? "Active"
+                      : "Ready"}
+                  </span>
+                </button>
+              )
+            })}
+          </div>
+
+          <div className={styles.quickActions}>
+            <Button
+              variant={
+                showOverflowSeating ? "secondary" : "primary"
+              }
+              onClick={() => {
+                setShowOverflowSeating(current => !current)
+                setSeatingTableNumber(null)
+              }}
+            >
+              {showOverflowSeating
+                ? "Hide overflow seating"
+                : "Seat overflow table"}
+            </Button>
+          </div>
+        </div>
+      </Card>
+
+      {seatingTableNumber !== null && (
+        <Card>
+          <div className="space-y-3">
+            <div className="flex justify-between items-center">
+              <div className="space-y-1">
+              <div className="text-lg font-semibold">
+                Table {formatTableNumber(seatingTableNumber)}
+              </div>
+                <div className="text-sm opacity-70">
+                  Assign or update the NFC numbers for this table.
+                </div>
+              </div>
+              <Button
+                variant="secondary"
+                onClick={() => setSeatingTableNumber(null)}
+              >
+                Close
+              </Button>
+            </div>
             <TableAssignment
-              fixedTableNumbers={tableCatalog.fixedTableNumbers}
+              fixedTableNumbers={fixedTableNumbers}
+              temporaryTableNumbers={tableCatalog.temporaryTableNumbers}
+              tags={tags}
+              defaultTableNumber={seatingTableNumber}
+              initialTagIds={selectedSeatingTagIds}
+              onComplete={async result => {
+                await onSeatingUpdated(result.tableNo)
+              }}
+              onCancel={() => setSeatingTableNumber(null)}
+            />
+          </div>
+        </Card>
+      )}
+
+      {showOverflowSeating && (
+        <Card>
+          <div className="space-y-3">
+            <div className="space-y-1">
+              <div className="text-lg font-semibold">
+                Overflow / temporary table
+              </div>
+              <div className="text-sm opacity-70">
+                Use only when service needs extra temporary tables.
+              </div>
+            </div>
+
+            <TableAssignment
+              fixedTableNumbers={fixedTableNumbers}
               temporaryTableNumbers={tableCatalog.temporaryTableNumbers}
               tags={tags}
               onComplete={async result => {
                 await onSeatingUpdated(result.tableNo)
               }}
-              onCancel={() => setShowSeatingPanel(false)}
+              onCancel={() => setShowOverflowSeating(false)}
+              mode="manual-temporary"
             />
-          )}
-        </div>
-      </Card>
+          </div>
+        </Card>
+      )}
 
       <Divider />
 
@@ -391,7 +505,7 @@ export default function StaffTablesPage() {
           <div className="flex justify-between items-center">
             <div className="space-y-1">
               <div className="text-lg font-semibold">
-                Table {table.number}
+                Table {formatTableNumber(table.number)}
               </div>
               <div className="text-sm opacity-70">
                 Open {minutesSince(table.openedAt)}m ago ·{" "}

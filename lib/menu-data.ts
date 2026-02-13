@@ -1,3 +1,8 @@
+import {
+  getMenuItemCustomization,
+  type MenuCustomization,
+} from "@/lib/menuCustomizations"
+
 export type MenuItemData = {
   id: string
   name: string
@@ -7,6 +12,7 @@ export type MenuItemData = {
   vatRate: number
   allergens: string[]
   station: "KITCHEN" | "BAR"
+  customization?: MenuCustomization | null
 }
 
 export type MenuSectionData = {
@@ -19,7 +25,7 @@ function inferStation(sectionId: string): "KITCHEN" | "BAR" {
   return sectionId === "drinks" ? "BAR" : "KITCHEN"
 }
 
-export const menu: MenuSectionData[] = [
+const baseMenu: MenuSectionData[] = [
   {
     id: "brunch",
     name: "Brunch",
@@ -140,3 +146,14 @@ export const menu: MenuSectionData[] = [
     ],
   },
 ]
+
+export const menu: MenuSectionData[] = baseMenu.map(section => ({
+  ...section,
+  items: section.items.map(item => ({
+    ...item,
+    customization: getMenuItemCustomization({
+      ...item,
+      station: item.station,
+    }),
+  })),
+}))

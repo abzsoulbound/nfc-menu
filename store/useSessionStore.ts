@@ -1,62 +1,41 @@
 import { create } from "zustand"
 
-const SESSION_KEY = "nfc-pos.session.v1"
-
 type SessionState = {
   sessionId: string | null
+  clientKey: string | null
   origin: "customer" | "staff" | null
   setSession: (id: string, origin: "customer" | "staff") => void
   clearSession: () => void
   hydrate: () => void
+  ensureClientKey: () => string | null
   ensureSession: (tagId?: string) => Promise<string | null>
-}
-
-function persistSession(
-  sessionId: string | null,
-  origin: "customer" | "staff" | null
-) {
-  if (typeof window === "undefined") return
-  if (!sessionId || !origin) {
-    window.localStorage.removeItem(SESSION_KEY)
-    return
-  }
-  window.localStorage.setItem(
-    SESSION_KEY,
-    JSON.stringify({ sessionId, origin })
-  )
 }
 
 export const useSessionStore = create<SessionState>((set, get) => ({
   sessionId: null,
+  clientKey: null,
   origin: null,
   setSession: (id, origin) =>
-    set(() => {
-      persistSession(id, origin)
-      return { sessionId: id, origin }
-    }),
+    set(() => ({ sessionId: id, origin })),
   clearSession: () =>
-    set(() => {
-      persistSession(null, null)
-      return { sessionId: null, origin: null }
-    }),
+    set(() => ({ sessionId: null, clientKey: null, origin: null })),
   hydrate: () => {
-    if (typeof window === "undefined") return
-    const raw = window.localStorage.getItem(SESSION_KEY)
-    if (!raw) return
-    try {
-      const parsed = JSON.parse(raw) as {
-        sessionId?: string
-        origin?: "customer" | "staff"
-      }
-      if (parsed.sessionId && parsed.origin) {
-        set({
-          sessionId: parsed.sessionId,
-          origin: parsed.origin,
-        })
-      }
-    } catch {
-      set({ sessionId: null, origin: null })
-    }
+    // Local persistence is intentionally disabled for full online mode.
+  },
+  ensureClientKey: () => {
+    const existing = get().clientKey
+    if (existing) return existing
+    if (typeof window === "undefined") return null
+
+    const next =
+      typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+        ? crypto.randomUUID()
+        : `client-${Date.now().toString(36)}-${Math.random()
+            .toString(36)
+            .slice(2, 10)}`
+
+    set({ clientKey: next })
+    return next
   },
   ensureSession: async (tagId?: string) => {
     const existingId = get().sessionId

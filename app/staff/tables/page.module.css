@@ -1,0 +1,61 @@
+.tableGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(112px, 1fr));
+  gap: 10px;
+}
+
+.tableTile {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: 10px 11px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: #f7fbff;
+  color: var(--text-primary);
+  cursor: pointer;
+  text-align: left;
+  transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+
+.tableTile:hover {
+  border-color: #8eaac0;
+}
+
+.tableTile:focus-visible {
+  outline: 2px solid rgba(31, 111, 178, 0.35);
+  outline-offset: 2px;
+}
+
+.tableTileActive {
+  border-color: #2c6ea3;
+  background: #e8f2fa;
+}
+
+.tableTileNumber {
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.tableTileMeta {
+  font-size: 0.76rem;
+  opacity: 0.72;
+  line-height: 1.2;
+}
+
+.tableTileStatus {
+  margin-top: 4px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--bg-accent);
+  padding: 1px 8px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.quickActions {
+  display: flex;
+  justify-content: flex-start;
+}

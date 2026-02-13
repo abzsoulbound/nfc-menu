@@ -2,6 +2,7 @@
 
 import { Card } from "@/components/ui/Card"
 import { Badge } from "@/components/ui/Badge"
+import { formatTableNumber } from "@/lib/tableCatalog"
 
 export function TagList({
   tags,
@@ -37,7 +38,10 @@ export function TagList({
               </div>
               <div className="text-xs opacity-60">
                 Table:{" "}
-                {tag.tableNumber ?? "—"} · Sessions:{" "}
+                {tag.tableNumber === null
+                  ? "—"
+                  : formatTableNumber(tag.tableNumber)}{" "}
+                · Sessions:{" "}
                 {tag.activeSessionCount}
               </div>
             </div>

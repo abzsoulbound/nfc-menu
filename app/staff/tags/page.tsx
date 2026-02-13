@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/Badge"
 import { Divider } from "@/components/ui/Divider"
 import { Button } from "@/components/ui/Button"
 import { TagList } from "@/components/staff/TagList"
+import { formatTableNumber } from "@/lib/tableCatalog"
 
 type Tag = {
   id: string
@@ -153,7 +154,7 @@ export default function StaffTagsPage() {
             <div className="text-lg font-semibold">
               {selectedTag.tableNumber === null
                 ? "Unassigned"
-                : `Table ${selectedTag.tableNumber}`}
+                : `Table ${formatTableNumber(selectedTag.tableNumber)}`}
             </div>
           </div>
         </Card>

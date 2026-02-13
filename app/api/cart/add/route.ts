@@ -4,6 +4,14 @@ import { prisma } from '@/lib/prisma'
 import { findMenuItemForCart } from '@/lib/menuCatalog'
 import { appendSystemEvent } from '@/lib/events'
 import { withEditConfirmation } from '@/lib/itemEdits'
+import {
+  buildModifierSummary,
+  calculateModifierDelta,
+  collectModifierAllergens,
+  getMenuItemCustomization,
+  hasCustomization,
+  validateModifierSelections,
+} from '@/lib/menuCustomizations'
 
 function toJson(value: unknown): Prisma.InputJsonValue {
   if (value === undefined || value === null) {
@@ -15,6 +23,14 @@ function toJson(value: unknown): Prisma.InputJsonValue {
 function toStation(value: unknown, fallback: Station): Station {
   if (typeof value !== 'string') return fallback
   return value.toUpperCase() === 'BAR' ? 'BAR' : 'KITCHEN'
+}
+
+function isObject(value: unknown): value is Record<string, unknown> {
+  return (
+    value !== null &&
+    typeof value === 'object' &&
+    !Array.isArray(value)
+  )
 }
 
 export async function POST(req: Request) {
@@ -56,11 +72,76 @@ export async function POST(req: Request) {
     body?.station,
     menuItem?.station ?? 'KITCHEN'
   )
-  const allergens =
+  let allergens =
     menuItem?.allergens ??
     (Array.isArray(body?.allergens) ? body.allergens : [])
+  const customization =
+    menuItem?.id
+      ? getMenuItemCustomization({
+          id: menuItem.id,
+          name: menuItem.name,
+          description: menuItem.description,
+          station: menuItem.station,
+          allergens:
+            Array.isArray(menuItem.allergens)
+              ? (menuItem.allergens as string[])
+              : [],
+        })
+      : null
+  let nextEdits: unknown = body?.edits
+  let unitPrice = menuItem?.basePrice ?? Number(body?.unitPrice ?? 0)
+
+  if (menuItem && hasCustomization(customization)) {
+    const rawModifiers = isObject(body?.edits) && isObject(body.edits.modifiers)
+      ? body.edits.modifiers
+      : undefined
+    const validation = validateModifierSelections(
+      customization,
+      rawModifiers
+    )
+
+    if (!validation.ok) {
+      return NextResponse.json(
+        {
+          error: 'INVALID_MODIFIERS',
+          detail: validation.error,
+        },
+        { status: 400 }
+      )
+    }
+
+    const summary = buildModifierSummary(
+      customization,
+      validation.normalized
+    )
+    const delta = calculateModifierDelta(
+      customization,
+      validation.normalized
+    )
+    allergens = collectModifierAllergens(
+      customization,
+      validation.normalized,
+      Array.isArray(menuItem.allergens)
+        ? (menuItem.allergens as string[])
+        : []
+    )
+    const editsBase = isObject(body?.edits)
+      ? { ...body.edits }
+      : {}
+
+    editsBase.modifiers = validation.normalized
+    editsBase.modifierPriceDelta = delta
+    if (summary.length > 0) {
+      editsBase.modifierSummary = summary
+    } else {
+      delete editsBase.modifierSummary
+    }
+    nextEdits = editsBase
+    unitPrice = Number((menuItem.basePrice + delta).toFixed(2))
+  }
+
   const editsWithMeta = withEditConfirmation(
-    body?.edits,
+    nextEdits,
     false,
     body?.clientKey
   )
@@ -71,7 +152,7 @@ export async function POST(req: Request) {
       menuItemId: menuItem?.id ?? null,
       name: itemName,
       quantity,
-      unitPrice: menuItem?.basePrice ?? Number(body?.unitPrice ?? 0),
+      unitPrice,
       vatRate: menuItem?.vatRate ?? Number(body?.vatRate ?? 0),
       allergens: toJson(allergens),
       station,

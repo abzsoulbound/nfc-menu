@@ -24,23 +24,15 @@ type QueuedOrder = {
   attempts: number
 }
 
-const QUEUE_KEY = "nfc-pos.order-queue.v1"
+const inMemoryQueue: QueuedOrder[] = []
 
 function readQueue(): QueuedOrder[] {
-  if (typeof window === "undefined") return []
-  const raw = window.localStorage.getItem(QUEUE_KEY)
-  if (!raw) return []
-  try {
-    const parsed = JSON.parse(raw)
-    return Array.isArray(parsed) ? parsed : []
-  } catch {
-    return []
-  }
+  return [...inMemoryQueue]
 }
 
 function writeQueue(queue: QueuedOrder[]) {
-  if (typeof window === "undefined") return
-  window.localStorage.setItem(QUEUE_KEY, JSON.stringify(queue))
+  inMemoryQueue.length = 0
+  inMemoryQueue.push(...queue)
 }
 
 export function queueOrderSubmission(payload: OrderPayload) {

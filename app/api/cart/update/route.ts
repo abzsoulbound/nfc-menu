@@ -4,6 +4,14 @@ import { prisma } from '@/lib/prisma'
 import { appendSystemEvent } from '@/lib/events'
 import { ASSIST_EDIT_UNLOCK_MS } from '@/lib/constants'
 import {
+  buildModifierSummary,
+  calculateModifierDelta,
+  collectModifierAllergens,
+  getMenuItemCustomization,
+  hasCustomization,
+  validateModifierSelections,
+} from '@/lib/menuCustomizations'
+import {
   getEditClientKey,
   getEditHardActivityAt,
   withEditConfirmation,
@@ -15,9 +23,24 @@ function normalizeClientKey(value: unknown): string | null {
   return trimmed.length > 0 ? trimmed : null
 }
 
+function isObject(value: unknown): value is Record<string, unknown> {
+  return (
+    value !== null &&
+    typeof value === 'object' &&
+    !Array.isArray(value)
+  )
+}
+
 function isRecordMissingError(error: unknown): boolean {
   if (!error || typeof error !== 'object') return false
   return (error as { code?: unknown }).code === 'P2025'
+}
+
+function toJson(value: unknown): Prisma.InputJsonValue {
+  if (value === undefined || value === null) {
+    return [] as unknown as Prisma.InputJsonValue
+  }
+  return value as Prisma.InputJsonValue
 }
 
 export async function POST(req: Request) {
@@ -137,9 +160,84 @@ export async function POST(req: Request) {
       nextData.quantity = quantity
     }
 
+    let nextEditsSource = hasEdits ? payload.edits : item.edits
+
+    if (hasEdits && typeof item.menuItemId === 'string' && item.menuItemId) {
+      const menuItem = await prisma.menuItem.findUnique({
+        where: { id: item.menuItemId },
+      })
+
+      if (menuItem) {
+        const customization = getMenuItemCustomization({
+          id: menuItem.id,
+          name: menuItem.name,
+          description: menuItem.description,
+          station: menuItem.station,
+          allergens: Array.isArray(menuItem.allergens)
+            ? (menuItem.allergens as string[])
+            : [],
+        })
+
+        if (hasCustomization(customization)) {
+          const rawModifiers =
+            isObject(nextEditsSource) &&
+            isObject(nextEditsSource.modifiers)
+              ? nextEditsSource.modifiers
+              : undefined
+
+          const validation = validateModifierSelections(
+            customization,
+            rawModifiers
+          )
+
+          if (!validation.ok) {
+            return NextResponse.json(
+              {
+                error: 'INVALID_MODIFIERS',
+                detail: validation.error,
+              },
+              { status: 400 }
+            )
+          }
+
+          const summary = buildModifierSummary(
+            customization,
+            validation.normalized
+          )
+          const delta = calculateModifierDelta(
+            customization,
+            validation.normalized
+          )
+          const allergens = collectModifierAllergens(
+            customization,
+            validation.normalized,
+            Array.isArray(menuItem.allergens)
+              ? (menuItem.allergens as string[])
+              : []
+          )
+
+          const editsBase = isObject(nextEditsSource)
+            ? { ...nextEditsSource }
+            : {}
+
+          editsBase.modifiers = validation.normalized
+          editsBase.modifierPriceDelta = delta
+          if (summary.length > 0) {
+            editsBase.modifierSummary = summary
+          } else {
+            delete editsBase.modifierSummary
+          }
+
+          nextEditsSource = editsBase
+          nextData.unitPrice = Number((menuItem.basePrice + delta).toFixed(2))
+          nextData.vatRate = menuItem.vatRate
+          nextData.allergens = toJson(allergens)
+        }
+      }
+    }
+
     const keyForWrite = ownerClientKey ?? requesterClientKey
     if (hasEdits || hasQuantity) {
-      const nextEditsSource = hasEdits ? payload.edits : item.edits
       const editsWithMeta = withEditConfirmation(
         nextEditsSource,
         false,

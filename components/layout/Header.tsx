@@ -3,35 +3,14 @@
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { useEffect, useMemo, useState } from "react"
+import { useSessionStore } from "@/store/useSessionStore"
 import styles from "./Header.module.css"
-
-const LEGACY_CART_KEY = "nfc-pos.cart.v1"
-const LOCAL_CART_KEY_PREFIX = "nfc-pos.local-cart."
 
 function safeDecode(value: string) {
   try {
     return decodeURIComponent(value)
   } catch {
     return value
-  }
-}
-
-function parseCartCount(raw: string | null): number {
-  if (!raw) return 0
-  try {
-    const parsed = JSON.parse(raw) as Array<{
-      quantity?: unknown
-    }>
-    if (!Array.isArray(parsed)) return 0
-    return parsed.reduce((sum, item) => {
-      const quantity = Number(item?.quantity ?? 0)
-      if (!Number.isFinite(quantity) || quantity <= 0) {
-        return sum
-      }
-      return sum + quantity
-    }, 0)
-  } catch {
-    return 0
   }
 }
 
@@ -59,6 +38,8 @@ function CartIcon() {
 
 export function Header() {
   const pathname = usePathname() ?? "/"
+  const sessionId = useSessionStore(s => s.sessionId)
+  const ensureClientKey = useSessionStore(s => s.ensureClientKey)
   const [cartCount, setCartCount] = useState(0)
 
   const routeContext = useMemo(() => {
@@ -77,46 +58,66 @@ export function Header() {
   }, [pathname])
 
   useEffect(() => {
-    if (!routeContext.isOrderingRoute) return
-
-    const syncFromStorage = () => {
-      const taggedCartRaw = routeContext.tagId
-        ? window.localStorage.getItem(
-            `${LOCAL_CART_KEY_PREFIX}${routeContext.tagId}`
-          )
-        : null
-      const legacyCartRaw = window.localStorage.getItem(LEGACY_CART_KEY)
-      const taggedCount = parseCartCount(taggedCartRaw)
-      const legacyCount = parseCartCount(legacyCartRaw)
-      setCartCount(routeContext.tagId ? Math.max(taggedCount, legacyCount) : legacyCount)
+    if (!routeContext.isOrderingRoute) {
+      setCartCount(0)
+      return
     }
 
-    const onStorage = (event: StorageEvent) => {
-      if (!event.key) return
-      if (
-        event.key.startsWith(LOCAL_CART_KEY_PREFIX) ||
-        event.key === LEGACY_CART_KEY
-      ) {
-        syncFromStorage()
+    if (!routeContext.tagId || !sessionId) {
+      setCartCount(0)
+      return
+    }
+
+    let cancelled = false
+    const syncLiveCount = async () => {
+      try {
+        const res = await fetch("/api/cart/get", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            sessionId,
+            clientKey: ensureClientKey(),
+          }),
+        })
+        if (!res.ok) return
+        const payload = await res.json()
+        if (cancelled) return
+
+        const items = (
+          Array.isArray(payload?.items) ? payload.items : []
+        ) as Array<{ quantity?: unknown; isMine?: boolean }>
+        const ownItems = items.filter(item => item.isMine !== false)
+        const count = ownItems.reduce(
+          (sum: number, item: { quantity?: unknown }) => {
+            const quantity = Number(item?.quantity ?? 0)
+            return Number.isFinite(quantity) && quantity > 0
+              ? sum + quantity
+              : sum
+          },
+          0
+        )
+        setCartCount(count)
+      } catch {
+        // keep current count on transient network errors
       }
     }
 
     const onCartUpdated: EventListener = () => {
-      syncFromStorage()
+      void syncLiveCount()
     }
 
-    syncFromStorage()
-    const timer = window.setInterval(syncFromStorage, 1500)
-
-    window.addEventListener("storage", onStorage)
+    void syncLiveCount()
+    const timer = window.setInterval(() => {
+      void syncLiveCount()
+    }, 3000)
     window.addEventListener("nfc-cart-updated", onCartUpdated)
 
     return () => {
+      cancelled = true
       window.clearInterval(timer)
-      window.removeEventListener("storage", onStorage)
       window.removeEventListener("nfc-cart-updated", onCartUpdated)
     }
-  }, [routeContext])
+  }, [routeContext, sessionId, ensureClientKey])
 
   if (!routeContext.isOrderingRoute) {
     return null

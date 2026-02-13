@@ -10,12 +10,17 @@ import { Modal } from "@/components/ui/Modal"
 import { useCartStore } from "@/store/useCartStore"
 import { useSessionStore } from "@/store/useSessionStore"
 import { calculateCartTotals } from "@/lib/pricing"
-import { queueOrderSubmission } from "@/lib/offlineOrders"
 import {
   applyEditNote,
   getEditNote,
   hasVisibleEdits,
 } from "@/lib/itemEdits"
+import {
+  cartLoadErrorMessage,
+  networkErrorMessage,
+  readApiErrorInfo,
+  sessionConnectErrorMessage,
+} from "@/lib/clientApiErrors"
 
 type ReviewStatus = "pending" | "in_progress" | "completed"
 
@@ -37,18 +42,6 @@ type ReviewItem = {
   confirmed?: boolean
   canRequesterEdit?: boolean
   ownerInactive?: boolean
-}
-
-type LocalCartItem = {
-  id?: string
-  menuItemId?: string | null
-  name?: string
-  quantity?: number
-  edits?: unknown
-  allergens?: unknown
-  unitPrice?: number
-  vatRate?: number
-  station?: unknown
 }
 
 type PendingMember = {
@@ -82,10 +75,6 @@ type PendingCartSyncEntry = {
   revision: number
 }
 
-type LoadCartOptions = {
-  preserveLocalDraft?: boolean
-}
-
 function toStation(value: unknown): "KITCHEN" | "BAR" {
   return String(value).toUpperCase() === "BAR" ? "BAR" : "KITCHEN"
 }
@@ -103,29 +92,36 @@ function serviceStateLabel(item: ReviewItem) {
   return "in the kitchen"
 }
 
-function sameLineItem(a: ReviewItem, b: ReviewItem) {
-  const aMenuKey = a.menuItemId ?? a.name
-  const bMenuKey = b.menuItemId ?? b.name
+function isObject(
+  value: unknown
+): value is Record<string, unknown> {
   return (
-    aMenuKey === bMenuKey &&
-    a.quantity === b.quantity &&
-    a.unitPrice === b.unitPrice &&
-    (a.vatRate ?? 0) === (b.vatRate ?? 0) &&
-    a.station === b.station &&
-    getEditNote(a.edits) === getEditNote(b.edits)
+    value !== null &&
+    typeof value === "object" &&
+    !Array.isArray(value)
   )
 }
 
-function sameLineIdentity(a: ReviewItem, b: ReviewItem) {
-  const aMenuKey = a.menuItemId ?? a.name
-  const bMenuKey = b.menuItemId ?? b.name
-  return (
-    aMenuKey === bMenuKey &&
-    a.unitPrice === b.unitPrice &&
-    (a.vatRate ?? 0) === (b.vatRate ?? 0) &&
-    a.station === b.station &&
-    getEditNote(a.edits) === getEditNote(b.edits)
-  )
+function getVisibleEditLines(edits: unknown): string[] {
+  if (!hasVisibleEdits(edits)) return []
+
+  const lines: string[] = []
+  if (isObject(edits) && Array.isArray(edits.modifierSummary)) {
+    lines.push(
+      ...edits.modifierSummary.filter(
+        (value): value is string =>
+          typeof value === "string" && value.trim().length > 0
+      )
+    )
+  }
+
+  const note = getEditNote(edits)
+  if (note.trim().length > 0) {
+    lines.push(`Note: ${note}`)
+  }
+
+  if (lines.length > 0) return lines
+  return ["modified"]
 }
 
 export default function PerUserReviewPage({
@@ -135,12 +131,10 @@ export default function PerUserReviewPage({
 }) {
   const router = useRouter()
   const tagId = params.tagId
-  const localCartKey = `nfc-pos.local-cart.${tagId}`
-  const tableNumberCacheKey = `nfc-pos.table-number.${tagId}`
-  const currentTableNumberKey = "nfc-pos.table-number.current"
-  const clientKeyStorage = "nfc-pos.client-key.v1"
-
-  const { sessionId } = useSessionStore()
+  const sessionId = useSessionStore(s => s.sessionId)
+  const setSession = useSessionStore(s => s.setSession)
+  const clientKey = useSessionStore(s => s.clientKey)
+  const ensureClientKey = useSessionStore(s => s.ensureClientKey)
   const clearSubmittedItems = useCartStore(s => s.clearSubmittedItems)
 
   const [cartItems, setCartItems] = useState<ReviewItem[]>([])
@@ -158,145 +152,20 @@ export default function PerUserReviewPage({
   const [editingItem, setEditingItem] = useState<ReviewItem | null>(null)
   const [editDraft, setEditDraft] = useState("")
   const [savingEdit, setSavingEdit] = useState(false)
-  const [importingSavedCart, setImportingSavedCart] = useState(false)
-  const [localDraftNeedsSync, setLocalDraftNeedsSync] = useState(false)
-  const [importableLocalItems, setImportableLocalItems] = useState<ReviewItem[]>([])
-  const [clientKey, setClientKey] = useState<string | null>(null)
   const cartItemsRef = useRef<ReviewItem[]>([])
   const syncTimersRef = useRef<Record<string, number>>({})
   const syncInFlightRef = useRef<Record<string, boolean>>({})
   const pendingSyncRef = useRef<Record<string, PendingCartSyncEntry>>({})
-  const autoImportAttemptRef = useRef<string | null>(null)
 
-  const notifyHeader = (
-    eventName: "nfc-cart-updated" | "nfc-table-updated"
-  ) => {
+  const notifyHeader = () => {
     if (typeof window === "undefined") return
-    window.dispatchEvent(new Event(eventName))
+    window.dispatchEvent(new Event("nfc-cart-updated"))
   }
 
-  const ensureClientKey = () => {
-    if (typeof window === "undefined") return null
-
-    try {
-      const existing = localStorage.getItem(clientKeyStorage)
-      if (existing && existing.trim().length > 0) {
-        if (clientKey !== existing) {
-          setClientKey(existing)
-        }
-        return existing
-      }
-
-      const next = crypto.randomUUID()
-      localStorage.setItem(clientKeyStorage, next)
-      setClientKey(next)
-      return next
-    } catch {
-      return null
-    }
-  }
-
-  const persistTableNumber = (value: unknown) => {
-    const nextTableNumber = Number(value)
-
-    try {
-      if (Number.isInteger(nextTableNumber) && nextTableNumber > 0) {
-        localStorage.setItem(
-          tableNumberCacheKey,
-          String(nextTableNumber)
-        )
-        localStorage.setItem(
-          currentTableNumberKey,
-          String(nextTableNumber)
-        )
-      } else {
-        localStorage.removeItem(tableNumberCacheKey)
-      }
-    } catch {
-      // best-effort cache only
-    } finally {
-      notifyHeader("nfc-table-updated")
-    }
-  }
-
-  const readLocalItems = (): ReviewItem[] => {
-    try {
-      const raw = localStorage.getItem(localCartKey)
-      if (!raw) return []
-      const parsed = JSON.parse(raw) as LocalCartItem[]
-      if (!Array.isArray(parsed)) return []
-
-      return parsed
-        .map(item => ({
-          id: String(
-            item.id ??
-              `local:${item.menuItemId ?? item.name ?? crypto.randomUUID()}`
-          ),
-          menuItemId:
-            typeof item.menuItemId === "string"
-              ? item.menuItemId
-              : null,
-          name: String(item.name ?? "Item"),
-          quantity: Number(item.quantity ?? 0),
-          edits: item.edits ?? null,
-          allergens: Array.isArray(item.allergens)
-            ? item.allergens.filter((x): x is string => typeof x === "string")
-            : [],
-          unitPrice: Number(item.unitPrice ?? 0),
-          vatRate: Number(item.vatRate ?? 0),
-          station: toStation(item.station),
-          isMine: true,
-          confirmed: true,
-          canRequesterEdit: true,
-          ownerInactive: false,
-        }))
-        .filter(item => item.quantity > 0)
-    } catch {
-      return []
-    }
-  }
-
-  const writeLocalItems = (items: ReviewItem[]) => {
-    try {
-      const serializable: LocalCartItem[] = items.map(item => ({
-        id: item.id,
-        menuItemId: item.menuItemId ?? null,
-        name: item.name,
-        quantity: item.quantity,
-        edits: item.edits,
-        allergens: item.allergens,
-        unitPrice: item.unitPrice,
-        vatRate: item.vatRate,
-        station: item.station,
-      }))
-      localStorage.setItem(localCartKey, JSON.stringify(serializable))
-    } catch {
-      // best-effort cache only
-    } finally {
-      notifyHeader("nfc-cart-updated")
-    }
-  }
-
-  const clearLocalCart = () => {
-    try {
-      localStorage.removeItem(localCartKey)
-    } catch {
-      // best-effort cache clear only
-    } finally {
-      notifyHeader("nfc-cart-updated")
-    }
-  }
-
-  const loadCartItems = async (
-    options?: LoadCartOptions
-  ): Promise<PendingCartResponse> => {
-    const preserveLocalDraft = options?.preserveLocalDraft !== false
-
-    if (!sessionId || sessionId.startsWith("local:")) {
-      setImportableLocalItems([])
-      setLocalDraftNeedsSync(false)
+  const loadCartItems = async (): Promise<PendingCartResponse> => {
+    if (!sessionId) {
       return {
-        items: readLocalItems(),
+        items: [],
         members: [],
         requesterConfirmed: true,
         allMembersConfirmed: true,
@@ -315,10 +184,10 @@ export default function PerUserReviewPage({
       })
 
       if (!res.ok) {
-        setImportableLocalItems([])
-        setLocalDraftNeedsSync(false)
+        const errorInfo = await readApiErrorInfo(res)
+        setError(cartLoadErrorMessage(errorInfo))
         return {
-          items: readLocalItems(),
+          items: [],
           members: [],
           requesterConfirmed: true,
           allMembersConfirmed: true,
@@ -327,7 +196,14 @@ export default function PerUserReviewPage({
       }
 
       const payload = await res.json()
-      persistTableNumber(payload?.tableNumber)
+      setError(current =>
+        current &&
+        (current.toLowerCase().includes("cart") ||
+          current.toLowerCase().includes("session") ||
+          current.toLowerCase().includes("connect"))
+          ? null
+          : current
+      )
       const nextItems: ReviewItem[] = Array.isArray(payload?.items)
         ? (payload.items as any[])
             .map(item => ({
@@ -390,35 +266,6 @@ export default function PerUserReviewPage({
         member => !member.confirmed
       ).length
 
-      const ownServerItems = nextItems.filter(item => item.isMine)
-      const localSnapshot = readLocalItems()
-      const unmatchedLocal = preserveLocalDraft
-        ? localSnapshot.filter(localItem =>
-            !ownServerItems.some(serverItem =>
-              sameLineItem(localItem, serverItem)
-            )
-          )
-        : []
-      const unmatchedServer = preserveLocalDraft
-        ? ownServerItems.filter(serverItem =>
-            !localSnapshot.some(localItem =>
-              sameLineItem(localItem, serverItem)
-            )
-          )
-        : []
-      const hasLocalDraftMismatch =
-        preserveLocalDraft &&
-        (unmatchedLocal.length > 0 || unmatchedServer.length > 0)
-
-      if (hasLocalDraftMismatch) {
-        setLocalDraftNeedsSync(true)
-        setImportableLocalItems(localSnapshot)
-      } else {
-        setLocalDraftNeedsSync(false)
-        setImportableLocalItems([])
-        writeLocalItems(ownServerItems)
-      }
-
       return {
         items: nextItems,
         members,
@@ -436,10 +283,9 @@ export default function PerUserReviewPage({
             : fallbackUnconfirmedCount,
       }
     } catch {
-      setImportableLocalItems([])
-      setLocalDraftNeedsSync(false)
+      setError(networkErrorMessage("load pending cart items"))
       return {
-        items: readLocalItems(),
+        items: [],
         members: [],
         requesterConfirmed: true,
         allMembersConfirmed: true,
@@ -454,7 +300,7 @@ export default function PerUserReviewPage({
   }> => {
     try {
       const query = new URLSearchParams({ tagId })
-      if (sessionId && !sessionId.startsWith("local:")) {
+      if (sessionId) {
         query.set("sessionId", sessionId)
       }
       if (clientKey) {
@@ -551,10 +397,58 @@ export default function PerUserReviewPage({
 
   useEffect(() => {
     ensureClientKey()
-  }, [])
+  }, [ensureClientKey])
+
+  useEffect(() => {
+    if (sessionId) return
+
+    let cancelled = false
+    const bootstrapSession = async () => {
+      try {
+        const res = await fetch("/api/session", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ tagId }),
+        })
+
+        if (!res.ok) {
+          const errorInfo = await readApiErrorInfo(res)
+          if (res.status === 409 && errorInfo.code === "TABLE_CLOSED") {
+            router.replace(`/t/${tagId}/closed`)
+          } else {
+            setError(
+              sessionConnectErrorMessage(errorInfo, tagId)
+            )
+            setLoading(false)
+          }
+          return
+        }
+
+        const payload = await res.json()
+        if (cancelled) return
+        if (typeof payload?.sessionId === "string" && payload.sessionId.length > 0) {
+          setSession(payload.sessionId, "customer")
+        }
+      } catch {
+        if (!cancelled) {
+          setError(networkErrorMessage("connect this table"))
+          setLoading(false)
+        }
+      }
+    }
+
+    void bootstrapSession()
+    return () => {
+      cancelled = true
+    }
+  }, [sessionId, setSession, tagId, router])
 
   useEffect(() => {
     cartItemsRef.current = cartItems
+  }, [cartItems])
+
+  useEffect(() => {
+    notifyHeader()
   }, [cartItems])
 
   useEffect(() => {
@@ -569,8 +463,9 @@ export default function PerUserReviewPage({
   }, [])
 
   useEffect(() => {
-    refreshAll(true)
-  }, [localCartKey, sessionId, clientKey])
+    if (!sessionId) return
+    void refreshAll(true)
+  }, [sessionId, clientKey])
 
   useEffect(() => {
     if (!sessionId) return
@@ -582,9 +477,7 @@ export default function PerUserReviewPage({
     return () => window.clearInterval(timer)
   }, [sessionId, clientKey])
 
-  const isSharedSession = Boolean(
-    sessionId && !sessionId.startsWith("local:")
-  )
+  const isSharedSession = Boolean(sessionId)
   const isItemLockedByRequesterConfirmation = (
     item: ReviewItem
   ) => isSharedSession && requesterConfirmed && item.isMine
@@ -696,6 +589,10 @@ export default function PerUserReviewPage({
 
   async function submit() {
     if (cartItems.length === 0) return
+    if (!sessionId) {
+      setError("Live connection required. Could not send order.")
+      return
+    }
     if (isSharedSession && !allMembersConfirmed) {
       setError(
         "Every active member with pending items must confirm before sending the table order."
@@ -724,31 +621,11 @@ export default function PerUserReviewPage({
       }>
     } = {
       tagId,
-    }
-    const queuedPayload = {
-      ...payload,
-      items: cartItems.map(i => ({
-        itemId: i.id,
-        menuItemId: i.menuItemId ?? undefined,
-        name: i.name,
-        quantity: i.quantity,
-        edits: i.edits,
-        allergens: i.allergens,
-        unitPrice: i.unitPrice,
-        station: i.station,
-        vatRate: i.vatRate ?? 0,
-      })),
+      sessionId,
     }
 
     if (activeClientKey) {
       payload.clientKey = activeClientKey
-      queuedPayload.clientKey = activeClientKey
-    }
-    if (sessionId && !sessionId.startsWith("local:")) {
-      payload.sessionId = sessionId
-      queuedPayload.sessionId = sessionId
-    } else {
-      payload.items = queuedPayload.items
     }
 
     try {
@@ -785,7 +662,6 @@ export default function PerUserReviewPage({
       }
 
       clearSubmittedItems()
-      clearLocalCart()
       applyPendingState({
         items: [],
         members: [],
@@ -796,21 +672,7 @@ export default function PerUserReviewPage({
       await refreshAll(false)
     } catch (submitError: any) {
       const message = String(submitError?.message ?? "unknown")
-      const isNetworkFailure =
-        !navigator.onLine ||
-        /failed to fetch|networkerror/i.test(message)
-
-      if (isNetworkFailure) {
-        queueOrderSubmission(queuedPayload)
-      }
-
-      setError(
-        isNetworkFailure
-          ? navigator.onLine
-            ? `Order could not be submitted (${message}). Your items are still in your cart.`
-            : "You are offline. Your items are still in your cart and can be submitted when connection returns."
-          : `Order could not be submitted (${message}).`
-      )
+      setError(`Order could not be submitted (${message}).`)
     } finally {
       setSubmitting(false)
       setShowConfirm(false)
@@ -819,10 +681,6 @@ export default function PerUserReviewPage({
 
   async function setMyPendingConfirmation(nextConfirmed: boolean) {
     if (myPendingItems.length === 0 || !sessionId) return
-    if (sessionId.startsWith("local:")) {
-      setRequesterConfirmed(nextConfirmed)
-      return
-    }
 
     const activeClientKey = ensureClientKey()
     if (!activeClientKey) {
@@ -849,9 +707,7 @@ export default function PerUserReviewPage({
         throw new Error(payload?.error ?? "CONFIRMATION_FAILED")
       }
 
-      const pending = await loadCartItems({
-        preserveLocalDraft: false,
-      })
+      const pending = await loadCartItems()
       applyPendingState(pending)
     } catch (confirmError: any) {
       setError(
@@ -862,36 +718,13 @@ export default function PerUserReviewPage({
     }
   }
 
-  const updateLocalCart = (
-    itemId: string,
-    updater: (item: ReviewItem) => ReviewItem | null
-  ) => {
-    const current = readLocalItems()
-    const next = current
-      .map(item => {
-        if (item.id !== itemId) return item
-        return updater(item)
-      })
-      .filter((item): item is ReviewItem => Boolean(item))
-      .filter(item => item.quantity > 0)
-
-    writeLocalItems(next)
-    applyPendingState({
-      items: next,
-      members: [],
-      requesterConfirmed: true,
-      allMembersConfirmed: true,
-      unconfirmedMemberCount: 0,
-    })
-  }
-
   const applyOptimisticPendingItems = (
     updater: (items: ReviewItem[]) => ReviewItem[]
   ) => {
     setCartItems(current => {
       const next = updater(current)
       cartItemsRef.current = next
-      writeLocalItems(next.filter(item => item.isMine))
+      notifyHeader()
       return next
     })
   }
@@ -1026,19 +859,8 @@ export default function PerUserReviewPage({
 
     const activeClientKey = ensureClientKey()
     const activeSessionId = sessionId
-    const canSync =
-      Boolean(activeSessionId) &&
-      !String(activeSessionId).startsWith("local:") &&
-      !item.id.startsWith("local:")
-
-    if (!canSync) {
-      updateLocalCart(item.id, currentItem => {
-        if (nextQty <= 0) return null
-        return {
-          ...currentItem,
-          quantity: nextQty,
-        }
-      })
+    if (!activeSessionId) {
+      setError("Live connection required. Could not update cart item.")
       return
     }
 
@@ -1122,7 +944,7 @@ export default function PerUserReviewPage({
         if (activeClientKey) {
           body.clientKey = activeClientKey
         }
-        if (sessionId && !sessionId.startsWith("local:")) {
+        if (sessionId) {
           body.sessionId = sessionId
         }
 
@@ -1149,35 +971,27 @@ export default function PerUserReviewPage({
           )
         }
 
-        const canSync =
-          Boolean(sessionId) &&
-          !String(sessionId).startsWith("local:") &&
-          !editingItem.id.startsWith("local:")
-
-        if (canSync) {
-          applyOptimisticPendingItems(current =>
-            current.map(item =>
-              item.id === editingItem.id
-                ? {
-                    ...item,
-                    edits: nextEdits,
-                  }
-                : item
-            )
-          )
-          markConfirmationStateDirty(editingItem)
-          scheduleCartSync(
-            editingItem.id,
-            sessionId as string,
-            activeClientKey,
-            { edits: nextEdits }
-          )
-        } else {
-          updateLocalCart(editingItem.id, item => ({
-            ...item,
-            edits: nextEdits,
-          }))
+        if (!sessionId) {
+          throw new Error("SESSION_NOT_FOUND")
         }
+
+        applyOptimisticPendingItems(current =>
+          current.map(item =>
+            item.id === editingItem.id
+              ? {
+                  ...item,
+                  edits: nextEdits,
+                }
+              : item
+          )
+        )
+        markConfirmationStateDirty(editingItem)
+        scheduleCartSync(
+          editingItem.id,
+          sessionId,
+          activeClientKey,
+          { edits: nextEdits }
+        )
       }
 
       setEditingItem(null)
@@ -1206,158 +1020,6 @@ export default function PerUserReviewPage({
     }
   }
 
-  async function importSavedCartToReview() {
-    if (
-      importingSavedCart ||
-      !sessionId ||
-      sessionId.startsWith("local:") ||
-      !localDraftNeedsSync
-    ) {
-      return
-    }
-
-    setImportingSavedCart(true)
-    setError(null)
-
-    try {
-      const activeClientKey = ensureClientKey()
-      const localSnapshot = readLocalItems()
-      const remainingLocalItems = [...localSnapshot]
-      const currentServerItems = cartItemsRef.current.filter(
-        item => item.isMine
-      )
-
-      for (const serverItem of currentServerItems) {
-        let localIndex = remainingLocalItems.findIndex(
-          localItem => localItem.id === serverItem.id
-        )
-
-        if (localIndex < 0) {
-          localIndex = remainingLocalItems.findIndex(localItem =>
-            sameLineIdentity(localItem, serverItem)
-          )
-        }
-
-        if (localIndex < 0) {
-          const removeRes = await fetch("/api/cart/update", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              sessionId,
-              itemId: serverItem.id,
-              quantity: 0,
-              clientKey: activeClientKey,
-            }),
-          })
-
-          if (!removeRes.ok) {
-            const payload = await removeRes.json().catch(() => ({}))
-            throw new Error(
-              payload?.error ?? "IMPORT_SAVED_CART_REMOVE_FAILED"
-            )
-          }
-          continue
-        }
-
-        const [localItem] = remainingLocalItems.splice(localIndex, 1)
-        if (!localItem) continue
-
-        const quantityChanged =
-          localItem.quantity !== serverItem.quantity
-        const editsChanged =
-          getEditNote(localItem.edits) !==
-          getEditNote(serverItem.edits)
-
-        if (!quantityChanged && !editsChanged) {
-          continue
-        }
-
-        const updateRes = await fetch("/api/cart/update", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            sessionId,
-            itemId: serverItem.id,
-            quantity: localItem.quantity,
-            edits: localItem.edits,
-            clientKey: activeClientKey,
-          }),
-        })
-
-        if (!updateRes.ok) {
-          const payload = await updateRes.json().catch(() => ({}))
-          throw new Error(
-            payload?.error ?? "IMPORT_SAVED_CART_UPDATE_FAILED"
-          )
-        }
-      }
-
-      for (const item of remainingLocalItems) {
-        const res = await fetch("/api/cart/add", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            sessionId,
-            menuItemId: item.menuItemId ?? undefined,
-            name: item.name,
-            unitPrice: item.unitPrice,
-            vatRate: item.vatRate ?? 0,
-            allergens: item.allergens,
-            station: item.station,
-            quantity: item.quantity,
-            edits: item.edits,
-            clientKey: activeClientKey,
-          }),
-        })
-
-        if (!res.ok) {
-          const payload = await res.json().catch(() => ({}))
-          throw new Error(payload?.error ?? "IMPORT_SAVED_CART_FAILED")
-        }
-      }
-
-      const pending = await loadCartItems({
-        preserveLocalDraft: false,
-      })
-      applyPendingState(pending)
-      await refreshAll(false)
-    } catch (importError: any) {
-      setError(
-        `Could not add saved cart to review (${importError?.message ?? "unknown"}).`
-      )
-    } finally {
-      setImportingSavedCart(false)
-    }
-  }
-
-  useEffect(() => {
-    if (!isSharedSession || !localDraftNeedsSync) {
-      autoImportAttemptRef.current = null
-      return
-    }
-    if (importingSavedCart) return
-
-    const importKey = [
-      importableLocalItems
-        .map(item => `${item.id}:${item.quantity}:${getEditNote(item.edits)}`)
-        .join("|"),
-      cartItems
-        .filter(item => item.isMine)
-        .map(item => `${item.id}:${item.quantity}:${getEditNote(item.edits)}`)
-        .join("|"),
-    ].join("::")
-
-    if (autoImportAttemptRef.current === importKey) return
-    autoImportAttemptRef.current = importKey
-    void importSavedCartToReview()
-  }, [
-    isSharedSession,
-    localDraftNeedsSync,
-    importableLocalItems,
-    cartItems,
-    importingSavedCart,
-  ])
-
   if (loading) {
     return (
       <div className="p-4 opacity-60 text-center">
@@ -1366,52 +1028,13 @@ export default function PerUserReviewPage({
     )
   }
 
-  if (
-    cartItems.length === 0 &&
-    submittedItems.length === 0 &&
-    !localDraftNeedsSync
-  ) {
+  if (cartItems.length === 0 && submittedItems.length === 0) {
     return (
       <div className="p-4 space-y-3">
         {error && <Toast>{error}</Toast>}
         <div className="opacity-60 text-center">
           No items to review
         </div>
-        <Button
-          variant="secondary"
-          onClick={() => router.push(`/t/${tagId}`)}
-        >
-          Back
-        </Button>
-      </div>
-    )
-  }
-
-  if (cartItems.length === 0 && submittedItems.length === 0) {
-    return (
-      <div className="p-4 space-y-3">
-        {error && <Toast>{error}</Toast>}
-        <Card>
-          <div className="text-sm font-semibold mb-2">
-            {importingSavedCart
-              ? "Moving your cart to review"
-              : "Saved cart pending sync"}
-          </div>
-          <div className="text-xs opacity-70 mb-3">
-            {importingSavedCart
-              ? "Applying your latest cart changes to this table review now."
-              : "Automatic transfer did not complete. Retry to apply your latest cart changes."}
-          </div>
-          {!importingSavedCart && (
-            <Button
-              type="button"
-              onClick={importSavedCartToReview}
-              disabled={importingSavedCart}
-            >
-              Retry transfer
-            </Button>
-          )}
-        </Card>
         <Button
           variant="secondary"
           onClick={() => router.push(`/t/${tagId}`)}
@@ -1446,30 +1069,6 @@ export default function PerUserReviewPage({
         )}
       </Card>
 
-      {isSharedSession && localDraftNeedsSync && (
-        <Card>
-          <div className="text-sm font-semibold mb-2">
-            {importingSavedCart
-              ? "Syncing your latest cart changes"
-              : "Saved cart pending sync"}
-          </div>
-          <div className="text-xs opacity-70 mb-3">
-            {importingSavedCart
-              ? "Applying your latest cart changes to this table review."
-              : "Automatic transfer did not complete. Retry to apply your latest cart changes."}
-          </div>
-          {!importingSavedCart && (
-            <Button
-              type="button"
-              onClick={importSavedCartToReview}
-              disabled={importingSavedCart}
-            >
-              Retry transfer
-            </Button>
-          )}
-        </Card>
-      )}
-
       {cartItems.length > 0 && (
         <>
           <Divider />
@@ -1490,13 +1089,14 @@ export default function PerUserReviewPage({
                     <div className="font-medium">
                       {item.quantity}× {item.name}
                     </div>
-                    {hasVisibleEdits(item.edits) && (
-                      <div className="text-xs opacity-60">
-                        {getEditNote(item.edits)
-                          ? `Note: ${getEditNote(item.edits)}`
-                          : "modified"}
+                    {getVisibleEditLines(item.edits).map(line => (
+                      <div
+                        key={`${item.id}-${line}`}
+                        className="text-xs opacity-60"
+                      >
+                        {line}
                       </div>
-                    )}
+                    ))}
                     {item.allergens.length > 0 && (
                       <div className="text-xs opacity-60">
                         Allergens: {item.allergens.join(", ")}
@@ -1585,13 +1185,14 @@ export default function PerUserReviewPage({
                               <div className="font-medium">
                                 {item.quantity}× {item.name}
                               </div>
-                              {hasVisibleEdits(item.edits) && (
-                                <div className="text-xs opacity-60">
-                                  {getEditNote(item.edits)
-                                    ? `Note: ${getEditNote(item.edits)}`
-                                    : "modified"}
+                              {getVisibleEditLines(item.edits).map(line => (
+                                <div
+                                  key={`${item.id}-${line}`}
+                                  className="text-xs opacity-60"
+                                >
+                                  {line}
                                 </div>
-                              )}
+                              ))}
                               {item.canRequesterEdit && (
                                 <div className="text-xs opacity-60">
                                   Assist edit enabled
@@ -1723,13 +1324,14 @@ export default function PerUserReviewPage({
                     <div className="text-xs opacity-60">
                       {ownerLabelForItem(item)} · {serviceStateLabel(item)}
                     </div>
-                    {hasVisibleEdits(item.edits) && (
-                      <div className="text-xs opacity-60">
-                        {getEditNote(item.edits)
-                          ? `Note: ${getEditNote(item.edits)}`
-                          : "modified"}
+                    {getVisibleEditLines(item.edits).map(line => (
+                      <div
+                        key={`${item.id}-${line}`}
+                        className="text-xs opacity-60"
+                      >
+                        {line}
                       </div>
-                    )}
+                    ))}
                   </div>
 
                   <div className="text-sm min-w-16 text-right">
