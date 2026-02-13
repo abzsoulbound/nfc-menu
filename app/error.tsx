@@ -13,7 +13,18 @@ export default function GlobalError({
   reset: () => void
 }) {
   useEffect(() => {
-    console.error("Global runtime error:", error)
+    const requestId =
+      (error as Error & { requestId?: string }).requestId ??
+      null
+    console.error("Global runtime error:", {
+      message: error.message,
+      digest: error.digest,
+      requestId,
+      stack:
+        process.env.NODE_ENV === "production"
+          ? undefined
+          : error.stack,
+    })
   }, [error])
 
   return (

@@ -1,5 +1,4 @@
 import { prisma } from "@/lib/prisma"
-import { DEFAULT_RESTAURANT_ID } from "@/lib/restaurantConstants"
 
 export type TableGroupAssignment = {
   id: string
@@ -31,7 +30,7 @@ const assignmentSelect = {
 
 export async function getTableGroupByTableNo(
   tableNo: number,
-  restaurantId: string = DEFAULT_RESTAURANT_ID
+  restaurantId: string
 ): Promise<TableGroup | null> {
   const assignments = await prisma.tableAssignment.findMany({
     where: {
@@ -53,7 +52,7 @@ export async function getTableGroupByTableNo(
 
 export async function getTableGroupByAssignmentId(
   tableId: string,
-  restaurantId: string = DEFAULT_RESTAURANT_ID
+  restaurantId: string
 ): Promise<TableGroup | null> {
   const assignment = await prisma.tableAssignment.findUnique({
     where: { id: tableId },
@@ -65,7 +64,7 @@ export async function getTableGroupByAssignmentId(
 
 export async function getTableGroupForTag(
   tagId: string,
-  restaurantId: string = DEFAULT_RESTAURANT_ID
+  restaurantId: string
 ): Promise<TableGroup | null> {
   const assignment = await prisma.tableAssignment.findFirst({
     where: {

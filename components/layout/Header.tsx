@@ -43,39 +43,47 @@ export function Header() {
   const ensureClientKey = useSessionStore(s => s.ensureClientKey)
   const [cartCount, setCartCount] = useState(0)
   const [branding, setBranding] = useState({
-    name: "Marlo's Kitchen",
+    name: "Marlo's Brasserie",
     logoUrl: "/images/marlos-wordmark-alpha.svg",
     primaryColor: "#12649a",
     secondaryColor: "#d5e4ee",
   })
 
   const routeContext = useMemo(() => {
-    const tenantMatch = pathname.match(/^\/r\/([^/]+)(\/.*)?$/)
     const orderTenantMatch = pathname.match(/^\/order\/r\/([^/]+)(\/.*)?$/)
+    const tenantMatch = pathname.match(/^\/r\/([^/]+)(\/.*)?$/)
+    const orderDefaultMatch = pathname.match(/^\/order(\/.*)?$/)
 
-    const tenantSlug = tenantMatch?.[1]
-      ? safeDecode(tenantMatch[1])
-      : orderTenantMatch?.[1]
+    const tenantSlug = orderTenantMatch?.[1]
       ? safeDecode(orderTenantMatch[1])
+      : tenantMatch?.[1]
+      ? safeDecode(tenantMatch[1])
       : null
 
-    const normalizedPath = tenantMatch
-      ? tenantMatch[2] || "/"
-      : orderTenantMatch
+    const normalizedPath = orderTenantMatch
       ? orderTenantMatch[2] || "/order"
+      : orderDefaultMatch
+      ? orderDefaultMatch[1] || "/"
+      : tenantMatch
+      ? tenantMatch[2] || "/"
       : pathname
 
     const tagMatch = normalizedPath.match(/^\/t\/([^/]+)/)
     const tagId = tagMatch?.[1] ? safeDecode(tagMatch[1]) : null
-    const basePrefix = tenantSlug ? `/r/${encodeURIComponent(tenantSlug)}` : ""
+    const basePrefix = tenantSlug
+      ? `/order/r/${encodeURIComponent(tenantSlug)}`
+      : "/order"
+    const isOrderPath =
+      pathname.startsWith("/order") || pathname.startsWith("/r/") || pathname.startsWith("/t/")
 
     return {
       tenantSlug,
       tagId,
       isOrderingRoute:
-        normalizedPath === "/menu" ||
-        normalizedPath === "/order" ||
-        normalizedPath.startsWith("/t/"),
+        isOrderPath &&
+        (normalizedPath === "/" ||
+          normalizedPath === "/menu" ||
+          normalizedPath.startsWith("/t/")),
       homeHref: tagId
         ? `${basePrefix}/t/${encodeURIComponent(tagId)}`
         : `${basePrefix}/menu`,

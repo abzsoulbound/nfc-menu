@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { SESSION_IDLE_TIMEOUT_MS } from '@/lib/constants'
 import { appendSystemEvent } from '@/lib/events'
+import { findTagByToken } from '@/lib/db/tags'
 import {
   getTableGroupForTag,
   isTableGroupClosed,
@@ -23,11 +24,11 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'BAD_REQUEST' }, { status: 400 })
   }
 
-  const tag = await prisma.nfcTag.findUnique({
-    where: { id: tagId },
-    select: { id: true, restaurantId: true }
+  const tag = await findTagByToken({
+    restaurantId: restaurant.id,
+    tagId,
   })
-  if (!tag || tag.restaurantId !== restaurant.id) {
+  if (!tag) {
     return NextResponse.json(
       { error: 'TAG_NOT_REGISTERED' },
       { status: 404 }
@@ -35,7 +36,7 @@ export async function POST(req: Request) {
   }
 
   const resolvedTag = await prisma.nfcTag.findUnique({
-    where: { id: tagId },
+    where: { id: tag.id },
     include: { assignment: true }
   })
   const resolvedTableGroup = await getTableGroupForTag(
@@ -54,7 +55,7 @@ export async function POST(req: Request) {
 
   const existing = await prisma.session.findFirst({
     where: {
-      tagId,
+      tagId: tag.tagId,
       restaurantId: restaurant.id,
       status: 'ACTIVE'
     },
@@ -127,7 +128,8 @@ export async function POST(req: Request) {
   const session = await prisma.session.create({
     data: {
       restaurantId: restaurant.id,
-      tagId,
+      nfcTagId: tag.id,
+      tagId: tag.tagId,
       tableId: masterTableId,
       status: 'ACTIVE',
       openedAt: new Date(),

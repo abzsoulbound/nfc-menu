@@ -126,12 +126,12 @@ export default function StaffDashboard() {
 
       {sessions.length === 0 && (
         <Card className="text-sm opacity-70">
-          No active sessions yet. Opening <code>/menu</code> does not create a
+          No active sessions yet. Opening <code>/order/menu</code> does not create a
           table session. Sessions appear when guests open a tag URL like{" "}
           <code>
             {tenantPrefix
-              ? `${tenantPrefix}/t/<tagId>`
-              : "/r/marlos/t/<tagId>"}
+              ? `/order${tenantPrefix}/t/<tagId>`
+              : "/order/t/<tagId>"}
           </code>
           .
         </Card>

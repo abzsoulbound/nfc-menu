@@ -6,17 +6,22 @@ import {
 
 describe("tenantPaths", () => {
   it("extracts tenant prefix from a tenant path", () => {
-    expect(getTenantPrefixFromPath("/r/marlos/menu")).toBe("/r/marlos")
-    expect(getTenantPrefixFromPath("/menu")).toBe("")
+    expect(getTenantPrefixFromPath("/order/r/marlos/menu")).toBe(
+      "/order/r/marlos"
+    )
+    expect(getTenantPrefixFromPath("/order/menu")).toBe("/order")
+    expect(getTenantPrefixFromPath("/menu")).toBe("/order")
   })
 
   it("builds a tenant-aware tag path with suffix", () => {
-    expect(tenantTagPath("/r/acme/staff", "NFC-001", "review")).toBe(
-      "/r/acme/t/NFC-001/review"
-    )
+    expect(
+      tenantTagPath("/order/r/acme/staff", "NFC-001", "review")
+    ).toBe("/order/r/acme/t/NFC-001/review")
   })
 
-  it("falls back to a non-tenant tag path", () => {
-    expect(tenantTagPath("/menu", "A-1")).toBe("/t/A-1")
+  it("builds a default-tenant tag path", () => {
+    expect(tenantTagPath("/order/menu", "A-1")).toBe(
+      "/order/t/A-1"
+    )
   })
 })

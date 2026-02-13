@@ -38,7 +38,7 @@ function normalizeTagIds(raw: unknown): string[] {
 
 export async function POST(req: Request) {
   try {
-    requireStaff(req)
+    await requireStaff(req)
   } catch {
     return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 })
   }
@@ -86,15 +86,19 @@ export async function POST(req: Request) {
   const registeredTags = await prisma.nfcTag.findMany({
     where: {
       restaurantId: restaurant.id,
-      id: {
+      tagId: {
         in: tagIds,
       },
     },
     select: {
       id: true,
+      tagId: true,
     },
   })
-  const registeredSet = new Set(registeredTags.map(tag => tag.id))
+  const registeredSet = new Set(registeredTags.map(tag => tag.tagId))
+  const tagIdToNfcTagId = new Map(
+    registeredTags.map(tag => [tag.tagId, tag.id])
+  )
   const missingTagIds = tagIds.filter(tagId => !registeredSet.has(tagId))
   if (missingTagIds.length > 0) {
     return NextResponse.json(
@@ -157,10 +161,22 @@ export async function POST(req: Request) {
         )
 
         for (const tagId of tagIds) {
+          const nfcTagId = tagIdToNfcTagId.get(tagId)
+          if (!nfcTagId) {
+            throw new SeatingError(404, {
+              error: "TAG_NOT_REGISTERED",
+              missingTagIds: [tagId],
+            })
+          }
           await tx.tableAssignment.upsert({
-            where: { tagId },
+            where: {
+              restaurantId_tagId: {
+                restaurantId: restaurant.id,
+                tagId,
+              },
+            },
             update: {
-              restaurantId: restaurant.id,
+              nfcTagId,
               tableNo,
               locked: false,
               closedAt: null,
@@ -168,6 +184,7 @@ export async function POST(req: Request) {
             },
             create: {
               restaurantId: restaurant.id,
+              nfcTagId,
               tagId,
               tableNo,
               locked: false,

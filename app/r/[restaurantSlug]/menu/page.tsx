@@ -1,7 +1,9 @@
-import PublicMenuPage from "@/app/menu/page"
+import { redirect } from "next/navigation"
 
-export const dynamic = "force-dynamic"
-
-export default function TenantMenuPage() {
-  return <PublicMenuPage />
+export default function LegacyTenantMenuRouteRedirect({
+  params,
+}: {
+  params: { restaurantSlug: string }
+}) {
+  redirect(`/order/r/${encodeURIComponent(params.restaurantSlug)}/menu`)
 }

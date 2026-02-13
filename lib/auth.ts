@@ -1,58 +1,46 @@
 import { cookies, headers } from "next/headers"
-import {
-  DEFAULT_RESTAURANT_SLUG,
-  RESTAURANT_COOKIE,
-} from "@/lib/restaurantConstants"
-import { staffAuthCookies } from "@/lib/staffAuth"
+import { prisma } from "@/lib/prisma"
+import { requireRestaurantContext } from "@/lib/db/tenant"
+import { STAFF_SESSION_COOKIE } from "@/lib/staffAuth"
+import { hashSessionToken } from "@/lib/staffSessions"
 
 export type ActorType = "customer" | "staff" | "system"
+
 export type StaffIdentity = {
   id: string
-  authToken: string
+  staffUserId: string
+  staffSessionId: string
   role: string | null
+  restaurantId: string
   restaurantSlug: string
 }
 
-function isStaffAuthBypassed() {
-  const value = process.env.AUTH_DEMO_BYPASS
-  return value === "1" || value === "true"
-}
-
-function readHeader(
-  req: Request | undefined,
-  key: string
-) {
+function readHeader(req: Request | undefined, key: string) {
   if (req) return req.headers.get(key)
   return headers().get(key)
 }
 
-function readCookie(
-  req: Request | undefined,
-  key: string
-) {
+function readCookie(req: Request | undefined, key: string) {
   if (req) {
     const raw = req.headers.get("cookie")
     if (!raw) return null
-    const parts = raw.split(";")
-    for (const p of parts) {
-      const [k, ...rest] = p.trim().split("=")
-      if (k === key) {
-        return decodeURIComponent(rest.join("="))
-      }
-    }
-    return null
-  }
-  return cookies().get(key)?.value ?? null
-}
 
-function hasValidStaffToken(req?: Request) {
-  if (isStaffAuthBypassed()) return true
-  const secret = process.env.STAFF_AUTH_SECRET
-  if (!secret) return false
-  return (
-    readHeader(req, "x-staff-auth") === secret ||
-    readCookie(req, "staff_auth") === secret
-  )
+    const prefix = `${key}=`
+    const part = raw
+      .split(";")
+      .map(value => value.trim())
+      .find(value => value.startsWith(prefix))
+
+    if (!part) return null
+
+    try {
+      return decodeURIComponent(part.slice(prefix.length))
+    } catch {
+      return part.slice(prefix.length)
+    }
+  }
+
+  return cookies().get(key)?.value ?? null
 }
 
 function hasValidSystemToken(req?: Request) {
@@ -61,58 +49,89 @@ function hasValidSystemToken(req?: Request) {
   return readHeader(req, "x-system-auth") === secret
 }
 
+function hasStaffSessionCookie(req?: Request) {
+  return Boolean(readCookie(req, STAFF_SESSION_COOKIE))
+}
+
 export function getActorType(req?: Request): ActorType {
   if (hasValidSystemToken(req)) return "system"
-  if (hasValidStaffToken(req)) return "staff"
+  if (hasStaffSessionCookie(req)) return "staff"
   return "customer"
 }
 
-export function requireStaff(req?: Request): StaffIdentity {
-  const requestedRestaurantSlug =
-    readHeader(req, "x-restaurant-slug") ??
-    readCookie(req, RESTAURANT_COOKIE) ??
-    DEFAULT_RESTAURANT_SLUG
-  const authRestaurantSlug =
-    readHeader(req, "x-staff-restaurant") ??
-    readCookie(req, staffAuthCookies.restaurant) ??
-    requestedRestaurantSlug
+export async function requireStaffSession(
+  req?: Request
+): Promise<StaffIdentity> {
+  const context = requireRestaurantContext({
+    get: key => readHeader(req, key),
+  })
 
-  if (isStaffAuthBypassed()) {
-    return {
-      id: readHeader(req, "x-staff-id") ?? "staff-demo",
-      authToken: "demo-bypass",
-      role:
-        readHeader(req, "x-staff-role") ??
-        readCookie(req, staffAuthCookies.role),
-      restaurantSlug: authRestaurantSlug,
-    }
+  const rawToken = readCookie(req, STAFF_SESSION_COOKIE)
+  if (!rawToken) {
+    throw new Error("Unauthorized: missing staff session")
   }
 
-  const authToken =
-    readHeader(req, "x-staff-auth") ??
-    readCookie(req, "staff_auth")
-  const secret = process.env.STAFF_AUTH_SECRET
+  const tokenHash = hashSessionToken(rawToken)
+  const session = await prisma.staffSession.findFirst({
+    where: {
+      tokenHash,
+      restaurantId: context.restaurantId,
+      revokedAt: null,
+      expiresAt: {
+        gt: new Date(),
+      },
+      staffUser: {
+        active: true,
+        restaurantId: context.restaurantId,
+      },
+    },
+    include: {
+      staffUser: {
+        select: {
+          id: true,
+          role: true,
+        },
+      },
+    },
+  })
 
-  if (!authToken || !secret || authToken !== secret) {
-    throw new Error("Unauthorized: staff only")
+  if (!session) {
+    throw new Error("Unauthorized: invalid staff session")
   }
 
-  if (
-    authRestaurantSlug &&
-    requestedRestaurantSlug &&
-    authRestaurantSlug !== requestedRestaurantSlug
-  ) {
-    throw new Error("Unauthorized: cross-restaurant access denied")
-  }
+  // Non-blocking touch to track activity.
+  prisma.staffSession
+    .update({
+      where: { id: session.id },
+      data: {
+        lastSeenAt: new Date(),
+      },
+    })
+    .catch(() => undefined)
 
   return {
-    id: readHeader(req, "x-staff-id") ?? "staff-unknown",
-    authToken,
-    role:
-      readHeader(req, "x-staff-role") ??
-      readCookie(req, staffAuthCookies.role),
-    restaurantSlug: authRestaurantSlug || DEFAULT_RESTAURANT_SLUG,
+    id: session.staffUser.id,
+    staffUserId: session.staffUser.id,
+    staffSessionId: session.id,
+    role: session.staffUser.role,
+    restaurantId: context.restaurantId,
+    restaurantSlug: context.restaurantSlug,
   }
+}
+
+export async function requireStaffRole(
+  req: Request,
+  allowedRoles: string[]
+): Promise<StaffIdentity> {
+  const staff = await requireStaffSession(req)
+  if (!staff.role || !allowedRoles.includes(staff.role)) {
+    throw new Error("Unauthorized: insufficient staff role")
+  }
+  return staff
+}
+
+export async function requireStaff(req?: Request): Promise<StaffIdentity> {
+  return requireStaffSession(req)
 }
 
 export function requireSystem(req?: Request) {
@@ -132,7 +151,7 @@ export function getStaffIdentity(staff: StaffIdentity) {
 export function getActorMetadata(req?: Request) {
   return {
     actor: getActorType(req),
-    staffId: readHeader(req, "x-staff-id"),
+    staffSession: hasStaffSessionCookie(req),
     timestamp: new Date().toISOString(),
   }
 }

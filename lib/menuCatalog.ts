@@ -101,6 +101,7 @@ export async function ensureCanonicalMenu(input: {
       await prisma.menuItem.upsert({
         where: { id: storedMenuItemId },
         update: {
+          sku: item.id,
           restaurantId: input.restaurantId,
           categoryId: category.id,
           sortOrder: itemIndex,
@@ -115,6 +116,7 @@ export async function ensureCanonicalMenu(input: {
         },
         create: {
           id: storedMenuItemId,
+          sku: item.id,
           restaurantId: input.restaurantId,
           categoryId: category.id,
           sortOrder: itemIndex,

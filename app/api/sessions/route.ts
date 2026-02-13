@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma"
 import { requireStaff } from "@/lib/auth"
 import { SESSION_IDLE_TIMEOUT_MS } from "@/lib/constants"
 import { appendSystemEvent } from "@/lib/events"
+import { ensureTagByToken, findTagByToken } from "@/lib/db/tags"
 import {
   getTableGroupForTag,
   isTableGroupClosed,
@@ -54,33 +55,30 @@ class SessionRouteError extends Error {
   }
 }
 
-async function ensureTagId(
+async function ensureTag(
   tagId: string | undefined,
   origin: string | undefined,
   restaurantId: string
 ) {
   if (tagId) {
-    const existing = await prisma.nfcTag.findUnique({
-      where: { id: tagId },
-      select: { id: true, restaurantId: true },
+    const existing = await findTagByToken({
+      restaurantId,
+      tagId,
     })
-    if (!existing || existing.restaurantId !== restaurantId) {
+    if (!existing) {
       throw new SessionRouteError(404, {
         error: "TAG_NOT_REGISTERED",
       })
     }
-    return tagId
+    return existing
   }
 
   if (origin === "STAFF") {
     const staffTagId = `staff-${crypto.randomUUID()}`
-    await prisma.nfcTag.create({
-      data: {
-        id: staffTagId,
-        restaurantId,
-      },
+    return ensureTagByToken({
+      restaurantId,
+      tagId: staffTagId,
     })
-    return staffTagId
   }
 
   throw new SessionRouteError(400, {
@@ -97,7 +95,7 @@ function isStale(lastActivityAt: Date) {
 
 export async function GET(req: Request) {
   try {
-    requireStaff(req)
+    await requireStaff(req)
   } catch {
     return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 })
   }
@@ -162,7 +160,7 @@ export async function POST(req: Request) {
 
   if (origin === "STAFF") {
     try {
-      requireStaff(req)
+      await requireStaff(req)
     } catch {
       return NextResponse.json(
         { error: "UNAUTHORIZED" },
@@ -275,9 +273,9 @@ export async function POST(req: Request) {
     return NextResponse.json(toSessionDto(resumed))
   }
 
-  let resolvedTagId: string
+  let resolvedTag: { id: string; tagId: string }
   try {
-    resolvedTagId = await ensureTagId(tagId, origin, restaurant.id)
+    resolvedTag = await ensureTag(tagId, origin, restaurant.id)
   } catch (error) {
     if (error instanceof SessionRouteError) {
       return NextResponse.json(error.payload, {
@@ -288,15 +286,15 @@ export async function POST(req: Request) {
   }
 
   const tagTableGroup = await getTableGroupForTag(
-    resolvedTagId,
+    resolvedTag.tagId,
     restaurant.id
   )
-  const tableRequired = !resolvedTagId.startsWith("staff-")
+  const tableRequired = !resolvedTag.tagId.startsWith("staff-")
   if (tableRequired && !tagTableGroup) {
     await prisma.session.updateMany({
       where: {
         restaurantId: restaurant.id,
-        tagId: resolvedTagId,
+        tagId: resolvedTag.tagId,
         status: "ACTIVE",
       },
       data: {
@@ -321,7 +319,7 @@ export async function POST(req: Request) {
   const activeForTag = await prisma.session.findFirst({
     where: {
       restaurantId: restaurant.id,
-      tagId: resolvedTagId,
+      tagId: resolvedTag.tagId,
       status: "ACTIVE",
     },
     orderBy: { lastActivityAt: "desc" },
@@ -363,7 +361,7 @@ export async function POST(req: Request) {
 
     await appendSystemEvent(
       "session_reused_for_tag",
-      { sessionId: resumed.id, tagId: resolvedTagId },
+      { sessionId: resumed.id, tagId: resolvedTag.tagId },
       {
         req,
         restaurantId: restaurant.id,
@@ -385,7 +383,7 @@ export async function POST(req: Request) {
     })
     await appendSystemEvent(
       "session_closed_stale",
-      { sessionId: activeForTag.id, tagId: resolvedTagId },
+      { sessionId: activeForTag.id, tagId: resolvedTag.tagId },
       {
         req,
         restaurantId: restaurant.id,
@@ -398,7 +396,8 @@ export async function POST(req: Request) {
   const session = await prisma.session.create({
     data: {
       restaurantId: restaurant.id,
-      tagId: resolvedTagId,
+      nfcTagId: resolvedTag.id,
+      tagId: resolvedTag.tagId,
       tableId,
       status: "ACTIVE",
       openedAt: new Date(),
@@ -425,8 +424,8 @@ export async function POST(req: Request) {
     "session_created",
     {
       sessionId: session.id,
-      tagId: resolvedTagId,
-      origin: origin ?? inferOrigin(resolvedTagId),
+      tagId: resolvedTag.tagId,
+      origin: origin ?? inferOrigin(resolvedTag.tagId),
     },
     {
       req,

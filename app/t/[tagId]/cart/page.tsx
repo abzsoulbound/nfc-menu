@@ -1,9 +1,9 @@
 import { redirect } from "next/navigation"
 
-export default function CartRedirectPage({
+export default function LegacyTagCartRouteRedirect({
   params,
 }: {
   params: { tagId: string }
 }) {
-  redirect(`/t/${params.tagId}/review`)
+  redirect(`/order/t/${encodeURIComponent(params.tagId)}/review`)
 }

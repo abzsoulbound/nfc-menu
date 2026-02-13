@@ -5,5 +5,7 @@ export default function TenantRootPage({
 }: {
   params: { restaurantSlug: string }
 }) {
-  redirect(`/r/${encodeURIComponent(params.restaurantSlug)}/menu`)
+  redirect(
+    `/order/r/${encodeURIComponent(params.restaurantSlug)}/menu`
+  )
 }

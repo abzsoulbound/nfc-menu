@@ -1,13 +1,17 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
-import { requireStaff } from "@/lib/auth"
-import { DEFAULT_RESTAURANT_SLUG } from "@/lib/restaurantConstants"
+import { requireStaffRole } from "@/lib/auth"
+import {
+  DEFAULT_RESTAURANT_ID,
+  DEFAULT_RESTAURANT_SLUG,
+} from "@/lib/restaurantConstants"
 import {
   externalOrderUrl,
   getBrandingConfig,
   normalizeDomain,
 } from "@/lib/restaurants"
 import { ensureCanonicalMenu } from "@/lib/menuCatalog"
+import { hashPasscode } from "@/lib/staffSessions"
 
 function normalizeSlug(value: unknown) {
   if (typeof value !== "string") return ""
@@ -30,19 +34,22 @@ function toBaseUrl(domain: string | null) {
   return `https://${normalized}`
 }
 
-export async function GET(req: Request) {
-  const staff = (() => {
-    try {
-      return requireStaff(req)
-    } catch {
-      return null
-    }
-  })()
-  if (!staff) {
-    return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 })
+function restaurantIdFromSlug(slug: string) {
+  if (slug === DEFAULT_RESTAURANT_SLUG) {
+    return DEFAULT_RESTAURANT_ID
   }
-  if (staff.role !== "admin") {
-    return NextResponse.json({ error: "FORBIDDEN" }, { status: 403 })
+  return `rest_${slug}_${crypto.randomUUID().slice(0, 8)}`
+}
+
+async function requireAdmin(req: Request) {
+  return requireStaffRole(req, ["admin"])
+}
+
+export async function GET(req: Request) {
+  try {
+    await requireAdmin(req)
+  } catch {
+    return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 })
   }
 
   const restaurants = await prisma.restaurant.findMany({
@@ -76,18 +83,10 @@ export async function GET(req: Request) {
 }
 
 export async function POST(req: Request) {
-  const staff = (() => {
-    try {
-      return requireStaff(req)
-    } catch {
-      return null
-    }
-  })()
-  if (!staff) {
+  try {
+    await requireAdmin(req)
+  } catch {
     return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 })
-  }
-  if (staff.role !== "admin") {
-    return NextResponse.json({ error: "FORBIDDEN" }, { status: 403 })
   }
 
   const body = await req.json()
@@ -122,7 +121,7 @@ export async function POST(req: Request) {
 
   const restaurant = await prisma.restaurant.create({
     data: {
-      id: slug,
+      id: restaurantIdFromSlug(slug),
       slug,
       name: branding.name,
       logoUrl: branding.logoUrl,
@@ -140,31 +139,63 @@ export async function POST(req: Request) {
   )
 
   if (tableCount > 0) {
-    for (let tableNo = 1; tableNo <= tableCount; tableNo += 1) {
-      const tagId = `${slug}-t-${String(tableNo).padStart(2, "0")}`
-      await prisma.nfcTag.upsert({
-        where: { id: tagId },
-        update: {
-          restaurantId: restaurant.id,
-        },
-        create: {
-          id: tagId,
-          restaurantId: restaurant.id,
-        },
-      })
-      await prisma.tableAssignment.upsert({
-        where: { tagId },
-        update: {
-          restaurantId: restaurant.id,
-          tableNo,
-        },
-        create: {
-          restaurantId: restaurant.id,
-          tagId,
-          tableNo,
-        },
-      })
-    }
+    await prisma.$transaction(async tx => {
+      for (let tableNo = 1; tableNo <= tableCount; tableNo += 1) {
+        const externalTagId = `${slug}-t-${String(tableNo).padStart(2, "0")}`
+        const tag = await tx.nfcTag.upsert({
+          where: {
+            restaurantId_tagId: {
+              restaurantId: restaurant.id,
+              tagId: externalTagId,
+            },
+          },
+          update: {},
+          create: {
+            restaurantId: restaurant.id,
+            tagId: externalTagId,
+          },
+        })
+
+        await tx.table.upsert({
+          where: {
+            restaurantId_tableNumber: {
+              restaurantId: restaurant.id,
+              tableNumber: tableNo,
+            },
+          },
+          update: {},
+          create: {
+            restaurantId: restaurant.id,
+            tableNumber: tableNo,
+          },
+        })
+
+        await tx.tableAssignment.upsert({
+          where: {
+            restaurantId_tagId: {
+              restaurantId: restaurant.id,
+              tagId: externalTagId,
+            },
+          },
+          update: {
+            nfcTagId: tag.id,
+            tableNo,
+            locked: false,
+            closedAt: null,
+            closedPaid: null,
+          },
+          create: {
+            restaurantId: restaurant.id,
+            nfcTagId: tag.id,
+            tagId: externalTagId,
+            tableNo,
+            locked: false,
+            closedAt: null,
+            closedPaid: null,
+          },
+        })
+      }
+    })
   }
 
   const shouldSeedMenu = body?.seedMenu !== false
@@ -175,35 +206,45 @@ export async function POST(req: Request) {
     })
   }
 
-  await prisma.staffUser.createMany({
-    data: [
-      {
-        restaurantId: restaurant.id,
-        name: `${restaurant.slug}-admin`,
-        role: "admin",
-        passcode: process.env.ADMIN_PASSCODE ?? process.env.STAFF_AUTH_SECRET ?? null,
+  const roleDefaults: Array<{
+    role: "admin" | "waiter" | "bar" | "kitchen"
+    passcode: string | undefined
+  }> = [
+    { role: "admin", passcode: process.env.ADMIN_PASSCODE },
+    { role: "waiter", passcode: process.env.WAITER_PASSCODE },
+    { role: "bar", passcode: process.env.BAR_PASSCODE },
+    { role: "kitchen", passcode: process.env.KITCHEN_PASSCODE },
+  ]
+
+  for (const roleDefault of roleDefaults) {
+    const normalized = roleDefault.passcode?.trim()
+    const passcodeHash = normalized
+      ? await hashPasscode(normalized)
+      : null
+
+    await prisma.staffUser.upsert({
+      where: {
+        restaurantId_name: {
+          restaurantId: restaurant.id,
+          name: `${restaurant.slug}-${roleDefault.role}`,
+        },
       },
-      {
-        restaurantId: restaurant.id,
-        name: `${restaurant.slug}-waiter`,
-        role: "waiter",
-        passcode: process.env.WAITER_PASSCODE ?? process.env.STAFF_AUTH_SECRET ?? null,
+      update: {
+        role: roleDefault.role,
+        active: true,
+        passcodeHash,
+        passcodeUpdatedAt: passcodeHash ? new Date() : null,
       },
-      {
+      create: {
         restaurantId: restaurant.id,
-        name: `${restaurant.slug}-bar`,
-        role: "bar",
-        passcode: process.env.BAR_PASSCODE ?? process.env.STAFF_AUTH_SECRET ?? null,
+        name: `${restaurant.slug}-${roleDefault.role}`,
+        role: roleDefault.role,
+        passcodeHash,
+        passcodeUpdatedAt: passcodeHash ? new Date() : null,
+        active: true,
       },
-      {
-        restaurantId: restaurant.id,
-        name: `${restaurant.slug}-kitchen`,
-        role: "kitchen",
-        passcode: process.env.KITCHEN_PASSCODE ?? process.env.STAFF_AUTH_SECRET ?? null,
-      },
-    ],
-    skipDuplicates: true,
-  })
+    })
+  }
 
   return NextResponse.json({
     restaurant: {

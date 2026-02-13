@@ -7,7 +7,7 @@ import { resolveRestaurantFromRequest } from "@/lib/restaurants"
 
 export async function POST(req: Request) {
   try {
-    requireStaff(req)
+    await requireStaff(req)
   } catch {
     return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 })
   }
@@ -160,7 +160,7 @@ export async function POST(req: Request) {
 
 export async function PUT(req: Request) {
   try {
-    requireStaff(req)
+    await requireStaff(req)
   } catch {
     return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 })
   }

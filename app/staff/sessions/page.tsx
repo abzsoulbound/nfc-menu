@@ -158,12 +158,12 @@ export default function StaffSessionsPage() {
         <div className="opacity-60 text-center space-y-1">
           <div>No active sessions</div>
           <div className="text-xs">
-            Opening <code>/menu</code> does not create a table session. Sessions
+            Opening <code>/order/menu</code> does not create a table session. Sessions
             appear when guests open a tag URL like{" "}
             <code>
               {tenantPrefix
-                ? `${tenantPrefix}/t/<tagId>`
-                : "/r/marlos/t/<tagId>"}
+                ? `/order${tenantPrefix}/t/<tagId>`
+                : "/order/t/<tagId>"}
             </code>
             .
           </div>

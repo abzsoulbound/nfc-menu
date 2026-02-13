@@ -1,13 +1,13 @@
 import { redirect } from "next/navigation"
 
-export default function TenantCartRedirectPage({
+export default function LegacyTenantTagCartRouteRedirect({
   params,
 }: {
   params: { restaurantSlug: string; tagId: string }
 }) {
   redirect(
-    `/r/${encodeURIComponent(params.restaurantSlug)}/t/${encodeURIComponent(
-      params.tagId
-    )}/review`
+    `/order/r/${encodeURIComponent(
+      params.restaurantSlug
+    )}/t/${encodeURIComponent(params.tagId)}/review`
   )
 }

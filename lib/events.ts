@@ -1,6 +1,7 @@
 import { Prisma } from "@prisma/client"
 import { prisma } from "@/lib/prisma"
 import { getActorType } from "@/lib/auth"
+import { log } from "@/lib/logger"
 
 type EventMeta = {
   req?: Request
@@ -21,12 +22,19 @@ export async function appendSystemEvent(
   payload: unknown,
   meta: EventMeta = {}
 ) {
+  if (!meta.restaurantId) {
+    log("WARN", "system_event_skipped_missing_restaurant", {
+      type,
+    })
+    return
+  }
+
   try {
     await prisma.systemEvent.create({
       data: {
         type,
         payload: toJson(payload),
-        restaurantId: meta.restaurantId ?? "marlos",
+        restaurantId: meta.restaurantId,
         actor: meta.actor ?? (meta.req ? getActorType(meta.req) : "system"),
         sessionId: meta.sessionId ?? null,
         tableId: meta.tableId ?? null,

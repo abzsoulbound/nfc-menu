@@ -1,7 +1,7 @@
 "use client"
 
-import { useEffect, useState } from "react"
-import { usePathname, useRouter } from "next/navigation"
+import { useState } from "react"
+import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import { Card } from "@/components/ui/Card"
 import { Button } from "@/components/ui/Button"
 import { Divider } from "@/components/ui/Divider"
@@ -9,71 +9,59 @@ import type { StaffRole } from "@/lib/staffAuth"
 
 export default function StaffLoginPage() {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const pathname = usePathname() ?? "/staff/login"
   const tenantSlugMatch = pathname.match(/^\/r\/([^/]+)/)
   const tenantPrefix = tenantSlugMatch?.[1]
     ? `/r/${encodeURIComponent(tenantSlugMatch[1])}`
     : ""
-  const tenantSlug = tenantSlugMatch?.[1] ?? "marlos"
+
   const roleRoutes: Record<StaffRole, string> = {
     admin: tenantPrefix ? `${tenantPrefix}/dashboard` : "/admin",
     waiter: tenantPrefix ? `${tenantPrefix}/staff` : "/staff",
     bar: tenantPrefix ? `${tenantPrefix}/bar` : "/bar",
     kitchen: tenantPrefix ? `${tenantPrefix}/kitchen` : "/kitchen",
   }
+
   const [role, setRole] = useState<StaffRole>("admin")
   const [passcode, setPasscode] = useState("")
-  const [authBypassEnabled, setAuthBypassEnabled] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  useEffect(() => {
-    let active = true
-
-    async function loadBypassStatus() {
-      try {
-        const res = await fetch(
-          `/api/staff/auth?role=${role}&restaurantSlug=${encodeURIComponent(
-            tenantSlug
-          )}`,
-          {
-            cache: "no-store",
-          }
-        )
-        if (!res.ok) return
-
-        const payload = (await res.json()) as {
-          demoBypass?: unknown
-        }
-        if (!active) return
-        setAuthBypassEnabled(payload?.demoBypass === true)
-      } catch {
-        // best-effort status check only
-      }
-    }
-
-    void loadBypassStatus()
-
-    return () => {
-      active = false
-    }
-  }, [role, tenantSlug])
-
   async function login() {
-    if (submitting) return
-    if (!authBypassEnabled && !passcode) return
+    if (submitting || !passcode.trim()) return
     setSubmitting(true)
     setError(null)
 
     try {
-      const res = await fetch("/api/staff/auth", {
+      const res = await fetch("/api/staff/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ role, passcode, restaurantSlug: tenantSlug }),
+        body: JSON.stringify({ role, passcode }),
       })
 
       if (!res.ok) {
+        const payload = await res.json().catch(() => ({}))
+        if (res.status === 429) {
+          const retryAfterMs = Number(payload?.retryAfterMs ?? 0)
+          const retrySeconds =
+            Number.isFinite(retryAfterMs) && retryAfterMs > 0
+              ? Math.ceil(retryAfterMs / 1000)
+              : null
+          setError(
+            retrySeconds
+              ? `Too many attempts. Try again in ${retrySeconds}s.`
+              : "Too many attempts. Try again shortly."
+          )
+          return
+        }
         setError("Invalid passcode")
+        return
+      }
+
+      const nextPath = searchParams.get("next")
+      if (nextPath && nextPath.startsWith("/")) {
+        router.replace(nextPath)
         return
       }
 
@@ -88,9 +76,7 @@ export default function StaffLoginPage() {
       <Card>
         <div className="text-lg font-semibold">Staff Login</div>
         <div className="text-sm opacity-70">
-          {authBypassEnabled
-            ? "Demo mode is active. Passcodes are temporarily disabled and will be re-enabled before launch."
-            : "Role-specific passcodes are now used for staff access."}
+          Sign in with your role passcode.
         </div>
       </Card>
 
@@ -111,34 +97,26 @@ export default function StaffLoginPage() {
             <option value="kitchen">Kitchen</option>
           </select>
 
-          {!authBypassEnabled && (
-            <>
-              <label className="text-sm opacity-70" htmlFor="staff-passcode">
-                Passcode
-              </label>
-              <input
-                id="staff-passcode"
-                type="password"
-                value={passcode}
-                onChange={e => setPasscode(e.target.value)}
-                className="input"
-                autoFocus
-              />
-            </>
-          )}
+          <label className="text-sm opacity-70" htmlFor="staff-passcode">
+            Passcode
+          </label>
+          <input
+            id="staff-passcode"
+            type="password"
+            value={passcode}
+            onChange={e => setPasscode(e.target.value)}
+            className="input"
+            autoFocus
+          />
 
           {error && <div className="text-sm text-red-400">{error}</div>}
 
           <Button
             onClick={login}
-            disabled={submitting || (!authBypassEnabled && !passcode)}
+            disabled={submitting || !passcode.trim()}
             className="w-full"
           >
-            {submitting
-              ? "Signing in..."
-              : authBypassEnabled
-              ? "Continue (Demo)"
-              : "Sign in"}
+            {submitting ? "Signing in..." : "Sign in"}
           </Button>
         </div>
       </Card>
@@ -148,7 +126,13 @@ export default function StaffLoginPage() {
       <Button
         variant="secondary"
         className="w-full"
-        onClick={() => router.push(tenantPrefix ? `${tenantPrefix}/menu` : "/menu")}
+        onClick={() =>
+          router.push(
+            tenantPrefix
+              ? `/order${tenantPrefix}/menu`
+              : "/order/menu"
+          )
+        }
       >
         Back to menu
       </Button>

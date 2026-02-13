@@ -3,13 +3,17 @@ import { externalOrderUrl, tenantOrderPath } from "@/lib/restaurants"
 
 describe("restaurant order urls", () => {
   it("builds a tenant fallback link when no custom domain exists", () => {
-    expect(tenantOrderPath("marlos", "5")).toBe("/r/marlos/t/5")
+    expect(tenantOrderPath("marlos", "5")).toBe("/order/t/5")
     expect(
       externalOrderUrl({
         restaurantSlug: "marlos",
         tableId: "5",
       })
-    ).toBe("/r/marlos/t/5")
+    ).toBe("/order/t/5")
+  })
+
+  it("builds a non-default tenant fallback link when no custom domain exists", () => {
+    expect(tenantOrderPath("acme", "5")).toBe("/order/r/acme/t/5")
   })
 
   it("builds a custom-domain link without slug segment", () => {

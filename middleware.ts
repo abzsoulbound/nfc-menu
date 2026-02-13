@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server"
 import {
   DEFAULT_RESTAURANT_ID,
+  DEFAULT_RESTAURANT_NAME,
   DEFAULT_RESTAURANT_SLUG,
   RESTAURANT_COOKIE,
 } from "@/lib/restaurantConstants"
@@ -114,12 +115,11 @@ function parseRestaurantContext(value: unknown) {
   } satisfies MiddlewareRestaurantContext
 }
 
-function fallbackContext(slugFromRoute: string) {
-  const slug = slugFromRoute || DEFAULT_RESTAURANT_SLUG
+function fallbackContext() {
   return {
-    id: slug === DEFAULT_RESTAURANT_SLUG ? DEFAULT_RESTAURANT_ID : slug,
-    slug,
-    name: "Marlo's Kitchen",
+    id: DEFAULT_RESTAURANT_ID,
+    slug: DEFAULT_RESTAURANT_SLUG,
+    name: DEFAULT_RESTAURANT_NAME,
     logoUrl: null,
     primaryColor: null,
     secondaryColor: null,
@@ -162,7 +162,7 @@ async function resolveContextInMiddleware(
     })
 
     if (!res.ok) {
-      return fallbackContext(slugFromRoute)
+      return fallbackContext()
     }
 
     const payload = (await res.json()) as {
@@ -171,7 +171,7 @@ async function resolveContextInMiddleware(
 
     const parsed = parseRestaurantContext(payload.restaurant)
     if (!parsed) {
-      return fallbackContext(slugFromRoute)
+      return fallbackContext()
     }
 
     resolverCache.set(cacheKey, {
@@ -181,12 +181,110 @@ async function resolveContextInMiddleware(
 
     return parsed
   } catch {
-    return fallbackContext(slugFromRoute)
+    return fallbackContext()
   }
 }
 
 function encodeContextHeader(context: MiddlewareRestaurantContext) {
   return encodeURIComponent(JSON.stringify(context))
+}
+
+function staffLoginPath(pathname: string, restaurantSlug: string) {
+  const tenantMatch = pathname.match(/^\/r\/([^/]+)/i)
+  if (tenantMatch?.[1]) {
+    return `/r/${encodeURIComponent(tenantMatch[1])}/staff/login`
+  }
+
+  if (restaurantSlug && restaurantSlug !== DEFAULT_RESTAURANT_SLUG) {
+    return `/r/${encodeURIComponent(restaurantSlug)}/staff/login`
+  }
+
+  return "/staff/login"
+}
+
+function requiredStaffRoles(pathname: string) {
+  if (
+    pathname === "/staff/login" ||
+    /^\/r\/[^/]+\/staff\/login$/.test(pathname)
+  ) {
+    return null
+  }
+
+  if (
+    pathname === "/admin" ||
+    pathname.startsWith("/admin/") ||
+    /^\/r\/[^/]+\/admin(\/.*)?$/.test(pathname) ||
+    /^\/r\/[^/]+\/dashboard(\/.*)?$/.test(pathname)
+  ) {
+    return ["admin"] as const
+  }
+
+  if (
+    pathname === "/bar" ||
+    pathname.startsWith("/bar/") ||
+    /^\/r\/[^/]+\/bar(\/.*)?$/.test(pathname)
+  ) {
+    return ["admin", "bar"] as const
+  }
+
+  if (
+    pathname === "/kitchen" ||
+    pathname.startsWith("/kitchen/") ||
+    /^\/r\/[^/]+\/kitchen(\/.*)?$/.test(pathname)
+  ) {
+    return ["admin", "kitchen"] as const
+  }
+
+  if (
+    pathname === "/staff" ||
+    pathname.startsWith("/staff/") ||
+    /^\/r\/[^/]+\/staff(\/.*)?$/.test(pathname)
+  ) {
+    return ["admin", "waiter"] as const
+  }
+
+  return null
+}
+
+async function resolveStaffAccess(input: {
+  req: NextRequest
+  requestId: string
+  restaurantId: string
+  roles: readonly string[]
+}) {
+  const resolverUrl = new URL(
+    "/api/internal/staff-session",
+    input.req.nextUrl.origin
+  )
+  resolverUrl.searchParams.set("roles", input.roles.join(","))
+
+  try {
+    const res = await fetch(resolverUrl, {
+      headers: {
+        "x-internal-staff-check": "1",
+        [REQUEST_ID_HEADER]: input.requestId,
+        "x-restaurant-id": input.restaurantId,
+        cookie: input.req.headers.get("cookie") ?? "",
+      },
+      cache: "no-store",
+    })
+
+    if (!res.ok) return null
+    const payload = (await res.json()) as {
+      authorized?: unknown
+      staffUserId?: unknown
+      role?: unknown
+    }
+    if (payload.authorized !== true) return null
+    if (typeof payload.staffUserId !== "string") return null
+
+    return {
+      staffUserId: payload.staffUserId,
+      role: typeof payload.role === "string" ? payload.role : "",
+    }
+  } catch {
+    return null
+  }
 }
 
 export async function middleware(req: NextRequest) {
@@ -218,6 +316,31 @@ export async function middleware(req: NextRequest) {
   }
   requestHeaders.set(RESTAURANT_CONTEXT_HEADER, encodeContextHeader(context))
 
+  const roles = requiredStaffRoles(pathname)
+  if (roles) {
+    const staffAccess = await resolveStaffAccess({
+      req,
+      requestId,
+      restaurantId: context.id,
+      roles,
+    })
+
+    if (!staffAccess) {
+      const loginPath = staffLoginPath(pathname, slug)
+      const loginUrl = new URL(loginPath, req.url)
+      loginUrl.searchParams.set("next", pathname)
+      const redirectRes = NextResponse.redirect(loginUrl, { status: 307 })
+      redirectRes.headers.set(REQUEST_ID_HEADER, requestId)
+      return redirectRes
+    }
+
+    requestHeaders.set("x-staff-user-id", staffAccess.staffUserId)
+    requestHeaders.set("x-staff-role", staffAccess.role)
+  } else {
+    requestHeaders.delete("x-staff-user-id")
+    requestHeaders.delete("x-staff-role")
+  }
+
   const res = NextResponse.next({
     request: {
       headers: requestHeaders,
@@ -243,6 +366,6 @@ export async function middleware(req: NextRequest) {
 
 export const config = {
   matcher: [
-    "/((?!_next/static|_next/image|favicon.ico|images|icons|api/internal/restaurant-context).*)",
+    "/((?!_next/static|_next/image|favicon.ico|images|icons|api/internal/restaurant-context|api/internal/staff-session).*)",
   ],
 }

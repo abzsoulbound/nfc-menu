@@ -1,4 +1,4 @@
-# NFC POS System
+# Marlo's Brasserie Ordering SaaS
 
 Core rules:
 - User session = person
@@ -11,8 +11,9 @@ Architecture:
 - Stateless UI with client stores in store/*
 
 Routes:
-- /menu public menu
-- /t/[tagId] customer ordering
+- /order/menu public menu (canonical)
+- /order/t/[tagId] customer ordering (default tenant)
+- /order/r/[restaurantSlug]/t/[tagId] customer ordering (tenant)
 - /staff operational control
 - /kitchen kitchen station
 - /bar bar station
@@ -22,6 +23,15 @@ Development:
 - create a `.env` file
 - set DATABASE_URL to your managed Postgres URL
 - set TABLE_NUMBERS to fixed table numbers (example: `1-20,30,32`)
+- set role passcodes for bootstrap:
+  - `ADMIN_PASSCODE`
+  - `WAITER_PASSCODE`
+  - `BAR_PASSCODE`
+  - `KITCHEN_PASSCODE`
+- optional security/session env:
+  - `STAFF_PASSCODE_PEPPER`
+  - `STAFF_SESSION_PEPPER`
+  - `STAFF_SESSION_TTL_HOURS`
 - npm run prisma:migrate:deploy
 - npm run db:check
 - npm run test

@@ -1,11 +1,13 @@
 export const RESTAURANT_COOKIE = "restaurant_slug"
-export const DEFAULT_RESTAURANT_ID = "marlos"
+export const DEFAULT_RESTAURANT_ID = "rest_marlos"
 export const DEFAULT_RESTAURANT_SLUG = "marlos"
+export const DEFAULT_RESTAURANT_NAME = "Marlo's Brasserie"
+export const DEFAULT_ORDER_BASE_PATH = "/order"
 
 export const DEFAULT_RESTAURANT_BRANDING = {
   id: DEFAULT_RESTAURANT_ID,
   slug: DEFAULT_RESTAURANT_SLUG,
-  name: "Marlo's Kitchen",
+  name: DEFAULT_RESTAURANT_NAME,
   logoUrl: "/images/marlos-wordmark-alpha.svg",
   primaryColor: "#12649a",
   secondaryColor: "#d5e4ee",

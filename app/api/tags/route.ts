@@ -2,12 +2,13 @@ import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { requireStaff } from "@/lib/auth"
 import { appendSystemEvent } from "@/lib/events"
+import { ensureTagByToken, findTagByToken } from "@/lib/db/tags"
 import { getTableGroupByTableNo } from "@/lib/tableGroups"
 import { resolveRestaurantFromRequest } from "@/lib/restaurants"
 
 export async function GET(req: Request) {
   try {
-    requireStaff(req)
+    await requireStaff(req)
   } catch {
     return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 })
   }
@@ -47,7 +48,7 @@ export async function GET(req: Request) {
 
 export async function POST(req: Request) {
   try {
-    requireStaff(req)
+    await requireStaff(req)
   } catch {
     return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 })
   }
@@ -63,29 +64,20 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "BAD_REQUEST" }, { status: 400 })
   }
 
-  const existing = await prisma.nfcTag.findUnique({
-    where: { id: tagId },
-    select: { id: true, restaurantId: true },
+  const existing = await findTagByToken({
+    restaurantId: restaurant.id,
+    tagId,
   })
-  if (existing && existing.restaurantId === restaurant.id) {
+  if (existing) {
     return NextResponse.json({
       ok: true,
       created: false,
       tagId,
     })
   }
-  if (existing && existing.restaurantId !== restaurant.id) {
-    return NextResponse.json(
-      { error: "TAG_ALREADY_USED_BY_ANOTHER_RESTAURANT" },
-      { status: 409 }
-    )
-  }
-
-  await prisma.nfcTag.create({
-    data: {
-      id: tagId,
-      restaurantId: restaurant.id,
-    },
+  await ensureTagByToken({
+    restaurantId: restaurant.id,
+    tagId,
   })
 
   await appendSystemEvent(
@@ -106,7 +98,7 @@ export async function POST(req: Request) {
 
 export async function PATCH(req: Request) {
   try {
-    requireStaff(req)
+    await requireStaff(req)
   } catch {
     return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 })
   }
@@ -133,11 +125,11 @@ export async function PATCH(req: Request) {
     return NextResponse.json({ error: "BAD_REQUEST" }, { status: 400 })
   }
 
-  const tag = await prisma.nfcTag.findUnique({
-    where: { id: tagId },
-    select: { id: true, restaurantId: true },
+  const tag = await findTagByToken({
+    restaurantId: restaurant.id,
+    tagId,
   })
-  if (!tag || tag.restaurantId !== restaurant.id) {
+  if (!tag) {
     return NextResponse.json(
       { error: "TAG_NOT_REGISTERED" },
       { status: 404 }
@@ -211,13 +203,19 @@ export async function PATCH(req: Request) {
   }
 
   const assignment = await prisma.tableAssignment.upsert({
-    where: { tagId },
+    where: {
+      restaurantId_tagId: {
+        restaurantId: restaurant.id,
+        tagId,
+      },
+    },
     update: {
-      restaurantId: restaurant.id,
+      nfcTagId: tag.id,
       tableNo: table.tableNo,
     },
     create: {
       restaurantId: restaurant.id,
+      nfcTagId: tag.id,
       tagId,
       tableNo: table.tableNo,
     },

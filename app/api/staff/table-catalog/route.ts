@@ -6,7 +6,7 @@ import { resolveRestaurantFromRequest } from "@/lib/restaurants"
 
 export async function GET(req: Request) {
   try {
-    requireStaff(req)
+    await requireStaff(req)
   } catch {
     return NextResponse.json(
       { error: "UNAUTHORIZED" },

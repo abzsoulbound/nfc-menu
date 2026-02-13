@@ -23,7 +23,7 @@ export async function POST(req: Request) {
 
   let staffAuthorized = true
   try {
-    requireStaff(req)
+    await requireStaff(req)
   } catch {
     staffAuthorized = false
   }

@@ -3,6 +3,8 @@ import { OrderStatus, Prisma, Station } from "@prisma/client"
 import { prisma } from "@/lib/prisma"
 import { requireStaff } from "@/lib/auth"
 import { appendSystemEvent } from "@/lib/events"
+import { findTagByToken } from "@/lib/db/tags"
+import { logWithRequest } from "@/lib/logger"
 import {
   MEMBER_INACTIVE_MS,
   SESSION_IDLE_TIMEOUT_MS,
@@ -52,6 +54,13 @@ function normalizeClientKey(value: unknown): string | null {
   if (typeof value !== "string") return null
   const trimmed = value.trim()
   return trimmed.length > 0 ? trimmed : null
+}
+
+function normalizeClientRequestId(value: unknown): string | null {
+  if (typeof value !== "string") return null
+  const trimmed = value.trim()
+  if (!trimmed) return null
+  return trimmed.slice(0, 128)
 }
 
 function editsToInputJson(
@@ -135,7 +144,16 @@ async function resolveSessionTableGroup(input: {
 }
 
 async function syncOrderStatus(orderId: string, restaurantId: string) {
-  const items = await prisma.orderItem.findMany({
+  const ticketItems = await prisma.ticketItem.findMany({
+    where: {
+      restaurantId,
+      ticket: {
+        orderId,
+      },
+    },
+    select: { status: true },
+  })
+  const fallbackOrderItems = await prisma.orderItem.findMany({
     where: {
       orderId,
       restaurantId,
@@ -143,7 +161,9 @@ async function syncOrderStatus(orderId: string, restaurantId: string) {
     select: { status: true },
   })
 
-  const hasOpen = items.some(i => i.status !== "COMPLETED")
+  const statusRows =
+    ticketItems.length > 0 ? ticketItems : fallbackOrderItems
+  const hasOpen = statusRows.some(i => i.status !== "COMPLETED")
   const nextStatus: OrderStatus = hasOpen ? "IN_PROGRESS" : "COMPLETED"
 
   await prisma.order.updateMany({
@@ -159,6 +179,33 @@ async function syncOrderStatus(orderId: string, restaurantId: string) {
 
   return prisma.order.findUnique({
     where: { id: orderId },
+  })
+}
+
+async function syncTicketStatus(ticketId: string, restaurantId: string) {
+  const items = await prisma.ticketItem.findMany({
+    where: {
+      restaurantId,
+      ticketId,
+    },
+    select: {
+      status: true,
+    },
+  })
+
+  const hasOpen = items.some(item => item.status !== "COMPLETED")
+  const nextStatus: OrderStatus = hasOpen ? "IN_PROGRESS" : "COMPLETED"
+
+  await prisma.kitchenTicket.updateMany({
+    where: {
+      id: ticketId,
+      restaurantId,
+    },
+    data: {
+      status: nextStatus,
+      readyAt: hasOpen ? null : new Date(),
+      completedAt: hasOpen ? null : new Date(),
+    },
   })
 }
 
@@ -267,16 +314,16 @@ export async function GET(req: Request) {
 
   if (station) {
     try {
-      requireStaff(req)
+      await requireStaff(req)
     } catch {
       return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 })
     }
 
     const targetStation = toStation(station)
-    const orders = await prisma.order.findMany({
+    const tickets = await prisma.kitchenTicket.findMany({
       where: {
         restaurantId: restaurant.id,
-        targetStation,
+        station: targetStation,
         status: { in: ["PENDING", "IN_PROGRESS"] },
       },
       include: {
@@ -289,18 +336,16 @@ export async function GET(req: Request) {
       orderBy: { createdAt: "asc" },
     })
 
-    const rows = orders.flatMap(order =>
-      order.items
-        .filter(i => i.station === targetStation)
-        .map(i => ({
-          orderId: order.id,
-          orderItemId: i.id,
-          tableNumber: order.table.tableNo,
-          name: i.name,
-          quantity: i.quantity,
-          edits: stripInternalEditMeta(i.edits),
-          submittedAt: order.createdAt.toISOString(),
-        }))
+    const rows = tickets.flatMap(ticket =>
+      ticket.items.map(item => ({
+        orderId: ticket.orderId ?? ticket.id,
+        orderItemId: item.orderItemId ?? item.id,
+        tableNumber: ticket.table.tableNo,
+        name: item.name,
+        quantity: item.quantity,
+        edits: null,
+        submittedAt: ticket.createdAt.toISOString(),
+      }))
     )
 
     return NextResponse.json(rows)
@@ -308,7 +353,7 @@ export async function GET(req: Request) {
 
   if (tableNumberRaw) {
     try {
-      requireStaff(req)
+      await requireStaff(req)
     } catch {
       return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 })
     }
@@ -370,9 +415,19 @@ export async function GET(req: Request) {
 export async function POST(req: Request) {
   try {
     const restaurant = await resolveRestaurantFromRequest(req)
-    const { sessionId, tagId, items, clientKey } =
+    const {
+      sessionId,
+      tagId,
+      items,
+      clientKey,
+      clientRequestId: clientRequestIdFromBody,
+    } =
       await req.json()
     const requesterClientKey = normalizeClientKey(clientKey)
+    const clientRequestId = normalizeClientRequestId(
+      clientRequestIdFromBody ??
+        req.headers.get("x-idempotency-key")
+    )
 
     const resolvedSessionId =
       typeof sessionId === "string" && sessionId.length > 0
@@ -401,9 +456,9 @@ export async function POST(req: Request) {
     }
 
     let tag = tagId
-      ? await prisma.nfcTag.findUnique({
-          where: { id: tagId },
-          include: { assignment: true },
+      ? await findTagByToken({
+          restaurantId: restaurant.id,
+          tagId,
         })
       : session?.tag ?? null
     if (tag && tag.restaurantId !== restaurant.id) {
@@ -425,7 +480,7 @@ export async function POST(req: Request) {
       const reused = await prisma.session.findFirst({
         where: {
           restaurantId: restaurant.id,
-          tagId: tag.id,
+          tagId: tag.tagId,
           status: "ACTIVE",
         },
         include: {
@@ -454,7 +509,7 @@ export async function POST(req: Request) {
         }
 
         const tagTableGroup = await getTableGroupForTag(
-          tag.id,
+          tag.tagId,
           restaurant.id
         )
         const masterTableId = tagTableGroup?.master.id ?? null
@@ -462,7 +517,8 @@ export async function POST(req: Request) {
         session = await prisma.session.create({
           data: {
             restaurantId: restaurant.id,
-            tagId: tag.id,
+            nfcTagId: tag.id,
+            tagId: tag.tagId,
             tableId: masterTableId,
             status: "ACTIVE",
             openedAt: new Date(),
@@ -478,7 +534,7 @@ export async function POST(req: Request) {
           "session_created",
           {
             sessionId: session.id,
-            tagId: tag.id,
+            tagId: tag.tagId,
             source: "orders_post",
           },
           {
@@ -541,6 +597,26 @@ export async function POST(req: Request) {
     }
     if (tableGroup && isTableGroupLocked(tableGroup)) {
       return NextResponse.json({ error: "TABLE_LOCKED" }, { status: 423 })
+    }
+
+    if (clientRequestId) {
+      const duplicate = await prisma.order.findFirst({
+        where: {
+          restaurantId: restaurant.id,
+          clientRequestId,
+        },
+        select: { id: true },
+      })
+      if (duplicate) {
+        return NextResponse.json(
+          {
+            error: "DUPLICATE_REQUEST",
+            orderIds: [duplicate.id],
+            duplicate: true,
+          },
+          { status: 409 }
+        )
+      }
     }
 
     const stale =
@@ -785,18 +861,27 @@ export async function POST(req: Request) {
       }
     }
 
-    const createdOrderIds: string[] = []
+    const flattenedItems = Array.from(grouped.entries()).flatMap(
+      ([stationKey, stationItems]) =>
+        stationItems.map(item => ({
+          ...item,
+          station: stationKey,
+          quantity: Number(item.quantity ?? 1),
+        }))
+    )
+    const primaryStation = flattenedItems[0]?.station ?? "KITCHEN"
 
-    for (const [stationKey, stationItems] of grouped.entries()) {
-      const order = await prisma.order.create({
+    const createdOrder = await prisma.$transaction(async tx => {
+      const order = await tx.order.create({
         data: {
           restaurantId: restaurant.id,
           sessionId: session.id,
           tableId: table.id,
-          targetStation: stationKey,
+          clientRequestId,
+          targetStation: primaryStation,
           status: "PENDING",
           items: {
-            create: stationItems.map(item => ({
+            create: flattenedItems.map(item => ({
               restaurantId: restaurant.id,
               menuItemId:
                 typeof item.menuItemId === "string" &&
@@ -815,30 +900,62 @@ export async function POST(req: Request) {
                 getEditClientKey(item.edits) ??
                   requesterClientKey
               ),
-              station: stationKey,
+              station: item.station,
               status: "PENDING",
             })),
           },
         },
+        include: {
+          items: true,
+        },
       })
 
-      createdOrderIds.push(order.id)
-      await appendSystemEvent(
-        "order_submitted",
-        {
-          orderId: order.id,
-          station: stationKey,
-          itemCount: stationItems.length,
-        },
-        {
-          req,
-          restaurantId: restaurant.id,
-          sessionId: session.id,
-          tableId: table.id,
-          orderId: order.id,
-        }
-      )
-    }
+      const byStation = new Map<Station, typeof order.items>()
+      for (const item of order.items) {
+        const existing = byStation.get(item.station) ?? []
+        existing.push(item)
+        byStation.set(item.station, existing)
+      }
+
+      for (const [stationKey, stationItems] of byStation.entries()) {
+        await tx.kitchenTicket.create({
+          data: {
+            restaurantId: restaurant.id,
+            orderId: order.id,
+            tableId: table.id,
+            station: stationKey,
+            status: "PENDING",
+            items: {
+              create: stationItems.map(item => ({
+                restaurantId: restaurant.id,
+                orderItemId: item.id,
+                name: item.name,
+                quantity: item.quantity,
+                station: item.station,
+                status: "PENDING",
+              })),
+            },
+          },
+        })
+      }
+
+      return order
+    })
+
+    await appendSystemEvent(
+      "order_submitted",
+      {
+        orderId: createdOrder.id,
+        itemCount: flattenedItems.length,
+      },
+      {
+        req,
+        restaurantId: restaurant.id,
+        sessionId: session.id,
+        tableId: table.id,
+        orderId: createdOrder.id,
+      }
+    )
 
     if (session.cart && sentCartItemIds.length > 0) {
       await prisma.cartItem.deleteMany({
@@ -856,14 +973,19 @@ export async function POST(req: Request) {
     })
 
     return NextResponse.json({
-      orderIds: createdOrderIds,
-      ticketId: createdOrderIds[0] ?? null,
+      orderIds: [createdOrder.id],
+      ticketId: createdOrder.id,
       skippedUnconfirmedInactiveItemCount,
     })
   } catch (error) {
     const detail =
       error instanceof Error ? error.message : String(error)
-    console.error("orders_post_failed", {
+    logWithRequest("ERROR", "orders_post_failed", {
+      requestId:
+        req.headers.get("x-request-id") ?? crypto.randomUUID(),
+      restaurantId:
+        req.headers.get("x-restaurant-id") ?? "unknown",
+      staffUserId: req.headers.get("x-staff-user-id"),
       detail,
     })
     return NextResponse.json(
@@ -919,7 +1041,7 @@ export async function PATCH(req: Request) {
 
     if (!customerScopedSession) {
       try {
-        requireStaff(req)
+        await requireStaff(req)
       } catch {
         return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 })
       }
@@ -973,9 +1095,30 @@ export async function PATCH(req: Request) {
     }
 
     if (hasQuantityUpdate && quantity === 0) {
+      const relatedTicketItems = await prisma.ticketItem.findMany({
+        where: {
+          restaurantId: restaurant.id,
+          orderItemId: orderItem.id,
+        },
+        select: {
+          ticketId: true,
+        },
+      })
       await prisma.orderItem.delete({
         where: { id: orderItem.id },
       })
+      await prisma.ticketItem.deleteMany({
+        where: {
+          restaurantId: restaurant.id,
+          orderItemId: orderItem.id,
+        },
+      })
+      const ticketIds = Array.from(
+        new Set(relatedTicketItems.map(item => item.ticketId))
+      )
+      for (const ticketId of ticketIds) {
+        await syncTicketStatus(ticketId, restaurant.id)
+      }
 
       const remainingOpenItems =
         await prisma.orderItem.count({
@@ -1069,6 +1212,18 @@ export async function PATCH(req: Request) {
       data: nextData,
     })
 
+    if (hasQuantityUpdate) {
+      await prisma.ticketItem.updateMany({
+        where: {
+          restaurantId: restaurant.id,
+          orderItemId: orderItem.id,
+        },
+        data: {
+          quantity: updatedItem.quantity,
+        },
+      })
+    }
+
     await prisma.session.update({
       where: { id: orderItem.order.sessionId },
       data: { lastActivityAt: new Date() },
@@ -1117,7 +1272,7 @@ export async function PATCH(req: Request) {
   }
 
   try {
-    requireStaff(req)
+    await requireStaff(req)
   } catch {
     return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 })
   }
@@ -1144,6 +1299,31 @@ export async function PATCH(req: Request) {
         completedAt: new Date(),
       },
     })
+    const relatedTicketItems = await prisma.ticketItem.findMany({
+      where: {
+        restaurantId: restaurant.id,
+        orderItemId: orderItem.id,
+      },
+      select: {
+        ticketId: true,
+      },
+    })
+    await prisma.ticketItem.updateMany({
+      where: {
+        restaurantId: restaurant.id,
+        orderItemId: orderItem.id,
+      },
+      data: {
+        status: "COMPLETED",
+        completedAt: new Date(),
+      },
+    })
+    const ticketIds = Array.from(
+      new Set(relatedTicketItems.map(item => item.ticketId))
+    )
+    for (const ticketId of ticketIds) {
+      await syncTicketStatus(ticketId, restaurant.id)
+    }
 
     const updatedOrder = await syncOrderStatus(
       orderItem.orderId,
@@ -1230,6 +1410,15 @@ export async function PATCH(req: Request) {
   }
 
   const itemIds = openItems.map(i => i.id)
+  const relatedTicketItems = await prisma.ticketItem.findMany({
+    where: {
+      restaurantId: restaurant.id,
+      orderItemId: { in: itemIds },
+    },
+    select: {
+      ticketId: true,
+    },
+  })
 
   await prisma.orderItem.updateMany({
     where: {
@@ -1241,6 +1430,22 @@ export async function PATCH(req: Request) {
       completedAt: new Date(),
     },
   })
+  await prisma.ticketItem.updateMany({
+    where: {
+      restaurantId: restaurant.id,
+      orderItemId: { in: itemIds },
+    },
+    data: {
+      status: "COMPLETED",
+      completedAt: new Date(),
+    },
+  })
+  const ticketIds = Array.from(
+    new Set(relatedTicketItems.map(item => item.ticketId))
+  )
+  for (const ticketId of ticketIds) {
+    await syncTicketStatus(ticketId, restaurant.id)
+  }
 
   const uniqueOrderIds = Array.from(
     new Set(openItems.map(i => i.orderId))
@@ -1282,7 +1487,7 @@ export async function PATCH(req: Request) {
 export async function PUT(req: Request) {
   const restaurant = await resolveRestaurantFromRequest(req)
   try {
-    requireStaff(req)
+    await requireStaff(req)
   } catch {
     return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 })
   }

@@ -7,8 +7,8 @@ export default function OrderEntryPage({
 }) {
   const tableToken = searchParams.t?.trim()
   if (!tableToken) {
-    redirect("/menu")
+    redirect("/order/menu")
   }
 
-  redirect(`/t/${encodeURIComponent(tableToken)}`)
+  redirect(`/order/t/${encodeURIComponent(tableToken)}`)
 }
