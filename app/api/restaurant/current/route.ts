@@ -1,26 +1,32 @@
-import { NextResponse } from "next/server"
 import {
   getBrandingConfig,
-  resolveRestaurantFromRequest,
 } from "@/lib/restaurants"
+import {
+  jsonWithTenantRequestId,
+  withTenant,
+} from "@/lib/api/withTenant"
 
 export async function GET(req: Request) {
-  const restaurant = await resolveRestaurantFromRequest(req)
-  const branding = getBrandingConfig({
-    name: restaurant.name,
-    logoUrl: restaurant.logoUrl,
-    primaryColor: restaurant.primaryColor,
-    secondaryColor: restaurant.secondaryColor,
-    vatRate: restaurant.vatRate,
-    serviceCharge: restaurant.serviceCharge,
-  })
+  return withTenant(req, async ({ requestId, restaurant }) => {
+    const branding = getBrandingConfig({
+      name: restaurant.name,
+      logoUrl: restaurant.logoUrl,
+      primaryColor: restaurant.primaryColor,
+      secondaryColor: restaurant.secondaryColor,
+      vatRate: restaurant.vatRate,
+      serviceCharge: restaurant.serviceCharge,
+    })
 
-  return NextResponse.json({
-    restaurant: {
-      id: restaurant.id,
-      slug: restaurant.slug,
-      domain: restaurant.domain,
-      ...branding,
-    },
+    return jsonWithTenantRequestId(
+      {
+        restaurant: {
+          id: restaurant.id,
+          slug: restaurant.slug,
+          domain: restaurant.domain,
+          ...branding,
+        },
+      },
+      requestId
+    )
   })
 }

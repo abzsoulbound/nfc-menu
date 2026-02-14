@@ -1,19 +1,28 @@
 .header {
+  position: sticky;
+  top: 0;
+  z-index: 50;
   width: 100%;
-  height: 84px;
-  background: #fbfdff;
-  border-bottom: 1px solid #d6e0ea;
+  height: 56px;
+  background: rgba(251, 253, 255, 0.98);
+  border-bottom: 1px solid rgba(214, 224, 234, 0.58);
+  transition: border-color 160ms ease, box-shadow 160ms ease;
+}
+
+.headerScrolled {
+  border-bottom-color: rgba(191, 204, 218, 0.92);
+  box-shadow: 0 8px 22px rgba(14, 32, 48, 0.12);
 }
 
 .inner {
   width: min(1120px, 100%);
   height: 100%;
   margin: 0 auto;
-  padding: 0 16px;
+  padding: 0 12px;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: 10px;
 }
 
 .brand {
@@ -26,7 +35,7 @@
 }
 
 .logo {
-  width: 94px;
+  width: 88px;
   height: auto;
   max-width: 100%;
   object-fit: contain;
@@ -40,23 +49,29 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 38px;
-  height: 38px;
+  width: 44px;
+  height: 44px;
   border: 1px solid #d2dce7;
-  border-radius: 8px;
+  border-radius: 10px;
   color: #2e4358;
   background: #ffffff;
   text-decoration: none;
   flex: 0 0 auto;
+  transition: border-color 140ms ease, background-color 140ms ease;
 }
 
 .cartStatic {
   pointer-events: none;
 }
 
+.cartWarning {
+  border-color: rgba(184, 109, 31, 0.44);
+  background: rgba(255, 243, 224, 0.82);
+}
+
 .cartIcon {
-  width: 18px;
-  height: 18px;
+  width: 19px;
+  height: 19px;
   display: block;
 }
 
@@ -64,14 +79,14 @@
   position: absolute;
   top: -5px;
   right: -5px;
-  min-width: 17px;
-  height: 17px;
+  min-width: 18px;
+  height: 18px;
   border-radius: 999px;
   padding: 0 4px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  font-size: 0.62rem;
+  font-size: 10px;
   line-height: 1;
   font-weight: 700;
   color: #ffffff;
@@ -79,49 +94,22 @@
   border: 1px solid #ffffff;
 }
 
-@media (max-width: 768px) {
-  .header {
-    height: 82px;
-  }
-
-  .inner {
-    padding: 0 15px;
-  }
-
-  .brand {
-    max-width: min(70vw, 280px);
-  }
-
-  .logo {
-    width: 86px;
-  }
+.cartBadgeWarning {
+  color: #5f3e0d;
+  background: #ffdca8;
+  border-color: rgba(120, 79, 20, 0.24);
 }
 
-@media (max-width: 430px) {
+@media (min-width: 769px) {
   .header {
-    height: 80px;
+    height: 64px;
   }
 
   .inner {
-    padding: 0 14px;
-  }
-
-  .brand {
-    max-width: min(68vw, 250px);
+    padding: 0 16px;
   }
 
   .logo {
-    width: 80px;
-  }
-
-  .cart {
-    width: 36px;
-    height: 36px;
-    border-radius: 8px;
-  }
-
-  .cartIcon {
-    width: 17px;
-    height: 17px;
+    width: 94px;
   }
 }

@@ -259,7 +259,8 @@ export function RestaurantOnboarding() {
                   {restaurant.stats?.menuItems ?? 0}
                 </div>
                 <div className="opacity-70">
-                  Order URL: <code>/order/r/{restaurant.slug}/t/1</code>
+                  Order URL:{" "}
+                  <code>/order/t/1?restaurantSlug={restaurant.slug}</code>
                 </div>
               </div>
             ))}

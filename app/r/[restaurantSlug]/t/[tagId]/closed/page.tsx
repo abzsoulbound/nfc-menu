@@ -6,8 +6,8 @@ export default function LegacyTenantTagClosedRouteRedirect({
   params: { restaurantSlug: string; tagId: string }
 }) {
   redirect(
-    `/order/r/${encodeURIComponent(
-      params.restaurantSlug
-    )}/t/${encodeURIComponent(params.tagId)}/closed`
+    `/order/t/${encodeURIComponent(
+      params.tagId
+    )}/closed?restaurantSlug=${encodeURIComponent(params.restaurantSlug)}`
   )
 }

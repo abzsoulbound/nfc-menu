@@ -1,10 +1,8 @@
-import { NextResponse } from 'next/server'
 import { Prisma, Station } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { findMenuItemForCart } from '@/lib/menuCatalog'
 import { appendSystemEvent } from '@/lib/events'
 import { withEditConfirmation } from '@/lib/itemEdits'
-import { resolveRestaurantFromRequest } from '@/lib/restaurants'
 import {
   buildModifierSummary,
   calculateModifierDelta,
@@ -13,6 +11,11 @@ import {
   hasCustomization,
   validateModifierSelections,
 } from '@/lib/menuCustomizations'
+import {
+  apiErrorResponse,
+  jsonWithTenantRequestId,
+  withTenant,
+} from '@/lib/api/withTenant'
 
 function toJson(value: unknown): Prisma.InputJsonValue {
   if (value === undefined || value === null) {
@@ -35,168 +38,197 @@ function isObject(value: unknown): value is Record<string, unknown> {
 }
 
 export async function POST(req: Request) {
-  const restaurant = await resolveRestaurantFromRequest(req)
-  const body = await req.json()
-  const sessionId = String(body?.sessionId ?? '')
-  const quantity = Number(body?.quantity ?? 0)
+  return withTenant(req, async ({ requestId, restaurant }) => {
+    let body: unknown
+    try {
+      body = await req.json()
+    } catch {
+      return apiErrorResponse({
+        requestId,
+        error: 'BAD_REQUEST',
+        status: 400,
+        message: 'Invalid JSON request body.',
+      })
+    }
 
-  if (!sessionId || !Number.isFinite(quantity) || quantity <= 0) {
-    return NextResponse.json({ error: 'BAD_REQUEST' }, { status: 400 })
-  }
+    const payload =
+      body && typeof body === 'object'
+        ? (body as Record<string, unknown>)
+        : {}
+    const sessionId = String(payload.sessionId ?? '')
+    const quantity = Number(payload.quantity ?? 0)
 
-  const cart = await prisma.sessionCart.findFirst({
-    where: {
-      sessionId,
+    if (!sessionId || !Number.isFinite(quantity) || quantity <= 0) {
+      return apiErrorResponse({
+        requestId,
+        error: 'BAD_REQUEST',
+        status: 400,
+        message: 'Session ID and quantity are required.',
+      })
+    }
+
+    const cart = await prisma.sessionCart.findFirst({
+      where: {
+        sessionId,
+        restaurantId: restaurant.id,
+      },
+      include: { session: true },
+    })
+    if (!cart) {
+      return apiErrorResponse({
+        requestId,
+        error: 'SESSION_NOT_FOUND',
+        status: 404,
+      })
+    }
+
+    const menuItem = await findMenuItemForCart({
+      menuItemId:
+        typeof payload.menuItemId === 'string'
+          ? payload.menuItemId
+          : undefined,
+      name: typeof payload.name === 'string' ? payload.name : undefined,
       restaurantId: restaurant.id,
-    },
-    include: { session: true }
-  })
-  if (!cart) {
-    return NextResponse.json({ error: 'SESSION_NOT_FOUND' }, { status: 404 })
-  }
+      restaurantSlug: restaurant.slug,
+    })
 
-  const menuItem = await findMenuItemForCart({
-    menuItemId: typeof body?.menuItemId === 'string' ? body.menuItemId : undefined,
-    name: typeof body?.name === 'string' ? body.name : undefined,
-    restaurantId: restaurant.id,
-    restaurantSlug: restaurant.slug,
-  })
+    if (menuItem && !menuItem.available) {
+      return apiErrorResponse({
+        requestId,
+        error: 'ITEM_UNAVAILABLE',
+        status: 409,
+      })
+    }
 
-  if (menuItem && !menuItem.available) {
-    return NextResponse.json(
-      { error: 'ITEM_UNAVAILABLE' },
-      { status: 409 }
+    const itemName =
+      menuItem?.name ??
+      (typeof payload.name === 'string' && payload.name.trim().length > 0
+        ? payload.name.trim()
+        : 'Item')
+
+    const station = toStation(
+      payload.station,
+      menuItem?.station ?? 'KITCHEN'
     )
-  }
+    let allergens =
+      menuItem?.allergens ??
+      (Array.isArray(payload.allergens) ? payload.allergens : [])
+    const customization =
+      menuItem?.id
+        ? getMenuItemCustomization({
+            id: menuItem.id,
+            name: menuItem.name,
+            description: menuItem.description,
+            station: menuItem.station,
+            allergens:
+              Array.isArray(menuItem.allergens)
+                ? (menuItem.allergens as string[])
+                : [],
+          })
+        : null
+    let nextEdits: unknown = payload.edits
+    let unitPrice = menuItem?.basePrice ?? Number(payload.unitPrice ?? 0)
 
-  const itemName =
-    menuItem?.name ??
-    (typeof body?.name === 'string' && body.name.trim().length > 0
-      ? body.name.trim()
-      : 'Item')
-
-  const station = toStation(
-    body?.station,
-    menuItem?.station ?? 'KITCHEN'
-  )
-  let allergens =
-    menuItem?.allergens ??
-    (Array.isArray(body?.allergens) ? body.allergens : [])
-  const customization =
-    menuItem?.id
-      ? getMenuItemCustomization({
-          id: menuItem.id,
-          name: menuItem.name,
-          description: menuItem.description,
-          station: menuItem.station,
-          allergens:
-            Array.isArray(menuItem.allergens)
-              ? (menuItem.allergens as string[])
-              : [],
-        })
-      : null
-  let nextEdits: unknown = body?.edits
-  let unitPrice = menuItem?.basePrice ?? Number(body?.unitPrice ?? 0)
-
-  if (menuItem && hasCustomization(customization)) {
-    const rawModifiers = isObject(body?.edits) && isObject(body.edits.modifiers)
-      ? body.edits.modifiers
-      : undefined
-    const validation = validateModifierSelections(
-      customization,
-      rawModifiers
-    )
-
-    if (!validation.ok) {
-      return NextResponse.json(
-        {
-          error: 'INVALID_MODIFIERS',
-          detail: validation.error,
-        },
-        { status: 400 }
+    if (menuItem && hasCustomization(customization)) {
+      const rawModifiers =
+        isObject(payload.edits) && isObject(payload.edits.modifiers)
+          ? payload.edits.modifiers
+          : undefined
+      const validation = validateModifierSelections(
+        customization,
+        rawModifiers
       )
+
+      if (!validation.ok) {
+        return apiErrorResponse({
+          requestId,
+          error: 'INVALID_MODIFIERS',
+          status: 400,
+          message: validation.error ?? 'Invalid modifier selection.',
+        })
+      }
+
+      const summary = buildModifierSummary(
+        customization,
+        validation.normalized
+      )
+      const delta = calculateModifierDelta(
+        customization,
+        validation.normalized
+      )
+      allergens = collectModifierAllergens(
+        customization,
+        validation.normalized,
+        Array.isArray(menuItem.allergens)
+          ? (menuItem.allergens as string[])
+          : []
+      )
+      const editsBase = isObject(payload.edits)
+        ? { ...payload.edits }
+        : {}
+
+      editsBase.modifiers = validation.normalized
+      editsBase.modifierPriceDelta = delta
+      if (summary.length > 0) {
+        editsBase.modifierSummary = summary
+      } else {
+        delete editsBase.modifierSummary
+      }
+      nextEdits = editsBase
+      unitPrice = Number((menuItem.basePrice + delta).toFixed(2))
     }
 
-    const summary = buildModifierSummary(
-      customization,
-      validation.normalized
+    const editsWithMeta = withEditConfirmation(
+      nextEdits,
+      false,
+      payload.clientKey
     )
-    const delta = calculateModifierDelta(
-      customization,
-      validation.normalized
+
+    const item = await prisma.cartItem.create({
+      data: {
+        restaurantId: restaurant.id,
+        cartId: cart.id,
+        menuItemId: menuItem?.id ?? null,
+        name: itemName,
+        quantity,
+        unitPrice,
+        vatRate: menuItem?.vatRate ?? Number(payload.vatRate ?? 0),
+        allergens: toJson(allergens),
+        station,
+        edits:
+          editsWithMeta === undefined
+            ? undefined
+            : (editsWithMeta as Prisma.InputJsonValue),
+      },
+    })
+
+    await prisma.session.updateMany({
+      where: {
+        id: cart.sessionId,
+        restaurantId: restaurant.id,
+      },
+      data: {
+        lastActivityAt: new Date(),
+      },
+    })
+
+    await appendSystemEvent(
+      'item_added',
+      {
+        cartId: cart.id,
+        itemId: item.id,
+        menuItemId: item.menuItemId,
+        name: item.name,
+        quantity: item.quantity,
+      },
+      {
+        req,
+        restaurantId: restaurant.id,
+        sessionId: cart.sessionId,
+        tableId: cart.session.tableId,
+      }
     )
-    allergens = collectModifierAllergens(
-      customization,
-      validation.normalized,
-      Array.isArray(menuItem.allergens)
-        ? (menuItem.allergens as string[])
-        : []
-    )
-    const editsBase = isObject(body?.edits)
-      ? { ...body.edits }
-      : {}
 
-    editsBase.modifiers = validation.normalized
-    editsBase.modifierPriceDelta = delta
-    if (summary.length > 0) {
-      editsBase.modifierSummary = summary
-    } else {
-      delete editsBase.modifierSummary
-    }
-    nextEdits = editsBase
-    unitPrice = Number((menuItem.basePrice + delta).toFixed(2))
-  }
-
-  const editsWithMeta = withEditConfirmation(
-    nextEdits,
-    false,
-    body?.clientKey
-  )
-
-  const item = await prisma.cartItem.create({
-    data: {
-      restaurantId: restaurant.id,
-      cartId: cart.id,
-      menuItemId: menuItem?.id ?? null,
-      name: itemName,
-      quantity,
-      unitPrice,
-      vatRate: menuItem?.vatRate ?? Number(body?.vatRate ?? 0),
-      allergens: toJson(allergens),
-      station,
-      edits:
-        editsWithMeta === undefined
-          ? undefined
-          : (editsWithMeta as Prisma.InputJsonValue),
-    }
+    return jsonWithTenantRequestId(item, requestId)
   })
-
-  await prisma.session.updateMany({
-    where: {
-      id: cart.sessionId,
-      restaurantId: restaurant.id,
-    },
-    data: {
-      lastActivityAt: new Date()
-    }
-  })
-
-  await appendSystemEvent(
-    'item_added',
-    {
-      cartId: cart.id,
-      itemId: item.id,
-      menuItemId: item.menuItemId,
-      name: item.name,
-      quantity: item.quantity
-    },
-    {
-      req,
-      restaurantId: restaurant.id,
-      sessionId: cart.sessionId,
-      tableId: cart.session.tableId
-    }
-  )
-
-  return NextResponse.json(item)
 }

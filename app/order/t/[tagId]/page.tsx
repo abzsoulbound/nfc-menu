@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, type TouchEvent } from 'react'
 import { usePathname, useRouter } from 'next/navigation'
 import { MenuSection } from "@/components/menu/MenuSection"
 import { MenuItemCard } from "@/components/menu/MenuItemCard"
@@ -22,12 +22,12 @@ import {
   getBaseIngredientLabels,
   hasCustomization,
   normalizeModifierSelections,
-  resolveEditPolicy,
   type MenuCustomization,
   type ModifierSelections,
   validateModifierSelections,
 } from "@/lib/menuCustomizations"
 import { tenantTagPath } from "@/lib/tenantPaths"
+import { trackEvent } from "@/lib/analytics"
 
 type MenuItem = {
   id: string
@@ -79,20 +79,17 @@ type PendingSyncEntry = {
   revision: number
 }
 
-type CustomizerSectionKey = "removals" | "additions" | "allergens"
 type CustomizerGroup = MenuCustomization["groups"][number]
 
-type CustomizerSection = {
-  key: CustomizerSectionKey
-  title: string
-  hint: string
-  groups: CustomizerGroup[]
-  selectedCount: number
-  maxCount: number
-}
+const INCLUDED_PAGE_SIZE = 8
+const GROUP_OPTION_PAGE_SIZE = 4
+const ALLERGY_NOTICE_TEXT =
+  "Allergen information is available on request. Our kitchen handles common allergens, so traces may be present."
 
-const INCLUDED_PREVIEW_COUNT = 6
-const GROUP_OPTION_PREVIEW_COUNT = 3
+function clampIndex(index: number, length: number) {
+  if (length <= 0) return 0
+  return Math.max(0, Math.min(index, length - 1))
+}
 
 function isObject(value: unknown): value is Record<string, unknown> {
   return (
@@ -134,29 +131,17 @@ function groupSelectionMax(group: CustomizerGroup): number {
   return group.options.length
 }
 
-function classifyGroup(group: CustomizerGroup): CustomizerSectionKey {
-  const haystack = `${group.id} ${group.name}`.toLowerCase()
-  const hasRemovalOptions = group.options.some(
-    option => (option.removeIngredientIds?.length ?? 0) > 0
-  )
+function groupSelectionHint(group: CustomizerGroup): string {
+  const min = groupSelectionMin(group)
+  const max = groupSelectionMax(group)
 
-  if (
-    haystack.includes("remove") ||
-    haystack.includes("without") ||
-    hasRemovalOptions
-  ) {
-    return "removals"
+  if (group.type === "single") {
+    return min > 0 ? "Choose 1" : "Choose up to 1"
   }
 
-  if (
-    /allergen|allergy|diet|intolerance|gluten|dairy|nut|vegan|vegetarian|halal|kosher/.test(
-      haystack
-    )
-  ) {
-    return "allergens"
-  }
-
-  return "additions"
+  if (min <= 0) return `Choose up to ${max}`
+  if (min === max) return `Choose ${min}`
+  return `Choose ${min}-${max}`
 }
 
 export default function TagPage({ params }: { params: { tagId: string } }) {
@@ -172,16 +157,24 @@ export default function TagPage({ params }: { params: { tagId: string } }) {
   const [sessionId, setSessionId] = useState<string | null>(null)
   const [cartByKey, setCartByKey] = useState<Record<string, CartItem>>({})
   const [customizer, setCustomizer] = useState<CustomizerState | null>(null)
-  const [showAllIncluded, setShowAllIncluded] = useState(false)
-  const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({})
+  const [expandedSectionId, setExpandedSectionId] =
+    useState<string | null>(null)
+  const [customizerOptionPages, setCustomizerOptionPages] =
+    useState<Record<string, number>>({})
+  const [customizerDragOffset, setCustomizerDragOffset] = useState(0)
   const [customizerError, setCustomizerError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [restaurantId, setRestaurantId] = useState<string>('unknown')
 
   const cartByKeyRef = useRef<Record<string, CartItem>>({})
   const syncTimersRef = useRef<Record<string, number>>({})
   const syncInFlightRef = useRef<Record<string, boolean>>({})
   const pendingSyncRef = useRef<Record<string, PendingSyncEntry>>({})
+  const customizerTouchStartYRef = useRef<number | null>(null)
+  const lastRequestIdRef = useRef<string>('unknown')
+  const menuViewTrackedRef = useRef(false)
+  const lastCategoryTrackedRef = useRef<string | null>(null)
 
   const activeSection = menu.find(
     section => section.id === selectedCategoryId
@@ -201,71 +194,105 @@ export default function TagPage({ params }: { params: { tagId: string } }) {
   }, [cartByKey])
 
   useEffect(() => {
-    setShowAllIncluded(false)
-    setExpandedGroups({})
+    if (!selectedCategoryId) return
+
+    if (lastCategoryTrackedRef.current === null) {
+      lastCategoryTrackedRef.current = selectedCategoryId
+      return
+    }
+
+    if (lastCategoryTrackedRef.current !== selectedCategoryId) {
+      trackEvent('search_used', {
+        restaurantId,
+        requestId: lastRequestIdRef.current,
+        query: selectedCategoryId,
+        mode: 'category_chip',
+      })
+      lastCategoryTrackedRef.current = selectedCategoryId
+    }
+  }, [selectedCategoryId, restaurantId])
+
+  useEffect(() => {
+    setExpandedSectionId(null)
+    setCustomizerOptionPages({})
+    setCustomizerDragOffset(0)
   }, [customizer?.item.id])
 
   const loadCart = async (sid: string) => {
-    try {
-      const activeClientKey = ensureClientKey()
-      const res = await fetch('/api/cart/get', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          sessionId: sid,
-          clientKey: activeClientKey,
-        }),
-      })
+    const activeClientKey = ensureClientKey()
 
-      if (!res.ok) {
-        const errorInfo = await readApiErrorInfo(res)
-        setError(cartLoadErrorMessage(errorInfo))
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      try {
+        const res = await fetch('/api/cart/get', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            sessionId: sid,
+            clientKey: activeClientKey,
+          }),
+        })
+        const requestId = res.headers.get('x-request-id')
+        if (requestId) {
+          lastRequestIdRef.current = requestId
+        }
+
+        if (!res.ok) {
+          if (attempt === 0) continue
+          const errorInfo = await readApiErrorInfo(res)
+          setError(cartLoadErrorMessage(errorInfo))
+          return false
+        }
+
+        const payload = await res.json()
+        const items = (payload?.items ?? []) as Array<CartItem & {
+          isMine?: boolean
+        }>
+        const ownItems = items.filter(item => item.isMine !== false)
+
+        const next: Record<string, CartItem> = {}
+        for (const item of ownItems) {
+          const key =
+            item.menuItemId && typeof item.menuItemId === 'string'
+              ? `${item.menuItemId}::${modifierSignatureFromEdits(item.edits)}`
+              : item.id
+
+          const existing = next[key]
+          if (existing) {
+            next[key] = {
+              ...existing,
+              quantity:
+                Number(existing.quantity ?? 0) +
+                Number(item.quantity ?? 0),
+            }
+            continue
+          }
+
+          next[key] = {
+            ...item,
+            lineKey: key,
+          }
+        }
+
+        setCartByKey(next)
+        setError(current =>
+          current &&
+          (
+            current.toLowerCase().includes('basket') ||
+            current.toLowerCase().includes('cart') ||
+            current.toLowerCase().includes('session')
+          )
+            ? null
+            : current
+        )
+        return true
+      } catch {
+        if (attempt === 0) continue
+        setError(networkErrorMessage('open your basket'))
         return false
       }
-
-      const payload = await res.json()
-      const items = (payload?.items ?? []) as Array<CartItem & {
-        isMine?: boolean
-      }>
-      const ownItems = items.filter(item => item.isMine !== false)
-
-      const next: Record<string, CartItem> = {}
-      for (const item of ownItems) {
-        const key =
-          item.menuItemId && typeof item.menuItemId === 'string'
-            ? `${item.menuItemId}::${modifierSignatureFromEdits(item.edits)}`
-            : item.id
-
-        const existing = next[key]
-        if (existing) {
-          next[key] = {
-            ...existing,
-            quantity:
-              Number(existing.quantity ?? 0) +
-              Number(item.quantity ?? 0),
-          }
-          continue
-        }
-
-        next[key] = {
-          ...item,
-          lineKey: key,
-        }
-      }
-
-      setCartByKey(next)
-      setError(current =>
-        current &&
-        (current.toLowerCase().includes('cart') ||
-          current.toLowerCase().includes('session'))
-          ? null
-          : current
-      )
-      return true
-    } catch {
-      setError(networkErrorMessage('load your cart'))
-      return false
     }
+
+    return false
   }
 
   const loadMenu = async () => {
@@ -273,6 +300,10 @@ export default function TagPage({ params }: { params: { tagId: string } }) {
       const res = await fetch('/api/menu', {
         cache: 'no-store',
       })
+      const requestId = res.headers.get('x-request-id')
+      if (requestId) {
+        lastRequestIdRef.current = requestId
+      }
       if (!res.ok) {
         const errorInfo = await readApiErrorInfo(res)
         setError(menuLoadErrorMessage(errorInfo))
@@ -287,6 +318,12 @@ export default function TagPage({ params }: { params: { tagId: string } }) {
         ...section,
         items: section.items.filter(item => item.available !== false),
       }))
+      if (
+        payload?.restaurant &&
+        typeof payload.restaurant.id === 'string'
+      ) {
+        setRestaurantId(payload.restaurant.id)
+      }
 
       setMenu(visible)
       setMenuLocked(Boolean(payload?.locked))
@@ -302,6 +339,16 @@ export default function TagPage({ params }: { params: { tagId: string } }) {
           ? null
           : current
       )
+      if (!menuViewTrackedRef.current) {
+        trackEvent('menu_view', {
+          restaurantId:
+            typeof payload?.restaurant?.id === 'string'
+              ? payload.restaurant.id
+              : restaurantId,
+          requestId: lastRequestIdRef.current,
+        })
+        menuViewTrackedRef.current = true
+      }
     } catch {
       setError(networkErrorMessage('load the menu'))
     } finally {
@@ -323,6 +370,10 @@ export default function TagPage({ params }: { params: { tagId: string } }) {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ tagId: params.tagId }),
         })
+        const requestId = res.headers.get('x-request-id')
+        if (requestId) {
+          lastRequestIdRef.current = requestId
+        }
 
         if (!res.ok) {
           const errorInfo = await readApiErrorInfo(res)
@@ -482,7 +533,7 @@ export default function TagPage({ params }: { params: { tagId: string } }) {
       }
 
       if (!ok) {
-        setError(syncError ?? 'Could not sync cart. Refreshing your cart now.')
+        setError(syncError ?? "We couldn't update your basket. Retrying now.")
         await loadCart(pending.sessionId)
         return
       }
@@ -582,25 +633,71 @@ export default function TagPage({ params }: { params: { tagId: string } }) {
       setError('Live connection required. Please reload table.')
       return
     }
+    const defaultSelections = defaultModifierSelections(
+      item.customization
+    )
+    const firstGroupId = hasCustomization(item.customization)
+      ? item.customization.groups[0]?.id ?? null
+      : null
+    const included = getBaseIngredientLabels(item.customization)
 
     setCustomizer({
       item,
       quantity: 1,
-      selections: defaultModifierSelections(item.customization),
+      selections: defaultSelections,
     })
+    if (firstGroupId) {
+      setExpandedSectionId(`group:${firstGroupId}`)
+    } else if (included.length > 0) {
+      setExpandedSectionId('included')
+    } else {
+      setExpandedSectionId('allergens')
+    }
     setCustomizerError(null)
+    trackEvent('item_opened', {
+      restaurantId,
+      requestId: lastRequestIdRef.current,
+      menuItemId: item.id,
+    })
   }
 
   const closeCustomizer = () => {
     setCustomizer(null)
+    setExpandedSectionId(null)
     setCustomizerError(null)
+    setCustomizerDragOffset(0)
+    customizerTouchStartYRef.current = null
   }
 
-  const toggleGroupExpansion = (groupId: string) => {
-    setExpandedGroups(current => ({
-      ...current,
-      [groupId]: !current[groupId],
-    }))
+  const handleCustomizerTouchStart = (
+    event: TouchEvent<HTMLElement>
+  ) => {
+    if (typeof window === 'undefined' || window.innerWidth > 760) return
+    customizerTouchStartYRef.current = event.touches[0]?.clientY ?? null
+  }
+
+  const handleCustomizerTouchMove = (
+    event: TouchEvent<HTMLElement>
+  ) => {
+    const startY = customizerTouchStartYRef.current
+    if (startY === null) return
+    const nextY = event.touches[0]?.clientY ?? startY
+    const delta = nextY - startY
+    if (delta <= 0) {
+      setCustomizerDragOffset(0)
+      return
+    }
+    setCustomizerDragOffset(Math.min(delta, 150))
+  }
+
+  const handleCustomizerTouchEnd = () => {
+    if (customizerTouchStartYRef.current === null) return
+    const shouldClose = customizerDragOffset > 96
+    customizerTouchStartYRef.current = null
+    setCustomizerDragOffset(0)
+    if (shouldClose) {
+      closeCustomizer()
+    }
   }
 
   const updateCustomizerSelection = (
@@ -704,6 +801,14 @@ export default function TagPage({ params }: { params: { tagId: string } }) {
       unitPrice
     )
 
+    trackEvent('add_to_cart', {
+      restaurantId,
+      requestId: lastRequestIdRef.current,
+      menuItemId: item.id,
+      quantity: customizer.quantity,
+      lineKey,
+    })
+
     closeCustomizer()
   }
 
@@ -725,75 +830,19 @@ export default function TagPage({ params }: { params: { tagId: string } }) {
   }, [customizer, customizerValidation])
 
   const customizerLayout = useMemo(() => {
-    const sectionMeta: Array<Omit<CustomizerSection, "groups" | "selectedCount" | "maxCount">> = [
-      {
-        key: "removals",
-        title: "Removals",
-        hint: "Turn ingredients off with one tap.",
-      },
-      {
-        key: "additions",
-        title: "Additions",
-        hint: "Extras and substitutions for this dish.",
-      },
-      {
-        key: "allergens",
-        title: "Allergens",
-        hint: "Dietary-related switches, if available.",
-      },
-    ]
-
     if (!customizer || !hasCustomization(customizer.item.customization)) {
       return {
+        groups: [] as CustomizerGroup[],
         includedLines: [] as string[],
-        defaultChoiceLines: [] as string[],
-        sections: sectionMeta.map(section => ({
-          ...section,
-          groups: [] as CustomizerGroup[],
-          selectedCount: 0,
-          maxCount: 0,
-        })),
       }
     }
 
     const customization = customizer.item.customization
-    const buckets: Record<CustomizerSectionKey, CustomizerGroup[]> = {
-      removals: [],
-      additions: [],
-      allergens: [],
-    }
-
-    for (const group of customization.groups) {
-      buckets[classifyGroup(group)].push(group)
-    }
-
-    const sections = sectionMeta.map(section => {
-      const groups = buckets[section.key]
-      const selectedCount = groups.reduce(
-        (total, group) =>
-          total + (customizer.selections[group.id]?.length ?? 0),
-        0
-      )
-      const maxCount = groups.reduce(
-        (total, group) => total + groupSelectionMax(group),
-        0
-      )
-
-      return {
-        ...section,
-        groups,
-        selectedCount,
-        maxCount,
-      }
-    })
+    const groups = customization.groups
 
     return {
+      groups,
       includedLines: getBaseIngredientLabels(customization),
-      defaultChoiceLines: buildModifierSummary(
-        customization,
-        defaultModifierSelections(customization)
-      ),
-      sections,
     }
   }, [customizer])
 
@@ -815,18 +864,56 @@ export default function TagPage({ params }: { params: { tagId: string } }) {
     ).sort((a, b) => a.localeCompare(b))
   }, [customizer, customizerValidation])
 
+  const customizerGroups = customizerLayout.groups
+
+  const requiredRemaining = useMemo(() => {
+    if (!customizer) return 0
+    return customizerGroups.reduce((count, group) => {
+      const min = groupSelectionMin(group)
+      if (min <= 0) return count
+      const selected = customizer.selections[group.id]?.length ?? 0
+      return selected >= min ? count : count + 1
+    }, 0)
+  }, [customizer, customizerGroups])
+
   const customizerTitleId = customizer
     ? `customizer-title-${customizer.item.id}`
     : 'customizer-title'
   const customizerDescriptionId = customizer
     ? `customizer-description-${customizer.item.id}`
     : 'customizer-description'
-  const customizerImageSrc = customizer?.item.image ?? '/images/replace.png'
+  const customizerImageSrc =
+    customizer?.item.image && customizer.item.image.trim().length > 0
+      ? customizer.item.image
+      : null
+
+  const retryOrderData = () => {
+    if (sessionId) {
+      void loadCart(sessionId)
+    } else {
+      window.location.reload()
+    }
+    void loadMenu()
+  }
+
+  const toggleSection = (sectionId: string) => {
+    setExpandedSectionId(current =>
+      current === sectionId ? null : sectionId
+    )
+  }
 
   if (loading || menuLoading) {
     return (
       <div className="order-page">
-        <div className="menu-empty-state">Connecting your table...</div>
+        <div className="order-skeleton">
+          <div className="skeleton-block skeleton-pill" />
+          <div className="order-skeleton-grid">
+            <div className="skeleton-block skeleton-card" />
+            <div className="skeleton-block skeleton-card" />
+            <div className="skeleton-block skeleton-card" />
+          </div>
+          <div className="skeleton-block skeleton-footer" />
+        </div>
       </div>
     )
   }
@@ -834,7 +921,16 @@ export default function TagPage({ params }: { params: { tagId: string } }) {
   return (
     <div className="menu-page">
       {error && (
-        <div className="menu-lock-banner">{error}</div>
+        <div className="menu-lock-banner menu-lock-banner--error">
+          <span>{error}</span>
+          <button
+            type="button"
+            className="menu-error-retry"
+            onClick={retryOrderData}
+          >
+            Retry
+          </button>
+        </div>
       )}
 
       <div className="category-bar">
@@ -893,31 +989,35 @@ export default function TagPage({ params }: { params: { tagId: string } }) {
             aria-labelledby={customizerTitleId}
             aria-describedby={customizerDescriptionId}
             onClick={event => event.stopPropagation()}
+            onTouchStart={handleCustomizerTouchStart}
+            onTouchMove={handleCustomizerTouchMove}
+            onTouchEnd={handleCustomizerTouchEnd}
+            style={
+              customizerDragOffset > 0
+                ? { transform: `translateY(${customizerDragOffset}px)` }
+                : undefined
+            }
           >
-            <header className="customizer-hero">
-              <img
-                className="customizer-hero-image"
-                src={customizerImageSrc}
-                alt={`${customizer.item.name} preview`}
-                onError={event => {
-                  const el = event.currentTarget
-                  if (el.dataset.fallbackApplied === "1") return
-                  el.dataset.fallbackApplied = "1"
-                  el.src = '/images/replace.png'
-                }}
-              />
-              <button
-                type="button"
-                onClick={closeCustomizer}
-                className="customizer-close-btn"
-                aria-label="Close item details"
+            <header className="customizer-top">
+              <div
+                className={
+                  customizerImageSrc
+                    ? "customizer-top-image"
+                    : "customizer-top-image customizer-top-image--fallback"
+                }
+                aria-hidden="true"
               >
-                X
-              </button>
-            </header>
-
-            <div className="customizer-scroll">
-              <section className="customizer-summary">
+                {customizerImageSrc ? (
+                  <img
+                    className="customizer-hero-image"
+                    src={customizerImageSrc}
+                    alt=""
+                  />
+                ) : (
+                  <div className="customizer-hero-fallback" />
+                )}
+              </div>
+              <div className="customizer-meta">
                 <div className="customizer-summary-head">
                   <h2 id={customizerTitleId} className="customizer-title">
                     {customizer.item.name}
@@ -928,363 +1028,368 @@ export default function TagPage({ params }: { params: { tagId: string } }) {
                 </div>
                 <p
                   id={customizerDescriptionId}
-                  className="customizer-description"
+                  className="customizer-description customizer-description--compact"
                 >
                   {customizer.item.description ||
                     "Customize ingredients and quantity before adding to your order."}
                 </p>
-
-                {customizerLayout.defaultChoiceLines.length > 0 && (
-                  <div className="customizer-default-wrap" aria-label="Default choices">
-                    {customizerLayout.defaultChoiceLines.map(line => (
-                      <span key={line} className="customizer-default-chip">
-                        {line}
-                      </span>
-                    ))}
-                  </div>
-                )}
-              </section>
-
-              <section
-                className="customizer-panel"
-                aria-labelledby="included-ingredients-heading"
+              </div>
+              <button
+                type="button"
+                onClick={closeCustomizer}
+                className="customizer-close-btn"
+                aria-label="Close item details"
               >
-                <div className="customizer-panel-head">
-                  <h3
-                    id="included-ingredients-heading"
-                    className="customizer-panel-title"
-                  >
-                    Included Ingredients
-                  </h3>
-                  <span className="customizer-panel-badge">
-                    {customizerLayout.includedLines.length}
-                  </span>
-                </div>
+                ×
+              </button>
+            </header>
 
-                {customizerLayout.includedLines.length > 0 ? (
-                  <>
-                    <div className="customizer-ingredient-grid">
-                      {(showAllIncluded
-                        ? customizerLayout.includedLines
-                        : customizerLayout.includedLines.slice(0, INCLUDED_PREVIEW_COUNT)
-                      ).map(line => (
-                        <span key={line} className="customizer-ingredient-chip">
-                          {line}
-                        </span>
-                      ))}
-                    </div>
-                    {customizerLayout.includedLines.length > INCLUDED_PREVIEW_COUNT && (
-                      <button
-                        type="button"
-                        className="customizer-more-btn"
-                        onClick={() => setShowAllIncluded(current => !current)}
-                        aria-expanded={showAllIncluded}
+            <div className="customizer-stage customizer-stage--single">
+              <section className="customizer-pane customizer-pane--stack">
+                {customizerGroups.length > 0 ? (
+                  customizerGroups.map(group => {
+                    const sectionId = `group:${group.id}`
+                    const isOpen = expandedSectionId === sectionId
+                    const min = groupSelectionMin(group)
+                    const max = groupSelectionMax(group)
+                    const selectedCount =
+                      customizer.selections[group.id]?.length ?? 0
+                    const pageCount = Math.max(
+                      1,
+                      Math.ceil(group.options.length / GROUP_OPTION_PAGE_SIZE)
+                    )
+                    const page = clampIndex(
+                      customizerOptionPages[group.id] ?? 0,
+                      pageCount
+                    )
+                    const visibleOptions = isOpen
+                      ? group.options.slice(
+                          page * GROUP_OPTION_PAGE_SIZE,
+                          page * GROUP_OPTION_PAGE_SIZE +
+                            GROUP_OPTION_PAGE_SIZE
+                        )
+                      : []
+
+                    return (
+                      <article
+                        key={group.id}
+                        className={
+                          isOpen
+                            ? "customizer-section-card is-open"
+                            : "customizer-section-card"
+                        }
                       >
-                        {showAllIncluded
-                          ? "Show fewer ingredients"
-                          : `Show all ingredients (${customizerLayout.includedLines.length - INCLUDED_PREVIEW_COUNT} more)`}
-                      </button>
-                    )}
-                  </>
-                ) : (
-                  <p className="customizer-empty-copy">
-                    Ingredient list is currently unavailable for this item.
-                  </p>
-                )}
-              </section>
-
-              <section
-                className="customizer-panel"
-                aria-labelledby="customizations-heading"
-              >
-                <div className="customizer-panel-head">
-                  <h3 id="customizations-heading" className="customizer-panel-title">
-                    Customizations
-                  </h3>
-                  <span className="customizer-panel-badge">
-                    {customizerLayout.sections.reduce(
-                      (total, section) => total + section.groups.length,
-                      0
-                    )} groups
-                  </span>
-                </div>
-                <p className="customizer-panel-caption">
-                  Most common choices are shown first. Expand a group to see every option.
-                </p>
-
-                {!hasCustomization(customizer.item.customization) && (
-                  <p className="customizer-empty-copy">
-                    {resolveEditPolicy(customizer.item.customization) === "none"
-                      ? "No substitutions are configured for this item."
-                      : "No additional options are available right now."}
-                  </p>
-                )}
-
-                {hasCustomization(customizer.item.customization) && (
-                  <div className="customizer-section-stack">
-                    {customizerLayout.sections.map(section => {
-                      if (section.groups.length === 0) return null
-
-                      return (
-                        <section
-                          key={section.key}
-                          className="customizer-group-section"
-                          aria-labelledby={`customizer-section-${section.key}`}
+                        <button
+                          type="button"
+                          className="customizer-section-trigger"
+                          onClick={() => toggleSection(sectionId)}
+                          aria-expanded={isOpen}
                         >
-                          <div className="customizer-group-section-head">
-                            <h4
-                              id={`customizer-section-${section.key}`}
-                              className="customizer-group-section-title"
-                            >
-                              {section.title}
-                            </h4>
-                            <span className="customizer-group-section-count">
-                              {section.selectedCount} selected
+                          <span className="customizer-section-copy">
+                            <span className="customizer-group-label">
+                              {group.name}
                             </span>
-                          </div>
-                          <p className="customizer-group-section-hint">
-                            {section.hint}
-                          </p>
+                            <span className="customizer-group-meta">
+                              {min > 0 ? "Required" : "Optional"} ·{" "}
+                              {groupSelectionHint(group)}
+                            </span>
+                          </span>
+                          <span className="customizer-section-trailing">
+                            <span className="customizer-panel-badge">
+                              {selectedCount}/{max}
+                            </span>
+                            <span
+                              className="customizer-section-chevron"
+                              aria-hidden="true"
+                            >
+                              {isOpen ? "−" : "+"}
+                            </span>
+                          </span>
+                        </button>
 
-                          <div className="customizer-group-list">
-                            {section.groups.map(group => {
-                              const selected = customizer.selections[group.id] ?? []
-                              const min = groupSelectionMin(group)
-                              const max = groupSelectionMax(group)
-                              const requiredUnmet =
-                                min > 0 && selected.length < min
-                              const isExpanded = Boolean(expandedGroups[group.id])
-                              const collapsedOptions = group.options.filter(
-                                (option, index) =>
-                                  index < GROUP_OPTION_PREVIEW_COUNT ||
-                                  selected.includes(option.id)
-                              )
-                              const visibleOptions = isExpanded
-                                ? group.options
-                                : collapsedOptions
-                              const hiddenCount = Math.max(
-                                0,
-                                group.options.length - collapsedOptions.length
-                              )
-                              const maxReached =
-                                group.type === "multi" &&
-                                selected.length >= max
+                        {isOpen && (
+                          <div className="customizer-section-body">
+                            <div className="customizer-options customizer-options--checks">
+                              {visibleOptions.map(option => {
+                                const selected =
+                                  customizer.selections[
+                                    group.id
+                                  ]?.includes(option.id) ?? false
+                                const disabled =
+                                  group.type === "multi" &&
+                                  !selected &&
+                                  selectedCount >= max
 
-                              return (
-                                <fieldset key={group.id} className="customizer-group-card">
-                                  <legend className="customizer-sr-only">
-                                    {group.name}
-                                  </legend>
-                                  <div className="customizer-group-head">
-                                    <div>
-                                      <div className="customizer-group-label">
-                                        {group.name}
-                                      </div>
-                                      <div className="customizer-group-meta">
-                                        {min > 0 ? "Required" : "Optional"} ·{" "}
-                                        {group.type === "single"
-                                          ? "Choose 1"
-                                          : `Choose ${min}${max > min ? `-${max}` : ""}`}
-                                      </div>
-                                    </div>
-                                    <span className="customizer-group-status">
-                                      {selected.length} selected
-                                      {max > 0 ? ` of ${max}` : ""}
-                                      {maxReached ? " (max reached)" : ""}
-                                    </span>
-                                  </div>
-
-                                  {group.type === "single" &&
-                                    min === 0 &&
-                                    selected.length > 0 && (
-                                      <button
-                                        type="button"
-                                        className="customizer-clear-btn"
-                                        onClick={() =>
-                                          updateCustomizerSelection(
-                                            group.id,
-                                            selected[0],
-                                            false
-                                          )
-                                        }
-                                      >
-                                        Clear selection
-                                      </button>
-                                    )}
-
-                                  <div
-                                    id={`customizer-options-${group.id}`}
+                                return (
+                                  <button
+                                    key={option.id}
+                                    type="button"
                                     className={
-                                      group.type === "single"
-                                        ? "customizer-options customizer-options--chips"
-                                        : "customizer-options customizer-options--checks"
+                                      selected
+                                        ? "customizer-option-row is-active"
+                                        : disabled
+                                        ? "customizer-option-row is-disabled"
+                                        : "customizer-option-row"
                                     }
-                                  >
-                                    {visibleOptions.map(option => {
-                                      const active = selected.includes(option.id)
-                                      const disabled =
-                                        group.type === "multi" &&
-                                        !active &&
-                                        selected.length >= max
-
-                                      if (group.type === "multi") {
-                                        return (
-                                          <label
-                                            key={option.id}
-                                            className={
-                                              active
-                                                ? "customizer-check-option is-active"
-                                                : disabled
-                                                ? "customizer-check-option is-disabled"
-                                                : "customizer-check-option"
-                                            }
-                                          >
-                                            <input
-                                              type="checkbox"
-                                              className="customizer-check-input"
-                                              checked={active}
-                                              disabled={disabled}
-                                              onChange={event =>
-                                                updateCustomizerSelection(
-                                                  group.id,
-                                                  option.id,
-                                                  event.target.checked
-                                                )
-                                              }
-                                            />
-                                            <span
-                                              className="customizer-check-mark"
-                                              aria-hidden="true"
-                                            />
-                                            <span className="customizer-option-copy">
-                                              <span>{option.label}</span>
-                                              {option.allergens &&
-                                                option.allergens.length > 0 && (
-                                                  <span className="customizer-option-allergens">
-                                                    Allergens:{" "}
-                                                    {option.allergens.join(", ")}
-                                                  </span>
-                                                )}
-                                            </span>
-                                            {option.priceDelta !== 0 && (
-                                              <span className="customizer-option-price">
-                                                {option.priceDelta > 0 ? "+" : ""}£
-                                                {option.priceDelta.toFixed(2)}
-                                              </span>
-                                            )}
-                                          </label>
+                                    onClick={() => {
+                                      if (disabled) return
+                                      if (group.type === "single") {
+                                        const canClear =
+                                          groupSelectionMin(group) === 0
+                                        updateCustomizerSelection(
+                                          group.id,
+                                          option.id,
+                                          selected ? canClear : true
                                         )
+                                        return
                                       }
 
-                                      return (
-                                        <button
-                                          key={option.id}
-                                          type="button"
-                                          className={
-                                            active
-                                              ? "customizer-chip-option is-active"
-                                              : "customizer-chip-option"
-                                          }
-                                          aria-pressed={active}
-                                          onClick={() =>
-                                            updateCustomizerSelection(
-                                              group.id,
-                                              option.id,
-                                              !active
-                                            )
-                                          }
-                                        >
-                                          <span className="customizer-option-copy">
-                                            <span>{option.label}</span>
-                                            {option.allergens &&
-                                              option.allergens.length > 0 && (
-                                                <span className="customizer-option-allergens">
-                                                  Allergens:{" "}
-                                                  {option.allergens.join(", ")}
-                                                </span>
-                                              )}
-                                          </span>
-                                          {option.priceDelta !== 0 && (
-                                            <span className="customizer-option-price">
-                                              {option.priceDelta > 0 ? "+" : ""}£
-                                              {option.priceDelta.toFixed(2)}
-                                            </span>
-                                          )}
-                                        </button>
+                                      updateCustomizerSelection(
+                                        group.id,
+                                        option.id,
+                                        !selected
                                       )
-                                    })}
-                                  </div>
-
-                                  {hiddenCount > 0 && (
-                                    <button
-                                      type="button"
-                                      className="customizer-more-btn"
-                                      onClick={() => toggleGroupExpansion(group.id)}
-                                      aria-expanded={isExpanded}
-                                      aria-controls={`customizer-options-${group.id}`}
+                                    }}
+                                    aria-pressed={selected}
+                                  >
+                                    <span
+                                      className={
+                                        customizerImageSrc
+                                          ? "customizer-option-thumb"
+                                          : "customizer-option-thumb customizer-option-thumb--fallback"
+                                      }
+                                      aria-hidden="true"
                                     >
-                                      {isExpanded
-                                        ? "Show fewer options"
-                                        : `More options (${hiddenCount})`}
-                                    </button>
-                                  )}
+                                      {customizerImageSrc ? (
+                                        <img
+                                          src={customizerImageSrc}
+                                          alt=""
+                                        />
+                                      ) : null}
+                                    </span>
+                                    <span className="customizer-option-copy">
+                                      <span>{option.label}</span>
+                                      {option.allergens &&
+                                        option.allergens.length > 0 && (
+                                          <span className="customizer-option-allergens">
+                                            Allergens:{" "}
+                                            {option.allergens.join(", ")}
+                                          </span>
+                                        )}
+                                    </span>
+                                    {option.priceDelta !== 0 && (
+                                      <span className="customizer-option-price">
+                                        {option.priceDelta > 0 ? "+" : ""}£
+                                        {option.priceDelta.toFixed(2)}
+                                      </span>
+                                    )}
+                                    <span className="customizer-option-end">
+                                      {group.type === "single" ? (
+                                        <span
+                                          className={
+                                            selected
+                                              ? "customizer-radio is-active"
+                                              : "customizer-radio"
+                                          }
+                                          aria-hidden="true"
+                                        />
+                                      ) : (
+                                        <span
+                                          className={
+                                            selected
+                                              ? "customizer-check-mark is-inline is-active"
+                                              : "customizer-check-mark is-inline"
+                                          }
+                                          aria-hidden="true"
+                                        />
+                                      )}
+                                    </span>
+                                  </button>
+                                )
+                              })}
+                            </div>
 
-                                  {requiredUnmet && (
-                                    <div className="customizer-group-warning">
-                                      Select at least {min} option
-                                      {min > 1 ? "s" : ""}.
-                                    </div>
-                                  )}
-                                </fieldset>
-                              )
-                            })}
+                            {pageCount > 1 && (
+                              <div className="customizer-pager-row">
+                                <button
+                                  type="button"
+                                  className="customizer-more-btn"
+                                  onClick={() =>
+                                    setCustomizerOptionPages(current => ({
+                                      ...current,
+                                      [group.id]: clampIndex(
+                                        page - 1,
+                                        pageCount
+                                      ),
+                                    }))
+                                  }
+                                  disabled={page <= 0}
+                                >
+                                  Previous options
+                                </button>
+                                <span className="customizer-pager-state">
+                                  {page + 1}/{pageCount}
+                                </span>
+                                <button
+                                  type="button"
+                                  className="customizer-more-btn"
+                                  onClick={() =>
+                                    setCustomizerOptionPages(current => ({
+                                      ...current,
+                                      [group.id]: clampIndex(
+                                        page + 1,
+                                        pageCount
+                                      ),
+                                    }))
+                                  }
+                                  disabled={page >= pageCount - 1}
+                                >
+                                  More options
+                                </button>
+                              </div>
+                            )}
                           </div>
-                        </section>
-                      )
-                    })}
-                  </div>
-                )}
-              </section>
-
-              <section className="customizer-panel" aria-labelledby="allergens-heading">
-                <div className="customizer-panel-head">
-                  <h3 id="allergens-heading" className="customizer-panel-title">
-                    Allergens
-                  </h3>
-                  <span
-                    className={
-                      customizerAllergens.length > 0
-                        ? "customizer-allergen-state customizer-allergen-state--warn"
-                        : "customizer-allergen-state"
-                    }
-                  >
-                    {customizerAllergens.length > 0
-                      ? `${customizerAllergens.length} present`
-                      : "None detected"}
-                  </span>
-                </div>
-
-                {customizerAllergens.length > 0 ? (
-                  <div className="customizer-allergen-chip-wrap">
-                    {customizerAllergens.map(allergen => (
-                      <span key={allergen} className="customizer-allergen-chip">
-                        {allergen}
-                      </span>
-                    ))}
-                  </div>
+                        )}
+                      </article>
+                    )
+                  })
                 ) : (
-                  <p className="customizer-empty-copy">
-                    No tracked allergens in the current configuration.
+                  <p className="customizer-pane-empty">
+                    No customization options for this item.
                   </p>
                 )}
-              </section>
 
-              {customizerError && (
-                <div className="customizer-error" role="status" aria-live="polite">
-                  {customizerError}
-                </div>
-              )}
+                {customizerLayout.includedLines.length > 0 && (
+                  <article
+                    className={
+                      expandedSectionId === 'included'
+                        ? "customizer-section-card is-open"
+                        : "customizer-section-card"
+                    }
+                  >
+                    <button
+                      type="button"
+                      className="customizer-section-trigger"
+                      onClick={() => toggleSection('included')}
+                      aria-expanded={expandedSectionId === 'included'}
+                    >
+                      <span className="customizer-section-copy">
+                        <span className="customizer-group-label">
+                          Included ingredients
+                        </span>
+                        <span className="customizer-group-meta">
+                          Tap to review what is included by default.
+                        </span>
+                      </span>
+                      <span className="customizer-section-trailing">
+                        <span className="customizer-panel-badge">
+                          {customizerLayout.includedLines.length}
+                        </span>
+                        <span
+                          className="customizer-section-chevron"
+                          aria-hidden="true"
+                        >
+                          {expandedSectionId === 'included' ? "−" : "+"}
+                        </span>
+                      </span>
+                    </button>
+                    {expandedSectionId === 'included' && (
+                      <div className="customizer-section-body">
+                        <div className="customizer-included-grid">
+                          {customizerLayout.includedLines
+                            .slice(0, INCLUDED_PAGE_SIZE)
+                            .map(ingredient => (
+                              <span
+                                key={ingredient}
+                                className="customizer-ingredient-chip"
+                              >
+                                {ingredient}
+                              </span>
+                            ))}
+                        </div>
+                        {customizerLayout.includedLines.length >
+                          INCLUDED_PAGE_SIZE && (
+                          <p className="customizer-pane-copy">
+                            +{" "}
+                            {customizerLayout.includedLines.length -
+                              INCLUDED_PAGE_SIZE}{" "}
+                            more included ingredients
+                          </p>
+                        )}
+                      </div>
+                    )}
+                  </article>
+                )}
+
+                <article
+                  className={
+                    expandedSectionId === 'allergens'
+                      ? "customizer-section-card is-open"
+                      : "customizer-section-card"
+                  }
+                >
+                  <button
+                    type="button"
+                    className="customizer-section-trigger"
+                    onClick={() => toggleSection('allergens')}
+                    aria-expanded={expandedSectionId === 'allergens'}
+                  >
+                    <span className="customizer-section-copy">
+                      <span className="customizer-group-label">
+                        Allergy requests
+                      </span>
+                      <span className="customizer-group-meta">
+                        Important information before ordering.
+                      </span>
+                    </span>
+                    <span className="customizer-section-trailing">
+                      <span className="customizer-panel-badge">
+                        {customizerAllergens.length}
+                      </span>
+                      <span
+                        className="customizer-section-chevron"
+                        aria-hidden="true"
+                      >
+                        {expandedSectionId === 'allergens' ? "−" : "+"}
+                      </span>
+                    </span>
+                  </button>
+                  {expandedSectionId === 'allergens' && (
+                    <div className="customizer-section-body">
+                      <p className="customizer-disclosure-copy">
+                        {ALLERGY_NOTICE_TEXT}
+                      </p>
+                      {customizerAllergens.length > 0 && (
+                        <div className="customizer-allergen-chip-wrap">
+                          {customizerAllergens.map(allergen => (
+                            <span
+                              key={allergen}
+                              className="customizer-allergen-chip"
+                            >
+                              {allergen}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </article>
+              </section>
             </div>
+
+            {customizerError && (
+              <div className="customizer-error" role="status" aria-live="polite">
+                {customizerError}
+              </div>
+            )}
+
+            {requiredRemaining > 0 && (
+              <div className="customizer-error" role="status" aria-live="polite">
+                Select required options in {requiredRemaining}{" "}
+                {requiredRemaining === 1 ? "group" : "groups"} before
+                adding.
+              </div>
+            )}
 
             <footer className="customizer-footer">
               <div className="customizer-qty-control">
@@ -1341,10 +1446,14 @@ export default function TagPage({ params }: { params: { tagId: string } }) {
               <button
                 type="button"
                 onClick={applyCustomizedItem}
-                disabled={Boolean(customizerValidation && !customizerValidation.ok)}
+                disabled={
+                  Boolean(customizerValidation && !customizerValidation.ok) ||
+                  requiredRemaining > 0
+                }
                 className="customizer-footer-primary"
               >
-                Add to order
+                Add to basket • £
+                {(customizerUnitPrice * customizer.quantity).toFixed(2)}
               </button>
             </footer>
           </section>

@@ -50,10 +50,10 @@ function hasValidSystemToken(req?: Request) {
 }
 
 function hasAuthDemoBypassEnabled() {
-  const raw =
-    process.env.AUTH_DEMO_BYPASS ??
-    process.env.NEXT_PUBLIC_AUTH_DEMO_BYPASS ??
-    ""
+  if (process.env.NODE_ENV === "production") {
+    return false
+  }
+  const raw = process.env.AUTH_DEMO_BYPASS ?? ""
   const normalized = raw.trim().toLowerCase()
   return (
     normalized === "1" ||

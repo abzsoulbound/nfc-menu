@@ -1,20 +1,5 @@
-function decodeSafe(value: string) {
-  try {
-    return decodeURIComponent(value)
-  } catch {
-    return value
-  }
-}
-
 export function getTenantPrefixFromPath(pathname: string | null | undefined) {
-  if (!pathname) return ""
-  const tenantMatch = pathname.match(/^\/order\/r\/([^/]+)/)
-  if (tenantMatch?.[1]) {
-    const slug = decodeSafe(tenantMatch[1]).trim()
-    if (!slug) return "/order"
-    return `/order/r/${encodeURIComponent(slug)}`
-  }
-
+  if (!pathname) return "/order"
   return "/order"
 }
 

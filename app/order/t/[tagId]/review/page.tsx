@@ -22,6 +22,7 @@ import {
   sessionConnectErrorMessage,
 } from "@/lib/clientApiErrors"
 import { tenantTagPath } from "@/lib/tenantPaths"
+import { trackEvent } from "@/lib/analytics"
 
 type ReviewStatus = "pending" | "in_progress" | "completed"
 
@@ -125,6 +126,31 @@ function getVisibleEditLines(edits: unknown): string[] {
   return ["modified"]
 }
 
+function ReviewSkeleton() {
+  return (
+    <div className="review-skeleton">
+      <div className="card">
+        <div className="skeleton-block skeleton-title" />
+        <div className="skeleton-block skeleton-line" />
+      </div>
+      <div className="card review-skeleton-list">
+        <div className="skeleton-block skeleton-row" />
+        <div className="skeleton-block skeleton-row" />
+        <div className="skeleton-block skeleton-row" />
+      </div>
+      <div className="card">
+        <div className="skeleton-block skeleton-line" />
+        <div className="skeleton-block skeleton-line" />
+        <div className="skeleton-block skeleton-line" />
+      </div>
+      <div className="review-skeleton-actions">
+        <div className="skeleton-block skeleton-button" />
+        <div className="skeleton-block skeleton-button" />
+      </div>
+    </div>
+  )
+}
+
 export default function PerUserReviewPage({
   params,
 }: {
@@ -154,10 +180,13 @@ export default function PerUserReviewPage({
   const [editingItem, setEditingItem] = useState<ReviewItem | null>(null)
   const [editDraft, setEditDraft] = useState("")
   const [savingEdit, setSavingEdit] = useState(false)
+  const [restaurantId, setRestaurantId] = useState("unknown")
   const cartItemsRef = useRef<ReviewItem[]>([])
   const syncTimersRef = useRef<Record<string, number>>({})
   const syncInFlightRef = useRef<Record<string, boolean>>({})
   const pendingSyncRef = useRef<Record<string, PendingCartSyncEntry>>({})
+  const lastRequestIdRef = useRef("unknown")
+  const reviewOpenedTrackedRef = useRef(false)
 
   const notifyHeader = () => {
     if (typeof window === "undefined") return
@@ -175,121 +204,134 @@ export default function PerUserReviewPage({
       }
     }
 
-    try {
-      const res = await fetch("/api/cart/get", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          sessionId,
-          clientKey,
-        }),
-      })
-
-      if (!res.ok) {
-        const errorInfo = await readApiErrorInfo(res)
-        setError(cartLoadErrorMessage(errorInfo))
-        if (errorInfo.status >= 500) {
-          return null
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      try {
+        const res = await fetch("/api/cart/get", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            sessionId,
+            clientKey,
+          }),
+        })
+        const requestId = res.headers.get("x-request-id")
+        if (requestId) {
+          lastRequestIdRef.current = requestId
         }
+
+        if (!res.ok) {
+          if (attempt === 0) continue
+          const errorInfo = await readApiErrorInfo(res)
+          setError(cartLoadErrorMessage(errorInfo))
+          if (errorInfo.status >= 500) {
+            return null
+          }
+          return {
+            items: [],
+            members: [],
+            requesterConfirmed: true,
+            allMembersConfirmed: true,
+            unconfirmedMemberCount: 0,
+          }
+        }
+
+        const payload = await res.json()
+        setError(current =>
+          current &&
+          (
+            current.toLowerCase().includes("basket") ||
+            current.toLowerCase().includes("cart") ||
+            current.toLowerCase().includes("session")
+          )
+            ? null
+            : current
+        )
+        const nextItems: ReviewItem[] = Array.isArray(payload?.items)
+          ? (payload.items as any[])
+              .map(item => ({
+                id: String(item.id),
+                menuItemId:
+                  typeof item.menuItemId === "string"
+                    ? item.menuItemId
+                    : null,
+                ownerClientKey:
+                  typeof item.ownerClientKey === "string"
+                    ? item.ownerClientKey
+                    : null,
+                name: String(item.name ?? "Item"),
+                quantity: Number(item.quantity ?? 0),
+                edits: item.edits ?? null,
+                allergens: Array.isArray(item.allergens)
+                  ? item.allergens.filter(
+                      (x: unknown): x is string => typeof x === "string"
+                    )
+                  : [],
+                unitPrice: Number(item.unitPrice ?? 0),
+                vatRate: Number(item.vatRate ?? 0),
+                station: toStation(item.station),
+                isMine: Boolean(item.isMine),
+                confirmed: Boolean(item.confirmed),
+                canRequesterEdit: Boolean(item.canRequesterEdit),
+                ownerInactive: Boolean(item.inactive),
+              }))
+              .filter(item => item.quantity > 0)
+          : []
+
+        const members: PendingMember[] = Array.isArray(payload?.members)
+          ? (payload.members as any[])
+              .map(member => ({
+                clientKey: String(member.clientKey ?? ""),
+                itemCount: Number(member.itemCount ?? 0),
+                quantity: Number(member.quantity ?? 0),
+                confirmed: Boolean(member.confirmed),
+                isMine: Boolean(member.isMine),
+                inactive: Boolean(member.inactive),
+                hardActivityAt:
+                  typeof member.hardActivityAt === "string"
+                    ? member.hardActivityAt
+                    : new Date(0).toISOString(),
+              }))
+              .filter(member => member.clientKey.length > 0)
+          : []
+
+        const activeMembers = members.filter(
+          member => !member.inactive
+        )
+        const fallbackRequesterConfirmed =
+          members.find(member => member.isMine)?.confirmed ??
+          true
+        const fallbackAllMembersConfirmed =
+          activeMembers.length === 0
+            ? true
+            : activeMembers.every(member => member.confirmed)
+        const fallbackUnconfirmedCount = activeMembers.filter(
+          member => !member.confirmed
+        ).length
+
         return {
-          items: [],
-          members: [],
-          requesterConfirmed: true,
-          allMembersConfirmed: true,
-          unconfirmedMemberCount: 0,
+          items: nextItems,
+          members,
+          requesterConfirmed:
+            typeof payload?.confirmation?.requesterConfirmed === "boolean"
+              ? payload.confirmation.requesterConfirmed
+              : fallbackRequesterConfirmed,
+          allMembersConfirmed:
+            typeof payload?.confirmation?.allMembersConfirmed === "boolean"
+              ? payload.confirmation.allMembersConfirmed
+              : fallbackAllMembersConfirmed,
+          unconfirmedMemberCount:
+            typeof payload?.confirmation?.unconfirmedMemberCount === "number"
+              ? payload.confirmation.unconfirmedMemberCount
+              : fallbackUnconfirmedCount,
         }
+      } catch {
+        if (attempt === 0) continue
+        setError(networkErrorMessage("open your basket"))
+        return null
       }
-
-      const payload = await res.json()
-      setError(current =>
-        current &&
-        (current.toLowerCase().includes("cart") ||
-          current.toLowerCase().includes("session"))
-          ? null
-          : current
-      )
-      const nextItems: ReviewItem[] = Array.isArray(payload?.items)
-        ? (payload.items as any[])
-            .map(item => ({
-              id: String(item.id),
-              menuItemId:
-                typeof item.menuItemId === "string"
-                  ? item.menuItemId
-                  : null,
-              ownerClientKey:
-                typeof item.ownerClientKey === "string"
-                  ? item.ownerClientKey
-                  : null,
-              name: String(item.name ?? "Item"),
-              quantity: Number(item.quantity ?? 0),
-              edits: item.edits ?? null,
-              allergens: Array.isArray(item.allergens)
-                ? item.allergens.filter(
-                    (x: unknown): x is string => typeof x === "string"
-                  )
-                : [],
-              unitPrice: Number(item.unitPrice ?? 0),
-              vatRate: Number(item.vatRate ?? 0),
-              station: toStation(item.station),
-              isMine: Boolean(item.isMine),
-              confirmed: Boolean(item.confirmed),
-              canRequesterEdit: Boolean(item.canRequesterEdit),
-              ownerInactive: Boolean(item.inactive),
-            }))
-            .filter(item => item.quantity > 0)
-        : []
-
-      const members: PendingMember[] = Array.isArray(payload?.members)
-        ? (payload.members as any[])
-            .map(member => ({
-              clientKey: String(member.clientKey ?? ""),
-              itemCount: Number(member.itemCount ?? 0),
-              quantity: Number(member.quantity ?? 0),
-              confirmed: Boolean(member.confirmed),
-              isMine: Boolean(member.isMine),
-              inactive: Boolean(member.inactive),
-              hardActivityAt:
-                typeof member.hardActivityAt === "string"
-                  ? member.hardActivityAt
-                  : new Date(0).toISOString(),
-            }))
-            .filter(member => member.clientKey.length > 0)
-        : []
-
-      const activeMembers = members.filter(
-        member => !member.inactive
-      )
-      const fallbackRequesterConfirmed =
-        members.find(member => member.isMine)?.confirmed ??
-        true
-      const fallbackAllMembersConfirmed =
-        activeMembers.length === 0
-          ? true
-          : activeMembers.every(member => member.confirmed)
-      const fallbackUnconfirmedCount = activeMembers.filter(
-        member => !member.confirmed
-      ).length
-
-      return {
-        items: nextItems,
-        members,
-        requesterConfirmed:
-          typeof payload?.confirmation?.requesterConfirmed === "boolean"
-            ? payload.confirmation.requesterConfirmed
-            : fallbackRequesterConfirmed,
-        allMembersConfirmed:
-          typeof payload?.confirmation?.allMembersConfirmed === "boolean"
-            ? payload.confirmation.allMembersConfirmed
-            : fallbackAllMembersConfirmed,
-        unconfirmedMemberCount:
-          typeof payload?.confirmation?.unconfirmedMemberCount === "number"
-            ? payload.confirmation.unconfirmedMemberCount
-            : fallbackUnconfirmedCount,
-      }
-    } catch {
-      setError(networkErrorMessage("load pending cart items"))
-      return null
     }
+
+    return null
   }
 
   const loadSubmittedItems = async (): Promise<{
@@ -403,6 +445,49 @@ export default function PerUserReviewPage({
   useEffect(() => {
     ensureClientKey()
   }, [ensureClientKey])
+
+  useEffect(() => {
+    let cancelled = false
+
+    const loadRestaurantContext = async () => {
+      try {
+        const res = await fetch("/api/restaurant/current", {
+          cache: "no-store",
+        })
+        const requestId = res.headers.get("x-request-id")
+        if (requestId) {
+          lastRequestIdRef.current = requestId
+        }
+        if (!res.ok) return
+
+        const payload = await res.json()
+        if (cancelled) return
+        if (
+          payload?.restaurant &&
+          typeof payload.restaurant.id === "string"
+        ) {
+          setRestaurantId(payload.restaurant.id)
+        }
+      } catch {
+        // keep unknown fallback
+      }
+    }
+
+    void loadRestaurantContext()
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  useEffect(() => {
+    if (reviewOpenedTrackedRef.current) return
+    reviewOpenedTrackedRef.current = true
+    trackEvent("review_opened", {
+      restaurantId,
+      requestId: lastRequestIdRef.current,
+      tagId,
+    })
+  }, [restaurantId, tagId])
 
   useEffect(() => {
     if (sessionId) return
@@ -648,6 +733,10 @@ export default function PerUserReviewPage({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       })
+      const requestId = res.headers.get("x-request-id")
+      if (requestId) {
+        lastRequestIdRef.current = requestId
+      }
 
       if (!res.ok) {
         const failure = await res
@@ -672,7 +761,8 @@ export default function PerUserReviewPage({
           return
         }
 
-        throw new Error(`${apiError} (HTTP ${res.status})`)
+        setError("We couldn't send this order right now. Retry.")
+        return
       }
 
       clearSubmittedItems()
@@ -684,9 +774,14 @@ export default function PerUserReviewPage({
         unconfirmedMemberCount: 0,
       })
       await refreshAll(false)
-    } catch (submitError: any) {
-      const message = String(submitError?.message ?? "unknown")
-      setError(`Order could not be submitted (${message}).`)
+      trackEvent("order_confirmed", {
+        restaurantId,
+        requestId: lastRequestIdRef.current,
+        sessionId,
+        itemCount: cartItems.length,
+      })
+    } catch {
+      setError("We couldn't send this order right now. Retry.")
     } finally {
       setSubmitting(false)
       setShowConfirm(false)
@@ -725,9 +820,9 @@ export default function PerUserReviewPage({
       if (pending) {
         applyPendingState(pending)
       }
-    } catch (confirmError: any) {
+    } catch {
       setError(
-        `Could not ${nextConfirmed ? "confirm" : "unconfirm"} your items (${confirmError?.message ?? "unknown"}).`
+        `We couldn't ${nextConfirmed ? "confirm" : "unconfirm"} your items. Retry.`
       )
     } finally {
       setConfirmingMine(false)
@@ -795,17 +890,13 @@ export default function PerUserReviewPage({
             "Assist edit unlocks after 2 minutes of owner inactivity."
           )
         } else {
-          setError(
-            `Could not update cart item (${apiError}).`
-          )
+          setError("We couldn't update your basket. Retry.")
         }
 
         void refreshAll(false)
       }
     } catch {
-      setError(
-        "Could not update cart item (network error)."
-      )
+      setError("We couldn't update your basket. Retry.")
       void refreshAll(false)
     } finally {
       syncInFlightRef.current[itemId] = false
@@ -1030,42 +1121,67 @@ export default function PerUserReviewPage({
         )
         return
       }
-      setError(
-        `Could not update item edits (${errorMessage}).`
-      )
+      setError("We couldn't update this item. Retry.")
     } finally {
       setSavingEdit(false)
     }
   }
 
   if (loading) {
-    return (
-      <div className="p-4 opacity-60 text-center">
-        Loading review...
-      </div>
-    )
+    return <ReviewSkeleton />
   }
 
   if (cartItems.length === 0 && submittedItems.length === 0) {
     return (
-      <div className="p-4 space-y-3">
+      <div className="p-4 space-y-3 review-empty-state">
         {error && <Toast>{error}</Toast>}
-        <div className="opacity-60 text-center">
-          No items to review
+        <Card className="space-y-3">
+          <div className="text-lg font-semibold">Your basket is empty</div>
+          <div className="text-sm opacity-70">
+            Choose items from the menu to build your order.
+          </div>
+          <div className="review-step-strip">
+            <span className="review-step is-active">Choose</span>
+            <span className="review-step">Basket</span>
+            <span className="review-step">Send</span>
+          </div>
+        </Card>
+        <div className="grid grid-cols-2 gap-2">
+          <Button
+            variant="primary"
+            onClick={() => router.push(tenantTagPath(pathname, tagId))}
+          >
+            Browse menu
+          </Button>
+          <Button
+            variant="secondary"
+            onClick={() =>
+              setError("Please ask a member of staff for help at your table.")
+            }
+          >
+            Need help? Ask staff
+          </Button>
         </div>
-        <Button
-          variant="secondary"
-          onClick={() => router.push(tenantTagPath(pathname, tagId))}
-        >
-          Back
-        </Button>
       </div>
     )
   }
 
   return (
     <div className="p-4 space-y-4">
-      {error && <Toast>{error}</Toast>}
+      {error && (
+        <Toast>
+          <div className="review-error-row">
+            <span>{error}</span>
+            <Button
+              variant="secondary"
+              className="review-retry-btn"
+              onClick={() => void refreshAll(false)}
+            >
+              Retry
+            </Button>
+          </div>
+        </Toast>
+      )}
 
       <Card>
         <div className="text-lg font-semibold">

@@ -12,7 +12,12 @@ const nextConfig = {
       },
       {
         source: "/r/:restaurantSlug/t/:tagId",
-        destination: "/order/r/:restaurantSlug/t/:tagId",
+        destination: "/order/t/:tagId?restaurantSlug=:restaurantSlug",
+        permanent: true,
+      },
+      {
+        source: "/order/r/:restaurantSlug/t/:tagId",
+        destination: "/order/t/:tagId?restaurantSlug=:restaurantSlug",
         permanent: true,
       },
       {
@@ -22,7 +27,12 @@ const nextConfig = {
       },
       {
         source: "/r/:restaurantSlug/menu",
-        destination: "/order/r/:restaurantSlug/menu",
+        destination: "/order/menu?restaurantSlug=:restaurantSlug",
+        permanent: true,
+      },
+      {
+        source: "/order/r/:restaurantSlug/menu",
+        destination: "/order/menu?restaurantSlug=:restaurantSlug",
         permanent: true,
       },
       {
@@ -32,7 +42,14 @@ const nextConfig = {
       },
       {
         source: "/r/:restaurantSlug/t/:tagId/:path*",
-        destination: "/order/r/:restaurantSlug/t/:tagId/:path*",
+        destination:
+          "/order/t/:tagId/:path*?restaurantSlug=:restaurantSlug",
+        permanent: true,
+      },
+      {
+        source: "/order/r/:restaurantSlug/t/:tagId/:path*",
+        destination:
+          "/order/t/:tagId/:path*?restaurantSlug=:restaurantSlug",
         permanent: true,
       },
     ]

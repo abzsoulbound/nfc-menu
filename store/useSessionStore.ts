@@ -11,16 +11,79 @@ type SessionState = {
   ensureSession: (tagId?: string) => Promise<string | null>
 }
 
+const SESSION_STORAGE_KEY = "nfc-session-v1"
+
+type StoredSessionState = {
+  sessionId: string | null
+  clientKey: string | null
+  origin: "customer" | "staff" | null
+}
+
+function persistState(input: StoredSessionState) {
+  if (typeof window === "undefined") return
+  try {
+    window.localStorage.setItem(
+      SESSION_STORAGE_KEY,
+      JSON.stringify(input)
+    )
+  } catch {
+    // Ignore storage write failures.
+  }
+}
+
+function readPersistedState(): StoredSessionState | null {
+  if (typeof window === "undefined") return null
+  try {
+    const raw = window.localStorage.getItem(SESSION_STORAGE_KEY)
+    if (!raw) return null
+    const parsed = JSON.parse(raw) as Partial<StoredSessionState>
+    return {
+      sessionId:
+        typeof parsed.sessionId === "string" && parsed.sessionId.trim().length > 0
+          ? parsed.sessionId
+          : null,
+      clientKey:
+        typeof parsed.clientKey === "string" && parsed.clientKey.trim().length > 0
+          ? parsed.clientKey
+          : null,
+      origin:
+        parsed.origin === "customer" || parsed.origin === "staff"
+          ? parsed.origin
+          : null,
+    }
+  } catch {
+    return null
+  }
+}
+
 export const useSessionStore = create<SessionState>((set, get) => ({
   sessionId: null,
   clientKey: null,
   origin: null,
   setSession: (id, origin) =>
-    set(() => ({ sessionId: id, origin })),
+    set(current => {
+      const next = {
+        sessionId: id,
+        clientKey: current.clientKey,
+        origin,
+      }
+      persistState(next)
+      return next
+    }),
   clearSession: () =>
-    set(() => ({ sessionId: null, clientKey: null, origin: null })),
+    set(() => {
+      const next = { sessionId: null, clientKey: null, origin: null }
+      persistState(next)
+      return next
+    }),
   hydrate: () => {
-    // Local persistence is intentionally disabled for full online mode.
+    const persisted = readPersistedState()
+    if (!persisted) return
+    set(current => ({
+      sessionId: persisted.sessionId ?? current.sessionId,
+      clientKey: persisted.clientKey ?? current.clientKey,
+      origin: persisted.origin ?? current.origin,
+    }))
   },
   ensureClientKey: () => {
     const existing = get().clientKey
@@ -34,7 +97,15 @@ export const useSessionStore = create<SessionState>((set, get) => ({
             .toString(36)
             .slice(2, 10)}`
 
-    set({ clientKey: next })
+    set(current => {
+      const nextState = {
+        sessionId: current.sessionId,
+        clientKey: next,
+        origin: current.origin,
+      }
+      persistState(nextState)
+      return { clientKey: next }
+    })
     return next
   },
   ensureSession: async (tagId?: string) => {

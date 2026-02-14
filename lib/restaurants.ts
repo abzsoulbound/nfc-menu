@@ -297,20 +297,23 @@ export function getBrandingConfig(input: {
 export function tenantPath(restaurantSlug: string, path: string) {
   const slug = normalizeSlug(restaurantSlug) || DEFAULT_RESTAURANT_SLUG
   const cleanPath = path.startsWith("/") ? path : `/${path}`
+  const basePath = `${DEFAULT_ORDER_BASE_PATH}${cleanPath}`
   if (slug === DEFAULT_RESTAURANT_SLUG) {
-    return `${DEFAULT_ORDER_BASE_PATH}${cleanPath}`
+    return basePath
   }
-  return `${DEFAULT_ORDER_BASE_PATH}/r/${slug}${cleanPath}`
+  const separator = basePath.includes("?") ? "&" : "?"
+  return `${basePath}${separator}restaurantSlug=${encodeURIComponent(slug)}`
 }
 
 export function tenantOrderPath(restaurantSlug: string, tableId: string) {
   const slug = normalizeSlug(restaurantSlug) || DEFAULT_RESTAURANT_SLUG
-  if (slug === DEFAULT_RESTAURANT_SLUG) {
-    return `${DEFAULT_ORDER_BASE_PATH}/t/${encodeURIComponent(tableId)}`
-  }
-  return `${DEFAULT_ORDER_BASE_PATH}/r/${slug}/t/${encodeURIComponent(
+  const basePath = `${DEFAULT_ORDER_BASE_PATH}/t/${encodeURIComponent(
     tableId
   )}`
+  if (slug === DEFAULT_RESTAURANT_SLUG) {
+    return basePath
+  }
+  return `${basePath}?restaurantSlug=${encodeURIComponent(slug)}`
 }
 
 export function externalOrderUrl(input: {
@@ -319,14 +322,9 @@ export function externalOrderUrl(input: {
   tableId: string
 }) {
   const slug = normalizeSlug(input.restaurantSlug) || DEFAULT_RESTAURANT_SLUG
-  const tenantPath =
-    slug === DEFAULT_RESTAURANT_SLUG
-      ? `${DEFAULT_ORDER_BASE_PATH}/t/${encodeURIComponent(input.tableId)}`
-      : `${DEFAULT_ORDER_BASE_PATH}/r/${slug}/t/${encodeURIComponent(
-          input.tableId
-        )}`
+  const fallbackTenantPath = tenantOrderPath(slug, input.tableId)
   const domainPath = `/t/${encodeURIComponent(input.tableId)}`
   const baseUrl = input.baseUrl?.trim()
-  if (!baseUrl) return tenantPath
+  if (!baseUrl) return fallbackTenantPath
   return `${baseUrl.replace(/\/+$/, "")}${domainPath}`
 }

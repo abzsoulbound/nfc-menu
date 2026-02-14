@@ -1,24 +1,23 @@
 export type ApiErrorInfo = {
   status: number
   code: string | null
-  detail: string | null
-  raw: string | null
+  message: string | null
+  requestId: string | null
 }
 
-function trimRaw(text: string): string | null {
-  const trimmed = text.trim()
-  if (!trimmed) return null
-  return trimmed.length > 240
-    ? `${trimmed.slice(0, 237)}...`
-    : trimmed
+function asCustomerSafeTenantError(code: string | null) {
+  return (
+    code === "TENANT_CONTEXT_MISSING" ||
+    code === "TENANT_CONTEXT_INVALID"
+  )
 }
 
 export async function readApiErrorInfo(
   response: Response
 ): Promise<ApiErrorInfo> {
   let code: string | null = null
-  let detail: string | null = null
-  let raw: string | null = null
+  let message: string | null = null
+  let requestId: string | null = null
 
   const contentType = response.headers.get("content-type") ?? ""
 
@@ -30,38 +29,29 @@ export async function readApiErrorInfo(
     if (payload && typeof payload.error === "string") {
       code = payload.error
     }
-    if (payload && typeof payload.detail === "string") {
-      detail = payload.detail
-    } else if (payload && typeof payload.message === "string") {
-      detail = payload.message
+    if (payload && typeof payload.message === "string") {
+      message = payload.message
     }
+    if (payload && typeof payload.requestId === "string") {
+      requestId = payload.requestId
+    }
+  }
 
-    if (!code && !detail && payload) {
-      raw = trimRaw(JSON.stringify(payload))
-    }
-  } else {
-    raw = trimRaw(await response.text().catch(() => ""))
+  if (!requestId) {
+    requestId = response.headers.get("x-request-id")
   }
 
   return {
     status: response.status,
     code,
-    detail,
-    raw,
+    message,
+    requestId: requestId || null,
   }
 }
 
-function httpLabel(info: ApiErrorInfo) {
-  if (info.code) {
-    return `HTTP ${info.status} (${info.code})`
-  }
-  return `HTTP ${info.status}`
-}
-
-function withDetail(base: string, info: ApiErrorInfo) {
-  if (info.detail) return `${base} ${info.detail}`
-  if (info.raw) return `${base} ${info.raw}`
-  return base
+function withRequestHint(base: string, info: ApiErrorInfo) {
+  if (!info.requestId) return base
+  return `${base} Ref: ${info.requestId}`
 }
 
 export function sessionConnectErrorMessage(
@@ -69,6 +59,9 @@ export function sessionConnectErrorMessage(
   tagId: string
 ): string {
   switch (info.code) {
+    case "TENANT_CONTEXT_MISSING":
+    case "TENANT_CONTEXT_INVALID":
+      return "This table link looks invalid. Ask staff for help."
     case "TAG_NOT_REGISTERED":
       return `NFC "${tagId}" is not registered. Ask staff to register this tag in Staff > Tags.`
     case "BAD_REQUEST":
@@ -76,8 +69,8 @@ export function sessionConnectErrorMessage(
     case "TABLE_CLOSED":
       return `Table ordering is closed for NFC "${tagId}". Ask staff to reseat this table.`
     default:
-      return withDetail(
-        `Could not connect this table (${httpLabel(info)}).`,
+      return withRequestHint(
+        "We couldn’t connect this table right now. Retry.",
         info
       )
   }
@@ -85,13 +78,16 @@ export function sessionConnectErrorMessage(
 
 export function cartLoadErrorMessage(info: ApiErrorInfo): string {
   switch (info.code) {
+    case "TENANT_CONTEXT_MISSING":
+    case "TENANT_CONTEXT_INVALID":
+      return "This table link looks invalid. Ask staff for help."
     case "SESSION_NOT_FOUND":
-      return "Session not found. Reload this NFC tag to start a new table session."
+      return "This table session has expired. Scan again to continue."
     case "BAD_REQUEST":
-      return "Cart request was invalid. Reload this table and try again."
+      return "We couldn’t open your basket. Retry."
     default:
-      return withDetail(
-        `Could not load cart (${httpLabel(info)}).`,
+      return withRequestHint(
+        "We couldn’t open your basket. Retry.",
         info
       )
   }
@@ -99,33 +95,39 @@ export function cartLoadErrorMessage(info: ApiErrorInfo): string {
 
 export function cartSyncErrorMessage(info: ApiErrorInfo): string {
   switch (info.code) {
+    case "TENANT_CONTEXT_MISSING":
+    case "TENANT_CONTEXT_INVALID":
+      return "This table link looks invalid. Ask staff for help."
     case "ITEM_UNAVAILABLE":
       return "That item is unavailable right now."
     case "INVALID_MODIFIERS":
-      return withDetail("Invalid item edit.", info)
+      return "That customization is no longer available."
     case "SESSION_NOT_FOUND":
-      return "Session not found while syncing cart. Reload this table."
+      return "This table session has expired. Scan again to continue."
     case "ITEM_NOT_FOUND":
-      return "Cart item no longer exists. Refreshing your cart now."
+      return "That basket item no longer exists."
     case "ASSIST_LOCKED":
       return "This item is locked for assist edit right now."
     case "ITEM_CONFIRMED":
       return 'Your pending items are confirmed. Tap "Edit items" to unconfirm before editing.'
     default:
-      return withDetail(
-        `Could not sync cart (${httpLabel(info)}).`,
+      return withRequestHint(
+        "We couldn’t update your basket. Retry.",
         info
       )
   }
 }
 
 export function menuLoadErrorMessage(info: ApiErrorInfo): string {
-  return withDetail(
-    `Could not load menu (${httpLabel(info)}).`,
+  if (asCustomerSafeTenantError(info.code)) {
+    return "This table link looks invalid. Ask staff for help."
+  }
+  return withRequestHint(
+    "We couldn’t load the menu. Retry.",
     info
   )
 }
 
 export function networkErrorMessage(action: string): string {
-  return `Network error while trying to ${action}. Check internet and retry.`
+  return `Network issue while trying to ${action}. Retry.`
 }

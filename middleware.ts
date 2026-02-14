@@ -138,7 +138,10 @@ async function resolveContextInMiddleware(
   const cacheKey = `${hostname}::${slugFromRoute}`
   const cached = resolverCache.get(cacheKey)
   if (cached && cached.expiresAt > Date.now()) {
-    return cached.context
+    return {
+      context: cached.context,
+      resolved: true,
+    }
   }
 
   const resolverUrl = new URL(
@@ -162,7 +165,10 @@ async function resolveContextInMiddleware(
     })
 
     if (!res.ok) {
-      return fallbackContext()
+      return {
+        context: fallbackContext(),
+        resolved: false,
+      }
     }
 
     const payload = (await res.json()) as {
@@ -171,7 +177,10 @@ async function resolveContextInMiddleware(
 
     const parsed = parseRestaurantContext(payload.restaurant)
     if (!parsed) {
-      return fallbackContext()
+      return {
+        context: fallbackContext(),
+        resolved: false,
+      }
     }
 
     resolverCache.set(cacheKey, {
@@ -179,9 +188,15 @@ async function resolveContextInMiddleware(
       context: parsed,
     })
 
-    return parsed
+    return {
+      context: parsed,
+      resolved: true,
+    }
   } catch {
-    return fallbackContext()
+    return {
+      context: fallbackContext(),
+      resolved: false,
+    }
   }
 }
 
@@ -203,10 +218,10 @@ function staffLoginPath(pathname: string, restaurantSlug: string) {
 }
 
 function isAuthDemoBypassEnabled() {
-  const raw =
-    process.env.AUTH_DEMO_BYPASS ??
-    process.env.NEXT_PUBLIC_AUTH_DEMO_BYPASS ??
-    ""
+  if (process.env.NODE_ENV === "production") {
+    return false
+  }
+  const raw = process.env.AUTH_DEMO_BYPASS ?? ""
   const normalized = raw.trim().toLowerCase()
   return (
     normalized === "1" ||
@@ -345,6 +360,14 @@ async function resolveStaffAccess(input: {
 export async function middleware(req: NextRequest) {
   const pathname = req.nextUrl.pathname
   const slugFromRoute = slugFromPath(pathname)
+  const slugFromQuery = normalizedSlug(
+    req.nextUrl.searchParams.get("restaurantSlug") ?? undefined
+  )
+  const slugFromCookie = normalizedSlug(
+    req.cookies.get(RESTAURANT_COOKIE)?.value
+  )
+  const tenantSlugHint =
+    slugFromRoute || slugFromQuery || slugFromCookie
   const requestId =
     req.headers.get(REQUEST_ID_HEADER) || crypto.randomUUID()
   const hostname = normalizedDomain(
@@ -352,13 +375,30 @@ export async function middleware(req: NextRequest) {
       req.headers.get("host") ??
       req.nextUrl.hostname
   )
-  const context = await resolveContextInMiddleware(
+  const contextResult = await resolveContextInMiddleware(
     req,
     hostname,
-    slugFromRoute,
+    tenantSlugHint,
     requestId
   )
+  const context = contextResult.context
   const slug = context.slug
+  const requiresTenantContext =
+    pathname.startsWith("/api/cart/") ||
+    pathname === "/api/session" ||
+    pathname === "/api/sessions"
+
+  if (requiresTenantContext && !contextResult.resolved) {
+    const tenantError = NextResponse.json(
+      {
+        error: "TENANT_CONTEXT_MISSING",
+        requestId,
+      },
+      { status: 400 }
+    )
+    tenantError.headers.set(REQUEST_ID_HEADER, requestId)
+    return tenantError
+  }
 
   const requestHeaders = new Headers(req.headers)
   requestHeaders.set(REQUEST_ID_HEADER, requestId)

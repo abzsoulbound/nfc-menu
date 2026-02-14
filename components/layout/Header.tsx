@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation"
 import { useEffect, useMemo, useState } from "react"
 import { DEFAULT_RESTAURANT_SLUG } from "@/lib/restaurantConstants"
 import { useSessionStore } from "@/store/useSessionStore"
+import { readApiErrorInfo } from "@/lib/clientApiErrors"
 import styles from "./Header.module.css"
 
 function safeDecode(value: string) {
@@ -42,6 +43,9 @@ export function Header() {
   const sessionId = useSessionStore(s => s.sessionId)
   const ensureClientKey = useSessionStore(s => s.ensureClientKey)
   const [cartCount, setCartCount] = useState(0)
+  const [cartUnavailable, setCartUnavailable] = useState(false)
+  const [scrolled, setScrolled] = useState(false)
+  const [searchTenantSlug, setSearchTenantSlug] = useState<string | null>(null)
   const [branding, setBranding] = useState({
     name: "Marlo's Brasserie",
     logoUrl: "/images/marlos-wordmark-alpha.svg",
@@ -49,16 +53,25 @@ export function Header() {
     secondaryColor: "#d5e4ee",
   })
 
+  useEffect(() => {
+    if (typeof window === "undefined") return
+    const raw = new URLSearchParams(window.location.search).get(
+      "restaurantSlug"
+    )
+    setSearchTenantSlug(raw ? safeDecode(raw) : null)
+  }, [pathname])
+
   const routeContext = useMemo(() => {
     const orderTenantMatch = pathname.match(/^\/order\/r\/([^/]+)(\/.*)?$/)
     const tenantMatch = pathname.match(/^\/r\/([^/]+)(\/.*)?$/)
     const orderDefaultMatch = pathname.match(/^\/order(\/.*)?$/)
 
-    const tenantSlug = orderTenantMatch?.[1]
+    const tenantSlugFromPath = orderTenantMatch?.[1]
       ? safeDecode(orderTenantMatch[1])
       : tenantMatch?.[1]
       ? safeDecode(tenantMatch[1])
       : null
+    const tenantSlug = tenantSlugFromPath || searchTenantSlug || null
 
     const normalizedPath = orderTenantMatch
       ? orderTenantMatch[2] || "/order"
@@ -70,9 +83,12 @@ export function Header() {
 
     const tagMatch = normalizedPath.match(/^\/t\/([^/]+)/)
     const tagId = tagMatch?.[1] ? safeDecode(tagMatch[1]) : null
-    const basePrefix = tenantSlug
-      ? `/order/r/${encodeURIComponent(tenantSlug)}`
-      : "/order"
+    const basePrefix = "/order"
+    const withTenantQuery = (path: string) => {
+      if (!tenantSlug) return path
+      const separator = path.includes("?") ? "&" : "?"
+      return `${path}${separator}restaurantSlug=${encodeURIComponent(tenantSlug)}`
+    }
     const isOrderPath =
       pathname.startsWith("/order") || pathname.startsWith("/r/") || pathname.startsWith("/t/")
 
@@ -84,14 +100,18 @@ export function Header() {
         (normalizedPath === "/" ||
           normalizedPath === "/menu" ||
           normalizedPath.startsWith("/t/")),
-      homeHref: tagId
+      homeHref: withTenantQuery(
+        tagId
         ? `${basePrefix}/t/${encodeURIComponent(tagId)}`
-        : `${basePrefix}/menu`,
-      cartHref: tagId
+        : `${basePrefix}/menu`
+      ),
+      cartHref: withTenantQuery(
+        tagId
         ? `${basePrefix}/t/${encodeURIComponent(tagId)}/review`
-        : `${basePrefix}/menu`,
+        : `${basePrefix}/menu`
+      ),
     }
-  }, [pathname])
+  }, [pathname, searchTenantSlug])
 
   useEffect(() => {
     let active = true
@@ -142,13 +162,23 @@ export function Header() {
   }, [branding.primaryColor])
 
   useEffect(() => {
+    const onScroll = () => {
+      setScrolled(window.scrollY > 2)
+    }
+    onScroll()
+    window.addEventListener("scroll", onScroll, { passive: true })
+    return () => window.removeEventListener("scroll", onScroll)
+  }, [])
+
+  useEffect(() => {
     if (!routeContext.isOrderingRoute) {
       setCartCount(0)
+      setCartUnavailable(false)
       return
     }
 
     if (!routeContext.tagId || !sessionId) {
-      setCartCount(0)
+      setCartUnavailable(true)
       return
     }
 
@@ -163,7 +193,12 @@ export function Header() {
             clientKey: ensureClientKey(),
           }),
         })
-        if (!res.ok) return
+        if (!res.ok) {
+          if (!cancelled) {
+            setCartUnavailable(true)
+          }
+          return
+        }
         const payload = await res.json()
         if (cancelled) return
 
@@ -181,8 +216,11 @@ export function Header() {
           0
         )
         setCartCount(count)
+        setCartUnavailable(false)
       } catch {
-        // keep current count on transient network errors
+        if (!cancelled) {
+          setCartUnavailable(true)
+        }
       }
     }
 
@@ -207,11 +245,19 @@ export function Header() {
     return null
   }
 
-  const badgeLabel = cartCount > 99 ? "99+" : String(cartCount)
-  const cartAriaLabel = `Open cart (${cartCount} item${cartCount === 1 ? "" : "s"})`
+  const badgeLabel = cartUnavailable
+    ? "!"
+    : cartCount > 99
+    ? "99+"
+    : String(cartCount)
+  const cartAriaLabel = cartUnavailable
+    ? "Basket status unavailable. Tap to retry."
+    : `Open cart (${cartCount} item${cartCount === 1 ? "" : "s"})`
 
   return (
-    <header className={styles.header}>
+    <header
+      className={scrolled ? `${styles.header} ${styles.headerScrolled}` : styles.header}
+    >
       <div className={styles.inner}>
         <Link
           href={routeContext.homeHref}
@@ -233,11 +279,63 @@ export function Header() {
         {routeContext.tagId ? (
           <Link
             href={routeContext.cartHref}
-            className={styles.cart}
+            className={
+              cartUnavailable
+                ? `${styles.cart} ${styles.cartWarning}`
+                : styles.cart
+            }
             aria-label={cartAriaLabel}
+            aria-disabled={cartUnavailable}
+            onClick={event => {
+              if (!cartUnavailable) return
+              event.preventDefault()
+              if (!sessionId) return
+              void (async () => {
+                try {
+                  const res = await fetch("/api/cart/get", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                      sessionId,
+                      clientKey: ensureClientKey(),
+                    }),
+                  })
+                  if (!res.ok) {
+                    await readApiErrorInfo(res)
+                    return
+                  }
+                  const payload = await res.json()
+                  const items = (
+                    Array.isArray(payload?.items) ? payload.items : []
+                  ) as Array<{ quantity?: unknown; isMine?: boolean }>
+                  const ownItems = items.filter(item => item.isMine !== false)
+                  const count = ownItems.reduce(
+                    (sum: number, item: { quantity?: unknown }) => {
+                      const quantity = Number(item?.quantity ?? 0)
+                      return Number.isFinite(quantity) && quantity > 0
+                        ? sum + quantity
+                        : sum
+                    },
+                    0
+                  )
+                  setCartCount(count)
+                  setCartUnavailable(false)
+                } catch {
+                  // keep warning badge until next successful poll
+                }
+              })()
+            }}
           >
             <CartIcon />
-            <span className={styles.cartBadge}>{badgeLabel}</span>
+            <span
+              className={
+                cartUnavailable
+                  ? `${styles.cartBadge} ${styles.cartBadgeWarning}`
+                  : styles.cartBadge
+              }
+            >
+              {badgeLabel}
+            </span>
           </Link>
         ) : (
           <div className={`${styles.cart} ${styles.cartStatic}`} aria-hidden="true">

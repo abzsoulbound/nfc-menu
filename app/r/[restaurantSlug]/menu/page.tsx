@@ -5,5 +5,7 @@ export default function LegacyTenantMenuRouteRedirect({
 }: {
   params: { restaurantSlug: string }
 }) {
-  redirect(`/order/r/${encodeURIComponent(params.restaurantSlug)}/menu`)
+  redirect(
+    `/order/menu?restaurantSlug=${encodeURIComponent(params.restaurantSlug)}`
+  )
 }

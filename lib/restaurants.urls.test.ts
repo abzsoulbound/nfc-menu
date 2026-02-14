@@ -13,7 +13,9 @@ describe("restaurant order urls", () => {
   })
 
   it("builds a non-default tenant fallback link when no custom domain exists", () => {
-    expect(tenantOrderPath("acme", "5")).toBe("/order/r/acme/t/5")
+    expect(tenantOrderPath("acme", "5")).toBe(
+      "/order/t/5?restaurantSlug=acme"
+    )
   })
 
   it("builds a custom-domain link without slug segment", () => {

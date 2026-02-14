@@ -6,8 +6,8 @@ export default function LegacyTenantTagTableRouteRedirect({
   params: { restaurantSlug: string; tagId: string }
 }) {
   redirect(
-    `/order/r/${encodeURIComponent(
-      params.restaurantSlug
-    )}/t/${encodeURIComponent(params.tagId)}/table`
+    `/order/t/${encodeURIComponent(
+      params.tagId
+    )}/table?restaurantSlug=${encodeURIComponent(params.restaurantSlug)}`
   )
 }

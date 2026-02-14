@@ -6,8 +6,8 @@ export default function TenantOrderCartRedirectPage({
   params: { restaurantSlug: string; tagId: string }
 }) {
   redirect(
-    `/order/r/${encodeURIComponent(
-      params.restaurantSlug
-    )}/t/${encodeURIComponent(params.tagId)}/review`
+    `/order/t/${encodeURIComponent(
+      params.tagId
+    )}/review?restaurantSlug=${encodeURIComponent(params.restaurantSlug)}`
   )
 }

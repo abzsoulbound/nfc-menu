@@ -1,12 +1,12 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { MouseEvent } from "react"
-import { StationQueue } from "@/components/kitchen/StationQueue"
 import { TicketView } from "@/components/kitchen/TicketView"
 import { Card } from "@/components/ui/Card"
 import { Badge } from "@/components/ui/Badge"
 import { StaffAuthGate } from "@/components/staff/StaffAuthGate"
+import { trackEvent } from "@/lib/analytics"
 
 type KitchenItem = {
   orderId: string
@@ -27,6 +27,8 @@ type TableGroup = {
 export default function KitchenDashboard() {
   const [tables, setTables] = useState<TableGroup[]>([])
   const [activeTable, setActiveTable] = useState<number | null>(null)
+  const [restaurantId, setRestaurantId] = useState("unknown")
+  const lastRequestIdRef = useRef("unknown")
 
   async function parseArrayResponse<T>(
     res: Response
@@ -46,6 +48,10 @@ export default function KitchenDashboard() {
     const res = await fetch("/api/orders?station=KITCHEN", {
       cache: "no-store",
     })
+    const requestId = res.headers.get("x-request-id")
+    if (requestId) {
+      lastRequestIdRef.current = requestId
+    }
     const data = await parseArrayResponse<KitchenItem>(res)
 
     const grouped: Record<number, TableGroup> = {}
@@ -72,13 +78,36 @@ export default function KitchenDashboard() {
   }
 
   useEffect(() => {
+    const loadRestaurant = async () => {
+      try {
+        const res = await fetch("/api/restaurant/current", {
+          cache: "no-store",
+        })
+        const requestId = res.headers.get("x-request-id")
+        if (requestId) {
+          lastRequestIdRef.current = requestId
+        }
+        if (!res.ok) return
+        const payload = await res.json()
+        if (
+          payload?.restaurant &&
+          typeof payload.restaurant.id === "string"
+        ) {
+          setRestaurantId(payload.restaurant.id)
+        }
+      } catch {
+        // Keep unknown fallback.
+      }
+    }
+
+    void loadRestaurant()
     fetchQueue()
     const interval = setInterval(fetchQueue, 3000)
     return () => clearInterval(interval)
   }, [])
 
   async function markKitchenSent(tableNumber: number) {
-    await fetch("/api/orders", {
+    const res = await fetch("/api/orders", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -86,17 +115,43 @@ export default function KitchenDashboard() {
         station: "KITCHEN",
       }),
     })
+    const requestId = res.headers.get("x-request-id")
+    if (requestId) {
+      lastRequestIdRef.current = requestId
+    }
+    if (res.ok) {
+      trackEvent("staff_ticket_action", {
+        restaurantId,
+        requestId: lastRequestIdRef.current,
+        station: "KITCHEN",
+        action: "table_complete",
+        tableNumber,
+      })
+    }
 
     setActiveTable(null)
     fetchQueue()
   }
 
   async function completeKitchenItem(orderItemId: string) {
-    await fetch("/api/orders", {
+    const res = await fetch("/api/orders", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ orderItemId }),
     })
+    const requestId = res.headers.get("x-request-id")
+    if (requestId) {
+      lastRequestIdRef.current = requestId
+    }
+    if (res.ok) {
+      trackEvent("staff_ticket_action", {
+        restaurantId,
+        requestId: lastRequestIdRef.current,
+        station: "KITCHEN",
+        action: "item_complete",
+        orderItemId,
+      })
+    }
     fetchQueue()
   }
 

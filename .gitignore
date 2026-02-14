@@ -3,8 +3,11 @@ node_modules
 /generated/prisma
 
 .env
+.env.*
+!.env.example
 .next
 .next.bak-*/
 .DS_Store
 tsconfig.tsbuildinfo
 .vercel
+.vercel/
