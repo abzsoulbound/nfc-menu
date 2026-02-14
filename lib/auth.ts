@@ -49,6 +49,20 @@ function hasValidSystemToken(req?: Request) {
   return readHeader(req, "x-system-auth") === secret
 }
 
+function hasAuthDemoBypassEnabled() {
+  const raw =
+    process.env.AUTH_DEMO_BYPASS ??
+    process.env.NEXT_PUBLIC_AUTH_DEMO_BYPASS ??
+    ""
+  const normalized = raw.trim().toLowerCase()
+  return (
+    normalized === "1" ||
+    normalized === "true" ||
+    normalized === "yes" ||
+    normalized === "on"
+  )
+}
+
 function hasStaffSessionCookie(req?: Request) {
   return Boolean(readCookie(req, STAFF_SESSION_COOKIE))
 }
@@ -56,6 +70,12 @@ function hasStaffSessionCookie(req?: Request) {
 export function getActorType(req?: Request): ActorType {
   if (hasValidSystemToken(req)) return "system"
   if (hasStaffSessionCookie(req)) return "staff"
+  if (
+    hasAuthDemoBypassEnabled() &&
+    typeof readHeader(req, "x-staff-user-id") === "string"
+  ) {
+    return "staff"
+  }
   return "customer"
 }
 
@@ -65,6 +85,23 @@ export async function requireStaffSession(
   const context = requireRestaurantContext({
     get: key => readHeader(req, key),
   })
+
+  if (hasAuthDemoBypassEnabled()) {
+    const headerRole = readHeader(req, "x-staff-role")
+    const resolvedRole =
+      typeof headerRole === "string" && headerRole.trim().length > 0
+        ? headerRole.trim()
+        : "admin"
+
+    return {
+      id: "demo-staff-user",
+      staffUserId: "demo-staff-user",
+      staffSessionId: "demo-staff-session",
+      role: resolvedRole,
+      restaurantId: context.restaurantId,
+      restaurantSlug: context.restaurantSlug,
+    }
+  }
 
   const rawToken = readCookie(req, STAFF_SESSION_COOKIE)
   if (!rawToken) {

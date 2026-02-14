@@ -91,6 +91,9 @@ type CustomizerSection = {
   maxCount: number
 }
 
+const INCLUDED_PREVIEW_COUNT = 6
+const GROUP_OPTION_PREVIEW_COUNT = 3
+
 function isObject(value: unknown): value is Record<string, unknown> {
   return (
     value !== null &&
@@ -156,27 +159,6 @@ function classifyGroup(group: CustomizerGroup): CustomizerSectionKey {
   return "additions"
 }
 
-function ingredientToken(label: string): string {
-  const normalized = label.toLowerCase()
-  if (
-    /bacon|sausage|chicken|beef|steak|salmon|tuna|prawn|fish|egg/.test(
-      normalized
-    )
-  ) {
-    return "P"
-  }
-  if (/cheese|milk|cream|butter|yoghurt|yogurt/.test(normalized)) {
-    return "D"
-  }
-  if (/toast|bread|bun|pasta|rice|potato|chips|fries|pancake/.test(normalized)) {
-    return "C"
-  }
-  if (/tomato|avocado|lettuce|mushroom|onion|beans|pepper|salad/.test(normalized)) {
-    return "V"
-  }
-  return "I"
-}
-
 export default function TagPage({ params }: { params: { tagId: string } }) {
   const router = useRouter()
   const pathname = usePathname()
@@ -190,6 +172,8 @@ export default function TagPage({ params }: { params: { tagId: string } }) {
   const [sessionId, setSessionId] = useState<string | null>(null)
   const [cartByKey, setCartByKey] = useState<Record<string, CartItem>>({})
   const [customizer, setCustomizer] = useState<CustomizerState | null>(null)
+  const [showAllIncluded, setShowAllIncluded] = useState(false)
+  const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({})
   const [customizerError, setCustomizerError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -215,6 +199,11 @@ export default function TagPage({ params }: { params: { tagId: string } }) {
   useEffect(() => {
     notifyHeader()
   }, [cartByKey])
+
+  useEffect(() => {
+    setShowAllIncluded(false)
+    setExpandedGroups({})
+  }, [customizer?.item.id])
 
   const loadCart = async (sid: string) => {
     try {
@@ -607,6 +596,13 @@ export default function TagPage({ params }: { params: { tagId: string } }) {
     setCustomizerError(null)
   }
 
+  const toggleGroupExpansion = (groupId: string) => {
+    setExpandedGroups(current => ({
+      ...current,
+      [groupId]: !current[groupId],
+    }))
+  }
+
   const updateCustomizerSelection = (
     groupId: string,
     optionId: string,
@@ -966,19 +962,30 @@ export default function TagPage({ params }: { params: { tagId: string } }) {
                 </div>
 
                 {customizerLayout.includedLines.length > 0 ? (
-                  <div className="customizer-ingredient-grid">
-                    {customizerLayout.includedLines.map(line => (
-                      <div key={line} className="customizer-ingredient-chip">
-                        <span
-                          className="customizer-ingredient-icon"
-                          aria-hidden="true"
-                        >
-                          {ingredientToken(line)}
+                  <>
+                    <div className="customizer-ingredient-grid">
+                      {(showAllIncluded
+                        ? customizerLayout.includedLines
+                        : customizerLayout.includedLines.slice(0, INCLUDED_PREVIEW_COUNT)
+                      ).map(line => (
+                        <span key={line} className="customizer-ingredient-chip">
+                          {line}
                         </span>
-                        <span className="customizer-ingredient-label">{line}</span>
-                      </div>
-                    ))}
-                  </div>
+                      ))}
+                    </div>
+                    {customizerLayout.includedLines.length > INCLUDED_PREVIEW_COUNT && (
+                      <button
+                        type="button"
+                        className="customizer-more-btn"
+                        onClick={() => setShowAllIncluded(current => !current)}
+                        aria-expanded={showAllIncluded}
+                      >
+                        {showAllIncluded
+                          ? "Show fewer ingredients"
+                          : `Show all ingredients (${customizerLayout.includedLines.length - INCLUDED_PREVIEW_COUNT} more)`}
+                      </button>
+                    )}
+                  </>
                 ) : (
                   <p className="customizer-empty-copy">
                     Ingredient list is currently unavailable for this item.
@@ -998,9 +1005,12 @@ export default function TagPage({ params }: { params: { tagId: string } }) {
                     {customizerLayout.sections.reduce(
                       (total, section) => total + section.groups.length,
                       0
-                    )}
+                    )} groups
                   </span>
                 </div>
+                <p className="customizer-panel-caption">
+                  Most common choices are shown first. Expand a group to see every option.
+                </p>
 
                 {!hasCustomization(customizer.item.customization) && (
                   <p className="customizer-empty-copy">
@@ -1029,7 +1039,7 @@ export default function TagPage({ params }: { params: { tagId: string } }) {
                               {section.title}
                             </h4>
                             <span className="customizer-group-section-count">
-                              {section.selectedCount}/{section.maxCount || section.selectedCount}
+                              {section.selectedCount} selected
                             </span>
                           </div>
                           <p className="customizer-group-section-hint">
@@ -1043,6 +1053,19 @@ export default function TagPage({ params }: { params: { tagId: string } }) {
                               const max = groupSelectionMax(group)
                               const requiredUnmet =
                                 min > 0 && selected.length < min
+                              const isExpanded = Boolean(expandedGroups[group.id])
+                              const collapsedOptions = group.options.filter(
+                                (option, index) =>
+                                  index < GROUP_OPTION_PREVIEW_COUNT ||
+                                  selected.includes(option.id)
+                              )
+                              const visibleOptions = isExpanded
+                                ? group.options
+                                : collapsedOptions
+                              const hiddenCount = Math.max(
+                                0,
+                                group.options.length - collapsedOptions.length
+                              )
                               const maxReached =
                                 group.type === "multi" &&
                                 selected.length >= max
@@ -1064,16 +1087,11 @@ export default function TagPage({ params }: { params: { tagId: string } }) {
                                           : `Choose ${min}${max > min ? `-${max}` : ""}`}
                                       </div>
                                     </div>
-                                    <div className="customizer-group-feedback">
-                                      <span className="customizer-group-count-badge">
-                                        {selected.length}/{max}
-                                      </span>
-                                      {maxReached && (
-                                        <span className="customizer-limit-badge">
-                                          Max reached
-                                        </span>
-                                      )}
-                                    </div>
+                                    <span className="customizer-group-status">
+                                      {selected.length} selected
+                                      {max > 0 ? ` of ${max}` : ""}
+                                      {maxReached ? " (max reached)" : ""}
+                                    </span>
                                   </div>
 
                                   {group.type === "single" &&
@@ -1095,13 +1113,14 @@ export default function TagPage({ params }: { params: { tagId: string } }) {
                                     )}
 
                                   <div
+                                    id={`customizer-options-${group.id}`}
                                     className={
                                       group.type === "single"
                                         ? "customizer-options customizer-options--chips"
                                         : "customizer-options customizer-options--checks"
                                     }
                                   >
-                                    {group.options.map(option => {
+                                    {visibleOptions.map(option => {
                                       const active = selected.includes(option.id)
                                       const disabled =
                                         group.type === "multi" &&
@@ -1195,6 +1214,20 @@ export default function TagPage({ params }: { params: { tagId: string } }) {
                                       )
                                     })}
                                   </div>
+
+                                  {hiddenCount > 0 && (
+                                    <button
+                                      type="button"
+                                      className="customizer-more-btn"
+                                      onClick={() => toggleGroupExpansion(group.id)}
+                                      aria-expanded={isExpanded}
+                                      aria-controls={`customizer-options-${group.id}`}
+                                    >
+                                      {isExpanded
+                                        ? "Show fewer options"
+                                        : `More options (${hiddenCount})`}
+                                    </button>
+                                  )}
 
                                   {requiredUnmet && (
                                     <div className="customizer-group-warning">

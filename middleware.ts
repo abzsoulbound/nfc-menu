@@ -202,6 +202,61 @@ function staffLoginPath(pathname: string, restaurantSlug: string) {
   return "/staff/login"
 }
 
+function isAuthDemoBypassEnabled() {
+  const raw =
+    process.env.AUTH_DEMO_BYPASS ??
+    process.env.NEXT_PUBLIC_AUTH_DEMO_BYPASS ??
+    ""
+  const normalized = raw.trim().toLowerCase()
+  return (
+    normalized === "1" ||
+    normalized === "true" ||
+    normalized === "yes" ||
+    normalized === "on"
+  )
+}
+
+function demoRoleForPath(
+  pathname: string,
+  roles: readonly string[]
+) {
+  if (
+    pathname === "/bar" ||
+    pathname.startsWith("/bar/") ||
+    /^\/r\/[^/]+\/bar(\/.*)?$/.test(pathname)
+  ) {
+    return "bar"
+  }
+
+  if (
+    pathname === "/kitchen" ||
+    pathname.startsWith("/kitchen/") ||
+    /^\/r\/[^/]+\/kitchen(\/.*)?$/.test(pathname)
+  ) {
+    return "kitchen"
+  }
+
+  if (
+    pathname === "/admin" ||
+    pathname.startsWith("/admin/") ||
+    /^\/r\/[^/]+\/admin(\/.*)?$/.test(pathname) ||
+    /^\/r\/[^/]+\/dashboard(\/.*)?$/.test(pathname)
+  ) {
+    return "admin"
+  }
+
+  if (
+    pathname === "/staff" ||
+    pathname.startsWith("/staff/") ||
+    /^\/r\/[^/]+\/staff(\/.*)?$/.test(pathname)
+  ) {
+    return "waiter"
+  }
+
+  const nonAdmin = roles.find(role => role !== "admin")
+  return nonAdmin ?? roles[0] ?? "admin"
+}
+
 function requiredStaffRoles(pathname: string) {
   if (
     pathname === "/staff/login" ||
@@ -318,6 +373,13 @@ export async function middleware(req: NextRequest) {
 
   const roles = requiredStaffRoles(pathname)
   if (roles) {
+    if (isAuthDemoBypassEnabled()) {
+      requestHeaders.set("x-staff-user-id", "demo-staff-user")
+      requestHeaders.set(
+        "x-staff-role",
+        demoRoleForPath(pathname, roles)
+      )
+    } else {
     const staffAccess = await resolveStaffAccess({
       req,
       requestId,
@@ -336,6 +398,7 @@ export async function middleware(req: NextRequest) {
 
     requestHeaders.set("x-staff-user-id", staffAccess.staffUserId)
     requestHeaders.set("x-staff-role", staffAccess.role)
+    }
   } else {
     requestHeaders.delete("x-staff-user-id")
     requestHeaders.delete("x-staff-role")

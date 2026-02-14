@@ -383,17 +383,18 @@ button {
 }
 
 .customizer-overlay {
-  padding: 18px;
-  background: rgba(7, 16, 27, 0.72);
+  padding: 16px;
+  background: rgba(8, 18, 28, 0.66);
+  backdrop-filter: blur(4px);
 }
 
 .customizer-shell {
   width: min(760px, 100%);
   max-height: min(92vh, 760px);
-  border-radius: 24px;
-  border: 1px solid rgba(73, 97, 116, 0.35);
-  background: linear-gradient(180deg, #edf3f8 0%, #e2edf5 100%);
-  box-shadow: 0 26px 54px rgba(10, 22, 35, 0.42);
+  border-radius: 20px;
+  border: 1px solid rgba(82, 107, 126, 0.28);
+  background: #f6f9fc;
+  box-shadow: 0 28px 58px rgba(9, 20, 31, 0.4);
   overflow: hidden;
   display: flex;
   flex-direction: column;
@@ -402,15 +403,15 @@ button {
 .customizer-hero {
   position: relative;
   height: 220px;
-  border-bottom: 1px solid rgba(86, 110, 129, 0.3);
+  border-bottom: 1px solid rgba(89, 114, 132, 0.24);
 }
 
 .customizer-hero::after {
   content: "";
   position: absolute;
   inset: auto 0 0;
-  height: 72px;
-  background: linear-gradient(180deg, rgba(9, 20, 33, 0) 0%, rgba(9, 20, 33, 0.72) 100%);
+  height: 88px;
+  background: linear-gradient(180deg, rgba(8, 16, 24, 0) 0%, rgba(8, 16, 24, 0.68) 100%);
   pointer-events: none;
 }
 
@@ -423,22 +424,22 @@ button {
 
 .customizer-close-btn {
   position: absolute;
-  top: 10px;
-  right: 10px;
-  width: 36px;
-  height: 36px;
+  top: 12px;
+  right: 12px;
+  width: 44px;
+  height: 44px;
   border-radius: 999px;
-  border: 1px solid rgba(255, 255, 255, 0.4);
-  background: rgba(13, 27, 41, 0.64);
-  color: #f7fbff;
-  font-size: 20px;
+  border: 1px solid rgba(255, 255, 255, 0.55);
+  background: rgba(7, 17, 26, 0.66);
+  color: #f6fbff;
+  font-size: 22px;
   line-height: 1;
   cursor: pointer;
   z-index: 1;
 }
 
 .customizer-close-btn:hover {
-  background: rgba(13, 27, 41, 0.78);
+  background: rgba(7, 17, 26, 0.8);
 }
 
 .customizer-scroll {
@@ -446,16 +447,17 @@ button {
   overflow-y: auto;
   padding: 16px;
   display: grid;
-  gap: 12px;
+  gap: 14px;
+  background: linear-gradient(180deg, #f6f9fc 0%, #eef4f9 100%);
 }
 
 .customizer-summary {
-  border: 1px solid rgba(108, 133, 151, 0.32);
+  border: 1px solid rgba(111, 134, 152, 0.22);
   border-radius: 14px;
-  padding: 12px;
-  background: linear-gradient(180deg, rgba(247, 251, 255, 0.95) 0%, rgba(227, 237, 245, 0.9) 100%);
+  padding: 14px;
+  background: rgba(255, 255, 255, 0.94);
   display: grid;
-  gap: 10px;
+  gap: 11px;
 }
 
 .customizer-summary-head {
@@ -467,28 +469,28 @@ button {
 
 .customizer-title {
   margin: 0;
-  font-size: 22px;
-  line-height: 1.12;
+  font-size: 24px;
+  line-height: 1.25;
   letter-spacing: -0.01em;
-  color: #1b3245;
+  color: #152c3f;
 }
 
 .customizer-base-price {
   border-radius: 999px;
-  border: 1px solid rgba(88, 114, 133, 0.34);
-  background: rgba(212, 226, 237, 0.95);
-  color: #1f3a4f;
+  border: 1px solid rgba(93, 117, 136, 0.28);
+  background: rgba(234, 241, 247, 0.98);
+  color: #1c384b;
   font-size: 12px;
   font-weight: 700;
-  padding: 4px 10px;
+  padding: 5px 11px;
   white-space: nowrap;
 }
 
 .customizer-description {
   margin: 0;
-  font-size: 14px;
-  line-height: 1.4;
-  color: #384f62;
+  font-size: 15px;
+  line-height: 1.46;
+  color: #334d61;
 }
 
 .customizer-default-wrap {
@@ -499,21 +501,21 @@ button {
 
 .customizer-default-chip {
   border-radius: 999px;
-  border: 1px solid rgba(104, 130, 150, 0.26);
-  background: rgba(223, 235, 244, 0.95);
-  color: #334b5f;
-  font-size: 12px;
+  border: 1px solid rgba(106, 130, 149, 0.24);
+  background: rgba(236, 243, 248, 0.98);
+  color: #395267;
+  font-size: 13px;
   line-height: 1.25;
-  padding: 4px 9px;
+  padding: 4px 10px;
 }
 
 .customizer-panel {
-  border: 1px solid rgba(108, 133, 151, 0.32);
+  border: 1px solid rgba(106, 130, 148, 0.24);
   border-radius: 14px;
-  padding: 12px;
-  background: rgba(236, 244, 250, 0.9);
+  padding: 14px;
+  background: rgba(255, 255, 255, 0.92);
   display: grid;
-  gap: 10px;
+  gap: 11px;
   animation: customizer-fade-up 220ms ease both;
 }
 
@@ -526,74 +528,64 @@ button {
 
 .customizer-panel-title {
   margin: 0;
-  font-size: 15px;
+  font-size: 16px;
   font-weight: 700;
-  color: #223b4f;
+  color: #1f3a4f;
 }
 
 .customizer-panel-badge {
-  min-width: 30px;
+  min-width: 42px;
   text-align: center;
   border-radius: 999px;
-  border: 1px solid rgba(96, 122, 141, 0.28);
-  background: rgba(211, 225, 236, 0.95);
-  padding: 2px 9px;
+  border: 1px solid rgba(97, 121, 140, 0.24);
+  background: rgba(235, 243, 248, 0.96);
+  padding: 3px 10px;
   font-size: 12px;
   font-weight: 700;
-  color: #2b4458;
+  color: #355065;
+}
+
+.customizer-panel-caption {
+  margin: -3px 0 0;
+  font-size: 13px;
+  line-height: 1.38;
+  color: #496277;
 }
 
 .customizer-empty-copy {
   margin: 0;
   font-size: 13px;
-  line-height: 1.35;
-  color: #4d6477;
+  line-height: 1.4;
+  color: #4b6378;
 }
 
 .customizer-ingredient-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(155px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
   gap: 8px;
 }
 
 .customizer-ingredient-chip {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  border: 1px solid rgba(100, 126, 146, 0.3);
-  border-radius: 12px;
-  background: rgba(229, 239, 247, 0.92);
-  padding: 8px 10px;
-}
-
-.customizer-ingredient-icon {
-  width: 22px;
-  height: 22px;
-  border-radius: 999px;
-  background: linear-gradient(180deg, #2b5f86 0%, #214966 100%);
-  color: #f5fbff;
   display: inline-flex;
   align-items: center;
-  justify-content: center;
-  font-size: 11px;
-  font-weight: 700;
-  flex: 0 0 auto;
-}
-
-.customizer-ingredient-label {
-  font-size: 12px;
-  line-height: 1.3;
-  color: #2f475b;
+  min-height: 40px;
+  border: 1px solid rgba(101, 126, 145, 0.26);
+  border-radius: 11px;
+  background: rgba(238, 244, 249, 0.96);
+  padding: 9px 10px;
+  font-size: 13px;
+  line-height: 1.25;
+  color: #2d465b;
 }
 
 .customizer-section-stack {
   display: grid;
-  gap: 12px;
+  gap: 14px;
 }
 
 .customizer-group-section {
   display: grid;
-  gap: 8px;
+  gap: 9px;
 }
 
 .customizer-group-section-head {
@@ -606,23 +598,19 @@ button {
   margin: 0;
   font-size: 14px;
   font-weight: 700;
-  color: #253f53;
+  color: #243e52;
 }
 
 .customizer-group-section-count {
-  border-radius: 999px;
-  border: 1px solid rgba(95, 120, 138, 0.32);
-  background: rgba(214, 227, 237, 0.94);
-  color: #2d4458;
-  padding: 2px 9px;
+  color: #4a6378;
   font-size: 12px;
-  font-weight: 700;
+  font-weight: 600;
 }
 
 .customizer-group-section-hint {
   margin: 0;
-  font-size: 12px;
-  color: #51697c;
+  font-size: 13px;
+  color: #4d667b;
 }
 
 .customizer-group-list {
@@ -632,12 +620,12 @@ button {
 
 .customizer-group-card {
   margin: 0;
-  border: 1px solid rgba(101, 127, 146, 0.28);
+  border: 1px solid rgba(101, 127, 145, 0.24);
   border-radius: 12px;
-  padding: 10px;
-  background: rgba(228, 238, 246, 0.86);
+  padding: 12px;
+  background: rgba(248, 251, 253, 0.94);
   display: grid;
-  gap: 8px;
+  gap: 9px;
 }
 
 .customizer-sr-only {
@@ -659,59 +647,40 @@ button {
 }
 
 .customizer-group-label {
-  font-size: 13px;
+  font-size: 15px;
   font-weight: 700;
-  color: #233d50;
+  color: #20394d;
 }
 
 .customizer-group-meta {
-  margin-top: 2px;
-  font-size: 11px;
-  color: #50687a;
+  margin-top: 3px;
+  font-size: 12px;
+  color: #5a7387;
 }
 
-.customizer-group-feedback {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  gap: 6px;
-}
-
-.customizer-group-count-badge {
-  border-radius: 999px;
-  border: 1px solid rgba(94, 118, 136, 0.3);
-  background: rgba(209, 224, 234, 0.95);
-  color: #2e4658;
-  padding: 1px 8px;
-  font-size: 11px;
-  font-weight: 700;
-}
-
-.customizer-limit-badge {
-  border-radius: 999px;
-  border: 1px solid rgba(123, 87, 21, 0.38);
-  background: rgba(247, 227, 170, 0.9);
-  color: #6d5218;
-  padding: 1px 8px;
-  font-size: 11px;
-  font-weight: 700;
+.customizer-group-status {
+  font-size: 12px;
+  font-weight: 600;
+  color: #4b6479;
+  text-align: right;
 }
 
 .customizer-clear-btn {
   justify-self: flex-start;
-  border: 1px solid rgba(101, 127, 146, 0.4);
+  min-height: 36px;
+  border: 1px solid rgba(102, 127, 146, 0.34);
   border-radius: 999px;
-  background: rgba(214, 227, 237, 0.92);
-  color: #2f475b;
-  font-size: 11px;
+  background: rgba(236, 243, 248, 0.98);
+  color: #304a5f;
+  font-size: 12px;
   font-weight: 700;
-  padding: 4px 10px;
+  padding: 0 12px;
   cursor: pointer;
 }
 
 .customizer-options {
   display: grid;
-  gap: 7px;
+  gap: 8px;
 }
 
 .customizer-options--checks {
@@ -719,7 +688,7 @@ button {
 }
 
 .customizer-options--chips {
-  grid-template-columns: repeat(auto-fit, minmax(165px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
 }
 
 .customizer-option-copy {
@@ -730,43 +699,43 @@ button {
 }
 
 .customizer-option-allergens {
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.25;
-  color: #546d80;
+  color: #587084;
 }
 
 .customizer-option-price {
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 700;
-  color: #294256;
+  color: #284257;
   white-space: nowrap;
 }
 
 .customizer-check-option {
-  border: 1px solid rgba(102, 127, 147, 0.36);
-  border-radius: 10px;
-  background: rgba(216, 229, 239, 0.88);
-  color: #274054;
-  padding: 8px 10px;
+  min-height: 48px;
+  border: 1px solid rgba(102, 127, 146, 0.3);
+  border-radius: 12px;
+  background: rgba(240, 246, 250, 0.96);
+  color: #254055;
+  padding: 10px 12px;
   display: flex;
-  align-items: flex-start;
-  gap: 8px;
+  align-items: center;
+  gap: 9px;
   cursor: pointer;
-  transition: border-color 0.18s ease, transform 0.18s ease, background-color 0.18s ease;
+  transition: border-color 0.18s ease, background-color 0.18s ease;
 }
 
 .customizer-check-option:hover {
-  transform: translateY(-1px);
+  border-color: rgba(44, 102, 150, 0.45);
 }
 
 .customizer-check-option.is-active {
-  border-color: #1f6ca7;
-  background: rgba(33, 112, 177, 0.16);
-  animation: customizer-activate 180ms ease;
+  border-color: #2e6897;
+  background: rgba(47, 114, 162, 0.14);
 }
 
 .customizer-check-option.is-disabled {
-  opacity: 0.55;
+  opacity: 0.54;
   cursor: not-allowed;
 }
 
@@ -777,22 +746,20 @@ button {
 }
 
 .customizer-check-mark {
-  width: 18px;
-  height: 18px;
-  border-radius: 5px;
-  border: 1px solid rgba(92, 116, 134, 0.55);
+  width: 20px;
+  height: 20px;
+  border-radius: 6px;
+  border: 1px solid rgba(89, 113, 131, 0.5);
   background: #f7fbff;
   flex: 0 0 auto;
-  margin-top: 1px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  box-shadow: inset 0 -1px 0 rgba(38, 60, 78, 0.12);
 }
 
 .customizer-check-option.is-active .customizer-check-mark {
-  border-color: #165784;
-  background: #1e6ea8;
+  border-color: #1d5d8b;
+  background: #2272ab;
 }
 
 .customizer-check-option.is-active .customizer-check-mark::after {
@@ -806,53 +773,66 @@ button {
 }
 
 .customizer-chip-option {
-  border: 1px solid rgba(100, 126, 146, 0.36);
+  min-height: 48px;
+  border: 1px solid rgba(100, 126, 145, 0.3);
   border-radius: 12px;
-  background: rgba(216, 229, 239, 0.88);
-  color: #274054;
-  padding: 8px 10px;
+  background: rgba(240, 246, 250, 0.96);
+  color: #254055;
+  padding: 10px 12px;
   display: flex;
   justify-content: space-between;
-  align-items: flex-start;
+  align-items: center;
   gap: 8px;
   text-align: left;
   cursor: pointer;
-  transition: border-color 0.18s ease, transform 0.18s ease, background-color 0.18s ease;
+  transition: border-color 0.18s ease, background-color 0.18s ease;
 }
 
 .customizer-chip-option:hover {
-  transform: translateY(-1px);
+  border-color: rgba(44, 102, 150, 0.45);
 }
 
 .customizer-chip-option.is-active {
-  border-color: #1f6ca7;
-  background: rgba(33, 112, 177, 0.16);
-  animation: customizer-activate 180ms ease;
+  border-color: #2e6897;
+  background: rgba(47, 114, 162, 0.14);
+}
+
+.customizer-more-btn {
+  justify-self: flex-start;
+  min-height: 38px;
+  border: 1px solid rgba(102, 127, 146, 0.34);
+  border-radius: 999px;
+  background: rgba(236, 243, 248, 0.98);
+  color: #315066;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 0 12px;
+  cursor: pointer;
 }
 
 .customizer-group-warning {
-  font-size: 12px;
-  color: #6d4f18;
-  border: 1px solid rgba(126, 96, 39, 0.34);
+  font-size: 13px;
+  color: #6b4d1c;
+  border: 1px solid rgba(126, 97, 41, 0.34);
   border-radius: 8px;
-  padding: 6px 8px;
-  background: rgba(249, 231, 190, 0.82);
+  padding: 7px 9px;
+  background: rgba(249, 233, 194, 0.84);
 }
 
 .customizer-allergen-state {
   border-radius: 999px;
-  border: 1px solid rgba(92, 117, 136, 0.32);
-  background: rgba(212, 226, 236, 0.95);
-  color: #2f4759;
-  padding: 2px 9px;
+  border: 1px solid rgba(94, 117, 136, 0.28);
+  background: rgba(236, 242, 248, 0.98);
+  color: #355065;
+  padding: 3px 10px;
   font-size: 12px;
   font-weight: 700;
 }
 
 .customizer-allergen-state--warn {
-  border-color: rgba(133, 79, 33, 0.44);
-  background: rgba(247, 222, 170, 0.92);
-  color: #6e4d1d;
+  border-color: rgba(133, 80, 34, 0.42);
+  background: rgba(248, 224, 173, 0.9);
+  color: #6a4a1b;
 }
 
 .customizer-allergen-chip-wrap {
@@ -863,30 +843,30 @@ button {
 
 .customizer-allergen-chip {
   border-radius: 999px;
-  border: 1px solid rgba(133, 79, 33, 0.42);
-  background: rgba(248, 223, 171, 0.88);
-  color: #664819;
+  border: 1px solid rgba(133, 81, 35, 0.38);
+  background: rgba(249, 227, 182, 0.9);
+  color: #644716;
   font-size: 12px;
   font-weight: 700;
   padding: 3px 10px;
 }
 
 .customizer-error {
-  font-size: 12px;
+  font-size: 13px;
   color: #8f2b2b;
   border: 1px solid rgba(143, 43, 43, 0.25);
   border-radius: 10px;
-  padding: 8px 10px;
+  padding: 9px 10px;
   background: rgba(143, 43, 43, 0.08);
 }
 
 .customizer-footer {
-  border-top: 1px solid rgba(90, 115, 134, 0.3);
-  background: linear-gradient(180deg, rgba(229, 239, 246, 0.96) 0%, rgba(210, 225, 236, 0.96) 100%);
-  padding: 10px 12px;
+  border-top: 1px solid rgba(90, 115, 133, 0.24);
+  background: rgba(245, 249, 252, 0.98);
+  padding: 12px;
   display: grid;
   grid-template-columns: auto auto auto minmax(160px, 1fr);
-  gap: 8px;
+  gap: 10px;
   align-items: center;
 }
 
@@ -904,53 +884,43 @@ button {
 }
 
 .customizer-footer-total span {
-  font-size: 11px;
-  color: #4f6679;
+  font-size: 12px;
+  color: #4d6578;
 }
 
 .customizer-footer-total strong {
   font-size: 17px;
   line-height: 1;
-  color: #1f394d;
+  color: #1d3649;
 }
 
 .customizer-footer-cancel,
 .customizer-footer-primary {
-  border-radius: 10px;
-  height: 40px;
+  border-radius: 11px;
+  min-height: 44px;
   border: 1px solid transparent;
   font-size: 13px;
   font-weight: 700;
-  padding: 0 12px;
+  padding: 0 14px;
   cursor: pointer;
   white-space: nowrap;
 }
 
 .customizer-footer-cancel {
-  border-color: rgba(102, 127, 147, 0.34);
-  background: rgba(217, 229, 238, 0.92);
-  color: #2f475b;
+  border-color: rgba(102, 127, 146, 0.32);
+  background: rgba(236, 243, 248, 0.98);
+  color: #304a5f;
 }
 
 .customizer-footer-primary {
-  border-color: #0f537f;
-  background: #12649a;
-  color: #f5fbff;
+  border-color: #195f92;
+  background: #216fa7;
+  color: #f7fbff;
 }
 
 .customizer-footer-primary:disabled {
   opacity: 0.55;
   cursor: not-allowed;
-}
-
-@keyframes customizer-activate {
-  from {
-    transform: scale(0.99);
-  }
-
-  to {
-    transform: scale(1);
-  }
 }
 
 @keyframes customizer-fade-up {
@@ -1013,6 +983,17 @@ button {
     grid-area: add;
     width: 100%;
   }
+}
+
+.customizer-close-btn:focus-visible,
+.customizer-clear-btn:focus-visible,
+.customizer-more-btn:focus-visible,
+.customizer-check-option:focus-within,
+.customizer-chip-option:focus-visible,
+.customizer-footer-cancel:focus-visible,
+.customizer-footer-primary:focus-visible {
+  outline: 2px solid #1f6ea7;
+  outline-offset: 2px;
 }
 
 .menu-item--editor {

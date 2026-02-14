@@ -1,20 +1,52 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import { Card } from "@/components/ui/Card"
 import { Button } from "@/components/ui/Button"
 import { Divider } from "@/components/ui/Divider"
 import type { StaffRole } from "@/lib/staffAuth"
 
+const ROLE_LABELS: Record<StaffRole, string> = {
+  admin: "Admin",
+  waiter: "Waiter",
+  bar: "Bar",
+  kitchen: "Kitchen",
+}
+
+function roleFromNextPath(nextPath: string | null): StaffRole | null {
+  if (!nextPath || !nextPath.startsWith("/")) return null
+  const normalized = nextPath.toLowerCase()
+
+  if (/^\/(?:r\/[^/]+\/)?bar(\/|$)/.test(normalized)) {
+    return "bar"
+  }
+  if (/^\/(?:r\/[^/]+\/)?kitchen(\/|$)/.test(normalized)) {
+    return "kitchen"
+  }
+  if (
+    /^\/(?:r\/[^/]+\/)?admin(\/|$)/.test(normalized) ||
+    /^\/r\/[^/]+\/dashboard(\/|$)/.test(normalized)
+  ) {
+    return "admin"
+  }
+
+  return null
+}
+
 export default function StaffLoginPage() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const pathname = usePathname() ?? "/staff/login"
+  const nextPath = searchParams.get("next")
   const tenantSlugMatch = pathname.match(/^\/r\/([^/]+)/)
   const tenantPrefix = tenantSlugMatch?.[1]
     ? `/r/${encodeURIComponent(tenantSlugMatch[1])}`
     : ""
+  const forcedRole = useMemo(
+    () => roleFromNextPath(nextPath),
+    [nextPath]
+  )
 
   const roleRoutes: Record<StaffRole, string> = {
     admin: tenantPrefix ? `${tenantPrefix}/dashboard` : "/admin",
@@ -23,21 +55,29 @@ export default function StaffLoginPage() {
     kitchen: tenantPrefix ? `${tenantPrefix}/kitchen` : "/kitchen",
   }
 
-  const [role, setRole] = useState<StaffRole>("admin")
+  const [role, setRole] = useState<StaffRole>(forcedRole ?? "admin")
   const [passcode, setPasscode] = useState("")
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (forcedRole) {
+      setRole(forcedRole)
+    }
+  }, [forcedRole])
 
   async function login() {
     if (submitting || !passcode.trim()) return
     setSubmitting(true)
     setError(null)
 
+    const activeRole = forcedRole ?? role
+
     try {
       const res = await fetch("/api/staff/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ role, passcode }),
+        body: JSON.stringify({ role: activeRole, passcode }),
       })
 
       if (!res.ok) {
@@ -59,13 +99,12 @@ export default function StaffLoginPage() {
         return
       }
 
-      const nextPath = searchParams.get("next")
       if (nextPath && nextPath.startsWith("/")) {
         router.replace(nextPath)
         return
       }
 
-      router.replace(roleRoutes[role])
+      router.replace(roleRoutes[activeRole])
     } finally {
       setSubmitting(false)
     }
@@ -76,26 +115,45 @@ export default function StaffLoginPage() {
       <Card>
         <div className="text-lg font-semibold">Staff Login</div>
         <div className="text-sm opacity-70">
-          Sign in with your role passcode.
+          {forcedRole
+            ? `Sign in to ${ROLE_LABELS[forcedRole]} with your passcode.`
+            : "Sign in with your role passcode."}
         </div>
       </Card>
 
       <Card>
         <div className="space-y-3">
-          <label className="text-sm opacity-70" htmlFor="role">
-            Role
-          </label>
-          <select
-            id="role"
-            value={role}
-            onChange={e => setRole(e.target.value as StaffRole)}
-            className="input"
-          >
-            <option value="admin">Admin</option>
-            <option value="waiter">Waiter</option>
-            <option value="bar">Bar</option>
-            <option value="kitchen">Kitchen</option>
-          </select>
+          {forcedRole ? (
+            <div>
+              <label className="text-sm opacity-70" htmlFor="role-locked">
+                Role
+              </label>
+              <input
+                id="role-locked"
+                value={ROLE_LABELS[forcedRole]}
+                className="input"
+                readOnly
+                aria-readonly="true"
+              />
+            </div>
+          ) : (
+            <div>
+              <label className="text-sm opacity-70" htmlFor="role">
+                Role
+              </label>
+              <select
+                id="role"
+                value={role}
+                onChange={e => setRole(e.target.value as StaffRole)}
+                className="input"
+              >
+                <option value="admin">Admin</option>
+                <option value="waiter">Waiter</option>
+                <option value="bar">Bar</option>
+                <option value="kitchen">Kitchen</option>
+              </select>
+            </div>
+          )}
 
           <label className="text-sm opacity-70" htmlFor="staff-passcode">
             Passcode
