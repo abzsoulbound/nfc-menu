@@ -3,9 +3,27 @@
 import { useEffect, useState } from "react"
 import { MenuItemCard } from "@/components/menu/MenuItemCard"
 import { QuantitySelector } from "@/components/order/QuantitySelector"
-import { EditPanel } from "@/components/order/EditPanel"
+import EditPanel from "@/components/order/EditPanel"
 import { Button } from "@/components/ui/Button"
 import { useCartStore } from "@/store/useCartStore"
+
+type MenuItem = {
+  id: string
+  name: string
+  description: string
+  basePrice: number
+  vatRate: number
+  allergens?: string[]
+  station?: string
+}
+
+type MenuSection = {
+  items: MenuItem[]
+}
+
+type MenuResponse = {
+  menu: MenuSection[]
+}
 
 export function StaffOrderEditor({
   sessionId,
@@ -14,16 +32,19 @@ export function StaffOrderEditor({
   sessionId: string
   onBack: () => void
 }) {
-  const [menu, setMenu] = useState<any[]>([])
+  const [menu, setMenu] = useState<MenuItem[]>([])
   const { items, addItem, updateItem, removeItem } =
     useCartStore()
 
   useEffect(() => {
-    fetch("/api/menu")
-      .then(r => r.json())
-      .then(d =>
-        setMenu(d.menu.flatMap((s: any) => s.items))
-      )
+    const loadMenu = async () => {
+      const res = await fetch("/api/menu")
+      const data: MenuResponse = await res.json()
+      const flatItems = data.menu.flatMap(section => section.items)
+      setMenu(flatItems)
+    }
+
+    loadMenu()
   }, [])
 
   return (
@@ -33,9 +54,7 @@ export function StaffOrderEditor({
       </Button>
 
       {menu.map(item => {
-        const cartItem = items.find(
-          i => i.id === item.id
-        )
+        const cartItem = items.find(i => i.id === item.id)
 
         return (
           <MenuItemCard
@@ -49,20 +68,25 @@ export function StaffOrderEditor({
           >
             <QuantitySelector
               value={cartItem?.quantity ?? 0}
-              onChange={q => {
-                if (q === 0) removeItem(item.id)
-                else if (cartItem)
+              onChange={(q: number) => {
+                if (q === 0) {
+                  removeItem(item.id)
+                  return
+                }
+
+                if (cartItem) {
                   updateItem(item.id, { quantity: q })
-                else
+                } else {
                   addItem({
                     id: item.id,
                     name: item.name,
                     quantity: q,
-                    edits: null,
+                    edits: null as unknown,
                     allergens: item.allergens,
                     unitPrice: item.basePrice,
                     station: item.station,
                   })
+                }
               }}
             />
 
@@ -70,7 +94,7 @@ export function StaffOrderEditor({
               <EditPanel
                 item={item}
                 value={cartItem.edits}
-                onChange={edits =>
+                onChange={(edits: unknown) =>
                   updateItem(item.id, { edits })
                 }
               />
