@@ -82,23 +82,21 @@ export function StaffOrderEditor({
                     name: item.name,
                     quantity: q,
                     edits: null as unknown,
-                    allergens: item.allergens,
+                    allergens: item.allergens || [],
                     unitPrice: item.basePrice,
-                    station: item.station,
+                    station: (item.station || "KITCHEN") as "KITCHEN" | "BAR",
                   })
                 }
               }}
             />
 
+            {/* EditPanel temporarily disabled - needs proper implementation
             {cartItem && (
               <EditPanel
                 item={item}
-                value={cartItem.edits}
-                onChange={(edits: unknown) =>
-                  updateItem(item.id, { edits })
-                }
+                onClose={() => {}}
               />
-            )}
+            )} */}
           </MenuItemCard>
         )
       })}
