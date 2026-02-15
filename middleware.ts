@@ -388,16 +388,10 @@ export async function middleware(req: NextRequest) {
     pathname === "/api/session" ||
     pathname === "/api/sessions"
 
+    // Allow fallback (default restaurant) to satisfy tenant context for customer APIs.
+  // If the resolver fails, we still proceed with DEFAULT_RESTAURANT_* context.
   if (requiresTenantContext && !contextResult.resolved) {
-    const tenantError = NextResponse.json(
-      {
-        error: "TENANT_CONTEXT_MISSING",
-        requestId,
-      },
-      { status: 400 }
-    )
-    tenantError.headers.set(REQUEST_ID_HEADER, requestId)
-    return tenantError
+    // do nothing: fallbackContext() is already set in `context`
   }
 
   const requestHeaders = new Headers(req.headers)
