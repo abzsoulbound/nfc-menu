@@ -260,7 +260,7 @@ export function RestaurantOnboarding() {
                 </div>
                 <div className="opacity-70">
                   Order URL:{" "}
-                  <code>/order/t/1?restaurantSlug={restaurant.slug}</code>
+                  <code>/order/t/1</code>
                 </div>
               </div>
             ))}

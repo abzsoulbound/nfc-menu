@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useMemo, useState } from "react"
-import { usePathname, useRouter, useSearchParams } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import { Card } from "@/components/ui/Card"
 import { Button } from "@/components/ui/Button"
 import { Divider } from "@/components/ui/Divider"
@@ -18,16 +18,13 @@ function roleFromNextPath(nextPath: string | null): StaffRole | null {
   if (!nextPath || !nextPath.startsWith("/")) return null
   const normalized = nextPath.toLowerCase()
 
-  if (/^\/(?:r\/[^/]+\/)?bar(\/|$)/.test(normalized)) {
+  if (/^\/bar(\/|$)/.test(normalized)) {
     return "bar"
   }
-  if (/^\/(?:r\/[^/]+\/)?kitchen(\/|$)/.test(normalized)) {
+  if (/^\/kitchen(\/|$)/.test(normalized)) {
     return "kitchen"
   }
-  if (
-    /^\/(?:r\/[^/]+\/)?admin(\/|$)/.test(normalized) ||
-    /^\/r\/[^/]+\/dashboard(\/|$)/.test(normalized)
-  ) {
+  if (/^\/admin(\/|$)/.test(normalized)) {
     return "admin"
   }
 
@@ -37,22 +34,17 @@ function roleFromNextPath(nextPath: string | null): StaffRole | null {
 export default function StaffLoginPage() {
   const router = useRouter()
   const searchParams = useSearchParams()
-  const pathname = usePathname() ?? "/staff/login"
   const nextPath = searchParams.get("next")
-  const tenantSlugMatch = pathname.match(/^\/r\/([^/]+)/)
-  const tenantPrefix = tenantSlugMatch?.[1]
-    ? `/r/${encodeURIComponent(tenantSlugMatch[1])}`
-    : ""
   const forcedRole = useMemo(
     () => roleFromNextPath(nextPath),
     [nextPath]
   )
 
   const roleRoutes: Record<StaffRole, string> = {
-    admin: tenantPrefix ? `${tenantPrefix}/dashboard` : "/admin",
-    waiter: tenantPrefix ? `${tenantPrefix}/staff` : "/staff",
-    bar: tenantPrefix ? `${tenantPrefix}/bar` : "/bar",
-    kitchen: tenantPrefix ? `${tenantPrefix}/kitchen` : "/kitchen",
+    admin: "/admin",
+    waiter: "/staff",
+    bar: "/bar",
+    kitchen: "/kitchen",
   }
 
   const [role, setRole] = useState<StaffRole>(forcedRole ?? "admin")
@@ -185,11 +177,7 @@ export default function StaffLoginPage() {
         variant="secondary"
         className="w-full"
         onClick={() =>
-          router.push(
-            tenantPrefix
-              ? `/order${tenantPrefix}/menu`
-              : "/order/menu"
-          )
+          router.push("/order/menu")
         }
       >
         Back to menu

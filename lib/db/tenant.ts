@@ -1,4 +1,4 @@
-import { DEFAULT_RESTAURANT_ID, DEFAULT_RESTAURANT_SLUG } from "@/lib/restaurantConstants"
+import { DEFAULT_RESTAURANT_ID } from "@/lib/restaurantConstants"
 
 type HeaderLike = {
   get: (key: string) => string | null
@@ -31,13 +31,10 @@ export function getRequestId(headers: HeaderLike): string {
 
 export function requireRestaurantContext(headers: HeaderLike) {
   const restaurantId = getRestaurantIdOrThrow(headers)
-  const restaurantSlug =
-    readHeader(headers, "x-restaurant-slug") || DEFAULT_RESTAURANT_SLUG
   const requestId = getRequestId(headers)
 
   return {
     restaurantId,
-    restaurantSlug,
     requestId,
     isDefaultRestaurant: restaurantId === DEFAULT_RESTAURANT_ID,
   }

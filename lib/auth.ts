@@ -12,7 +12,6 @@ export type StaffIdentity = {
   staffSessionId: string
   role: string | null
   restaurantId: string
-  restaurantSlug: string
 }
 
 function readHeader(req: Request | undefined, key: string) {
@@ -99,7 +98,6 @@ export async function requireStaffSession(
       staffSessionId: "demo-staff-session",
       role: resolvedRole,
       restaurantId: context.restaurantId,
-      restaurantSlug: context.restaurantSlug,
     }
   }
 
@@ -152,7 +150,6 @@ export async function requireStaffSession(
     staffSessionId: session.id,
     role: session.staffUser.role,
     restaurantId: context.restaurantId,
-    restaurantSlug: context.restaurantSlug,
   }
 }
 

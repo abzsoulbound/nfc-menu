@@ -1,7 +1,6 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { usePathname } from "next/navigation"
 import { Card } from "@/components/ui/Card"
 import { Badge } from "@/components/ui/Badge"
 import { Divider } from "@/components/ui/Divider"
@@ -17,11 +16,6 @@ type Session = {
 }
 
 export default function StaffSessionsPage() {
-  const pathname = usePathname() ?? "/staff/sessions"
-  const tenantSlugMatch = pathname.match(/^\/r\/([^/]+)/)
-  const tenantPrefix = tenantSlugMatch?.[1]
-    ? `/r/${encodeURIComponent(tenantSlugMatch[1])}`
-    : ""
   const [sessions, setSessions] = useState<Session[]>([])
   const [activeSession, setActiveSession] = useState<Session | null>(null)
 
@@ -67,7 +61,8 @@ export default function StaffSessionsPage() {
 
   useEffect(() => {
     fetchSessions()
-    const interval = setInterval(fetchSessions, 5000)
+    // Sessions are active; poll every 8 seconds for active customer sessions
+    const interval = setInterval(fetchSessions, 8000)
     return () => clearInterval(interval)
   }, [])
 
@@ -160,11 +155,7 @@ export default function StaffSessionsPage() {
           <div className="text-xs">
             Opening <code>/order/menu</code> does not create a table session. Sessions
             appear when guests open a tag URL like{" "}
-            <code>
-              {tenantPrefix
-                ? `/order${tenantPrefix}/t/<tagId>`
-                : "/order/t/<tagId>"}
-            </code>
+            <code>/order/t/&lt;tagId&gt;</code>
             .
           </div>
         </div>

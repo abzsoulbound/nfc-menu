@@ -263,10 +263,10 @@
 
 .card {
   padding: 16px;
-  border-radius: 14px;
+  border-radius: 16px;
   border: 1px solid var(--border);
-  background: var(--bg-secondary);
-  box-shadow: 0 6px 22px rgba(15, 32, 46, 0.08);
+  background: var(--lux-card, var(--bg-secondary));
+  box-shadow: 0 10px 24px var(--lux-shadow, rgba(15, 32, 46, 0.08));
 }
 
 .badge {
@@ -298,12 +298,12 @@
 }
 
 .input:focus {
-  outline: 2px solid rgba(31, 111, 178, 0.35);
+  outline: 2px solid rgba(138, 106, 60, 0.4);
   outline-offset: 1px;
 }
 
 .btn-primary {
-  border: 1px solid #1a5f97;
+  border: 1px solid rgba(138, 106, 60, 0.7);
   background: var(--accent-action);
   color: var(--accent-action-text);
 }
@@ -315,9 +315,9 @@
 }
 
 .btn-destructive {
-  border: 1px solid #b43f3f;
-  background: #cc5757;
-  color: #fff;
+  border: 1px solid #c28a8a;
+  background: #e7c1c1;
+  color: #6a3333;
 }
 
 .modal-overlay {

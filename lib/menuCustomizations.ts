@@ -56,6 +56,7 @@ type CustomizationDefinition = {
   editPolicy?: MenuEditPolicy
   needsOwnerReview?: boolean
   autoRemovalGroup?: boolean
+  autoExtraGroup?: boolean
   baseIngredientIds?: string[]
   lockedIngredientIds?: string[]
   groups?: MenuModifierGroup[]
@@ -1102,6 +1103,156 @@ const explicitCustomizationByItemId: Record<string, MenuCustomization> = {
       },
     ],
   }),
+  "full-english": finalizeCustomization({
+    editPolicy: "full",
+    needsOwnerReview: true,
+    baseIngredientIds: ["egg", "beans", "bacon", "cumberland_sausage", "hash_browns", "mushroom", "tomato"],
+    lockedIngredientIds: [],
+    groups: [
+      {
+        id: "sausage_choice",
+        name: "Sausage substitute",
+        type: "single",
+        required: false,
+        options: [
+          {
+            id: "cumberland",
+            label: "Cumberland Sausage",
+            priceDelta: 0,
+            default: true,
+            ingredientIds: ["cumberland_sausage"],
+            removeIngredientIds: ["beef_sausage", "vegan_sausage", "vegetarian_sausage"],
+          },
+          {
+            id: "beef",
+            label: "Beef Sausage",
+            priceDelta: 0,
+            ingredientIds: ["beef_sausage"],
+            removeIngredientIds: ["cumberland_sausage", "vegan_sausage", "vegetarian_sausage"],
+          },
+          {
+            id: "vegan",
+            label: "Vegan Sausage",
+            priceDelta: 0,
+            ingredientIds: ["vegan_sausage"],
+            removeIngredientIds: ["cumberland_sausage", "beef_sausage", "vegetarian_sausage"],
+          },
+          {
+            id: "vegetarian",
+            label: "Vegetarian Sausage",
+            priceDelta: 0,
+            ingredientIds: ["vegetarian_sausage"],
+            removeIngredientIds: ["cumberland_sausage", "beef_sausage", "vegan_sausage"],
+          },
+        ],
+      },
+      {
+        id: "hash_brown_choice",
+        name: "Base vegetable",
+        type: "single",
+        required: false,
+        options: [
+          {
+            id: "hash_browns",
+            label: "Hash Browns",
+            priceDelta: 0,
+            default: true,
+            ingredientIds: ["hash_browns"],
+            removeIngredientIds: ["grilled_tomato", "mushroom_grilled"],
+          },
+          {
+            id: "grilled_tomato",
+            label: "Grilled Tomato",
+            priceDelta: 0,
+            ingredientIds: ["grilled_tomato"],
+            removeIngredientIds: ["hash_browns", "mushroom_grilled"],
+          },
+          {
+            id: "mushroom",
+            label: "Grilled Mushroom",
+            priceDelta: 0,
+            ingredientIds: ["mushroom_grilled"],
+            removeIngredientIds: ["hash_browns", "grilled_tomato"],
+          },
+        ],
+      },
+      {
+        id: "bacon_choice",
+        name: "Protein upgrade",
+        type: "single",
+        required: false,
+        options: [
+          {
+            id: "bacon_standard",
+            label: "Bacon (standard)",
+            priceDelta: 0,
+            default: true,
+            ingredientIds: ["bacon"],
+            removeIngredientIds: ["turkey_rashers", "smoked_bacon"],
+          },
+          {
+            id: "smoked_bacon",
+            label: "Smoked Bacon",
+            priceDelta: 0.50,
+            ingredientIds: ["smoked_bacon"],
+            removeIngredientIds: ["bacon", "turkey_rashers"],
+          },
+          {
+            id: "turkey",
+            label: "Turkey Rashers",
+            priceDelta: 0,
+            ingredientIds: ["turkey_rashers"],
+            removeIngredientIds: ["bacon", "smoked_bacon"],
+          },
+        ],
+      },
+    ],
+  }),
+  "halal-breakfast": finalizeCustomization({
+    editPolicy: "full",
+    needsOwnerReview: true,
+    baseIngredientIds: ["egg", "turkey_rashers", "beef_sausage", "tomato", "beans", "hash_browns", "mushroom"],
+    lockedIngredientIds: [],
+    groups: [
+      {
+        id: "sausage_choice",
+        name: "Sausage substitute",
+        type: "single",
+        required: false,
+        options: [
+          {
+            id: "beef",
+            label: "Beef Sausage",
+            priceDelta: 0,
+            default: true,
+            ingredientIds: ["beef_sausage"],
+            removeIngredientIds: ["cumberland_sausage", "vegan_sausage", "vegetarian_sausage"],
+          },
+          {
+            id: "cumberland",
+            label: "Cumberland Sausage",
+            priceDelta: 0,
+            ingredientIds: ["cumberland_sausage"],
+            removeIngredientIds: ["beef_sausage", "vegan_sausage", "vegetarian_sausage"],
+          },
+          {
+            id: "vegan",
+            label: "Vegan Sausage",
+            priceDelta: 0,
+            ingredientIds: ["vegan_sausage"],
+            removeIngredientIds: ["beef_sausage", "cumberland_sausage", "vegetarian_sausage"],
+          },
+          {
+            id: "vegetarian",
+            label: "Vegetarian Sausage",
+            priceDelta: 0,
+            ingredientIds: ["vegetarian_sausage"],
+            removeIngredientIds: ["beef_sausage", "cumberland_sausage", "vegan_sausage"],
+          },
+        ],
+      },
+    ],
+  }),
   "arrabiatta-prawns": finalizeCustomization({
     editPolicy: "full",
     needsOwnerReview: true,
@@ -1215,6 +1366,7 @@ const explicitCustomizationByItemId: Record<string, MenuCustomization> = {
     lockedIngredientIds: ["espresso_shot"],
     groups: [milkChoiceGroup],
     autoRemovalGroup: false,
+    autoExtraGroup: false,
   }),
   cappuccino: finalizeCustomization({
     editPolicy: "full",
@@ -1223,6 +1375,7 @@ const explicitCustomizationByItemId: Record<string, MenuCustomization> = {
     lockedIngredientIds: ["espresso_shot"],
     groups: [milkChoiceGroup],
     autoRemovalGroup: false,
+    autoExtraGroup: false,
   }),
   "hot-chocolate": finalizeCustomization({
     editPolicy: "full",
@@ -1231,6 +1384,7 @@ const explicitCustomizationByItemId: Record<string, MenuCustomization> = {
     lockedIngredientIds: ["hot_chocolate_powder"],
     groups: [milkChoiceGroup],
     autoRemovalGroup: false,
+    autoExtraGroup: false,
   }),
 }
 
@@ -1364,6 +1518,32 @@ function buildRemovalGroup(
   }
 }
 
+function buildExtraIngredientsGroup(
+  baseIngredientIds: string[],
+  lockedIngredientIds: string[]
+): MenuModifierGroup | null {
+  const lockedSet = new Set(lockedIngredientIds)
+  const removable = baseIngredientIds.filter(
+    ingredientId => !lockedSet.has(ingredientId)
+  )
+
+  if (removable.length === 0) return null
+
+  return {
+    id: "extra_ingredients",
+    name: "Add extras",
+    type: "multi",
+    min: 0,
+    max: removable.length,
+    options: removable.map(ingredientId => ({
+      id: `extra_${ingredientId}`,
+      label: `Extra ${ingredientLabel(ingredientId)}`,
+      priceDelta: normalizePriceDelta(0.50),
+      ingredientIds: [ingredientId],
+    })),
+  }
+}
+
 function finalizeCustomization(
   definition: CustomizationDefinition,
   defaults?: { needsOwnerReview?: boolean }
@@ -1407,6 +1587,21 @@ function finalizeCustomization(
     )
     if (removalGroup) {
       groups.push(removalGroup)
+    }
+  }
+
+  const autoExtraGroup = definition.autoExtraGroup !== false
+  if (
+    autoExtraGroup &&
+    editPolicy !== "none" &&
+    !groups.some(group => group.id === "extra_ingredients")
+  ) {
+    const extraGroup = buildExtraIngredientsGroup(
+      baseIngredientIds,
+      lockedIngredientIds
+    )
+    if (extraGroup) {
+      groups.push(extraGroup)
     }
   }
 

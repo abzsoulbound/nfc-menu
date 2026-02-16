@@ -3,7 +3,6 @@
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { useEffect, useMemo, useState } from "react"
-import { DEFAULT_RESTAURANT_SLUG } from "@/lib/restaurantConstants"
 import { useSessionStore } from "@/store/useSessionStore"
 import { readApiErrorInfo } from "@/lib/clientApiErrors"
 import styles from "./Header.module.css"
@@ -44,8 +43,8 @@ export function Header() {
   const ensureClientKey = useSessionStore(s => s.ensureClientKey)
   const [cartCount, setCartCount] = useState(0)
   const [cartUnavailable, setCartUnavailable] = useState(false)
+  const [cartOpen, setCartOpen] = useState(false)
   const [scrolled, setScrolled] = useState(false)
-  const [searchTenantSlug, setSearchTenantSlug] = useState<string | null>(null)
   const [branding, setBranding] = useState({
     name: "Marlo's Brasserie",
     logoUrl: "/images/marlos-wordmark-alpha.svg",
@@ -53,76 +52,44 @@ export function Header() {
     secondaryColor: "#d5e4ee",
   })
 
-  useEffect(() => {
-    if (typeof window === "undefined") return
-    const raw = new URLSearchParams(window.location.search).get(
-      "restaurantSlug"
-    )
-    setSearchTenantSlug(raw ? safeDecode(raw) : null)
-  }, [pathname])
-
   const routeContext = useMemo(() => {
-    const orderTenantMatch = pathname.match(/^\/order\/r\/([^/]+)(\/.*)?$/)
-    const tenantMatch = pathname.match(/^\/r\/([^/]+)(\/.*)?$/)
     const orderDefaultMatch = pathname.match(/^\/order(\/.*)?$/)
 
-    const tenantSlugFromPath = orderTenantMatch?.[1]
-      ? safeDecode(orderTenantMatch[1])
-      : tenantMatch?.[1]
-      ? safeDecode(tenantMatch[1])
-      : null
-    const tenantSlug = tenantSlugFromPath || searchTenantSlug || null
-
-    const normalizedPath = orderTenantMatch
-      ? orderTenantMatch[2] || "/order"
-      : orderDefaultMatch
+    const normalizedPath = orderDefaultMatch
       ? orderDefaultMatch[1] || "/"
-      : tenantMatch
-      ? tenantMatch[2] || "/"
       : pathname
 
     const tagMatch = normalizedPath.match(/^\/t\/([^/]+)/)
     const tagId = tagMatch?.[1] ? safeDecode(tagMatch[1]) : null
     const basePrefix = "/order"
-    const withTenantQuery = (path: string) => {
-      if (!tenantSlug) return path
-      const separator = path.includes("?") ? "&" : "?"
-      return `${path}${separator}restaurantSlug=${encodeURIComponent(tenantSlug)}`
-    }
-    const isOrderPath =
-      pathname.startsWith("/order") || pathname.startsWith("/r/") || pathname.startsWith("/t/")
+    const isOrderPath = pathname.startsWith("/order") || pathname.startsWith("/t/")
 
     return {
-      tenantSlug,
       tagId,
       isOrderingRoute:
         isOrderPath &&
         (normalizedPath === "/" ||
           normalizedPath === "/menu" ||
           normalizedPath.startsWith("/t/")),
-      homeHref: withTenantQuery(
+      homeHref:
         tagId
         ? `${basePrefix}/t/${encodeURIComponent(tagId)}`
-        : `${basePrefix}/menu`
-      ),
-      cartHref: withTenantQuery(
+        : `${basePrefix}/menu`,
+      cartHref:
         tagId
         ? `${basePrefix}/t/${encodeURIComponent(tagId)}/review`
-        : `${basePrefix}/menu`
-      ),
+        : `${basePrefix}/menu`,
     }
-  }, [pathname, searchTenantSlug])
+  }, [pathname])
 
   useEffect(() => {
     let active = true
 
     async function loadBranding() {
       try {
-        const slug = routeContext.tenantSlug || DEFAULT_RESTAURANT_SLUG
-        const res = await fetch(
-          `/api/restaurant/current?restaurantSlug=${encodeURIComponent(slug)}`,
-          { cache: "no-store" }
-        )
+        const res = await fetch("/api/restaurant/current", {
+          cache: "no-store",
+        })
         if (!res.ok) return
         const payload = (await res.json()) as {
           restaurant?: {
@@ -151,7 +118,7 @@ export function Header() {
     return () => {
       active = false
     }
-  }, [routeContext.tenantSlug])
+  }, [pathname])
 
   useEffect(() => {
     if (typeof document === "undefined") return
@@ -160,6 +127,10 @@ export function Header() {
       branding.primaryColor
     )
   }, [branding.primaryColor])
+
+  useEffect(() => {
+    setCartOpen(false)
+  }, [pathname])
 
   useEffect(() => {
     const onScroll = () => {
@@ -250,6 +221,7 @@ export function Header() {
     : cartCount > 99
     ? "99+"
     : String(cartCount)
+  const showBadge = cartUnavailable || cartCount > 0
   const cartAriaLabel = cartUnavailable
     ? "Basket status unavailable. Tap to retry."
     : `Open cart (${cartCount} item${cartCount === 1 ? "" : "s"})`
@@ -276,18 +248,18 @@ export function Header() {
           />
         </Link>
 
-        {routeContext.tagId ? (
-          <Link
-            href={routeContext.cartHref}
-            className={
-              cartUnavailable
-                ? `${styles.cart} ${styles.cartWarning}`
-                : styles.cart
-            }
-            aria-label={cartAriaLabel}
-            aria-disabled={cartUnavailable}
-            onClick={event => {
-              if (!cartUnavailable) return
+        <button
+          type="button"
+          className={
+            cartUnavailable
+              ? `${styles.cart} ${styles.cartWarning}`
+              : styles.cart
+          }
+          aria-label={cartAriaLabel}
+          aria-disabled={cartUnavailable}
+          aria-expanded={cartOpen}
+          onClick={event => {
+            if (cartUnavailable) {
               event.preventDefault()
               if (!sessionId) return
               void (async () => {
@@ -324,9 +296,13 @@ export function Header() {
                   // keep warning badge until next successful poll
                 }
               })()
-            }}
-          >
-            <CartIcon />
+              return
+            }
+            setCartOpen(true)
+          }}
+        >
+          <CartIcon />
+          {showBadge && (
             <span
               className={
                 cartUnavailable
@@ -336,14 +312,49 @@ export function Header() {
             >
               {badgeLabel}
             </span>
-          </Link>
-        ) : (
-          <div className={`${styles.cart} ${styles.cartStatic}`} aria-hidden="true">
-            <CartIcon />
-            <span className={styles.cartBadge}>{badgeLabel}</span>
-          </div>
-        )}
+          )}
+        </button>
       </div>
+
+      {cartOpen && (
+        <div
+          className={styles.cartDrawerOverlay}
+          role="dialog"
+          aria-modal="true"
+          onClick={() => setCartOpen(false)}
+        >
+          <div
+            className={styles.cartDrawer}
+            onClick={event => event.stopPropagation()}
+          >
+            <div className={styles.cartDrawerHeader}>
+              <div className={styles.cartDrawerTitle}>Basket</div>
+              <button
+                type="button"
+                className={styles.cartDrawerClose}
+                onClick={() => setCartOpen(false)}
+                aria-label="Close basket"
+              >
+                ×
+              </button>
+            </div>
+            <div className={styles.cartDrawerBody}>
+              <div className={styles.cartDrawerCount}>
+                {cartUnavailable
+                  ? "Basket count unavailable"
+                  : `${cartCount} item${cartCount === 1 ? "" : "s"} in your basket`}
+              </div>
+              <Link
+                href={routeContext.cartHref}
+                className={styles.cartDrawerAction}
+                onClick={() => setCartOpen(false)}
+              >
+                View basket
+              </Link>
+            </div>
+          </div>
+        </div>
+      )}
     </header>
   )
 }

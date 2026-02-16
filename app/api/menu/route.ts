@@ -1,3 +1,5 @@
+export const runtime = 'nodejs'
+
 import { NextResponse } from "next/server"
 import { isMenuLocked } from "@/lib/menu"
 import { menu as fallbackMenu } from "@/lib/menu-data"
@@ -13,28 +15,42 @@ export async function GET(req: Request) {
       restaurantSlug: restaurant.slug,
     })
 
-    return NextResponse.json({
-      menu,
-      locked: isMenuLocked(),
-      source: "db",
-      restaurant: {
-        id: restaurant.id,
-        slug: restaurant.slug,
-        name: restaurant.name,
+    return NextResponse.json(
+      {
+        menu,
+        locked: isMenuLocked(),
+        source: "db",
+        restaurant: {
+          id: restaurant.id,
+          slug: restaurant.slug,
+          name: restaurant.name,
+        },
       },
-    })
+      {
+        headers: {
+          "Cache-Control": "public, s-maxage=60, stale-while-revalidate=300",
+        },
+      }
+    )
   } catch (error) {
     console.error("menu_get_failed_using_fallback", error)
-    return NextResponse.json({
-      menu: fallbackMenu,
-      locked: isMenuLocked(),
-      source: "fallback",
-      restaurant: {
-        id: restaurant.id,
-        slug: restaurant.slug,
-        name: restaurant.name,
+    return NextResponse.json(
+      {
+        menu: fallbackMenu,
+        locked: isMenuLocked(),
+        source: "fallback",
+        restaurant: {
+          id: restaurant.id,
+          slug: restaurant.slug,
+          name: restaurant.name,
+        },
       },
-    })
+      {
+        headers: {
+          "Cache-Control": "public, s-maxage=60, stale-while-revalidate=300",
+        },
+      }
+    )
   }
 }
 

@@ -70,9 +70,10 @@ export default function StaffTagsPage() {
 
   useEffect(() => {
     fetchTags()
+    // Tags are mostly static; poll every 30 seconds (or remove if tags are configured once)
     const interval = setInterval(() => {
       fetchTags()
-    }, 5000)
+    }, 30000)
     return () => clearInterval(interval)
   }, [])
 

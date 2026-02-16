@@ -1,13 +1,14 @@
-import { Card } from "@/components/ui/Card"
-
 export default function GlobalLoading() {
   return (
-    <div className="min-h-screen flex items-center justify-center p-6 surface-primary">
-      <Card className="w-full max-w-sm text-center">
-        <div className="text-sm text-secondary">
-          Loading…
+    <div className="menu-page">
+      <div className="order-skeleton">
+        <div className="skeleton-block skeleton-pill" />
+        <div className="order-skeleton-grid">
+          <div className="skeleton-block skeleton-card" />
+          <div className="skeleton-block skeleton-card" />
+          <div className="skeleton-block skeleton-card" />
         </div>
-      </Card>
+      </div>
     </div>
   )
 }

@@ -102,7 +102,8 @@ export default function KitchenDashboard() {
 
     void loadRestaurant()
     fetchQueue()
-    const interval = setInterval(fetchQueue, 3000)
+    // Poll queue every 8 seconds (kitchen staff can handle 5-10s lag)
+    const interval = setInterval(fetchQueue, 8000)
     return () => clearInterval(interval)
   }, [])
 

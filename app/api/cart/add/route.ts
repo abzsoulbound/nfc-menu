@@ -1,3 +1,5 @@
+export const runtime = 'nodejs'
+
 import { Prisma, Station } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { findMenuItemForCart } from '@/lib/menuCatalog'

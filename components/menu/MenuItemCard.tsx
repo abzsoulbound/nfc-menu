@@ -19,6 +19,7 @@ type Props = {
   editDisabled?: boolean
   onClick?: () => void
   mode?: "pill" | "editor"
+  editSummary?: string[]
 }
 
 export function MenuItemCard({
@@ -37,6 +38,7 @@ export function MenuItemCard({
   editDisabled = false,
   onClick,
   mode = "pill",
+  editSummary = [],
 }: Props) {
   const fallbackImage = "/images/replace.png"
   const imageSrc = image || fallbackImage
@@ -47,6 +49,8 @@ export function MenuItemCard({
   const plusDisabled = controlsDisabled || !onIncrease
   const resolvedEditDisabled =
     controlsDisabled || editDisabled || !onEdit
+  const resolvedEditSummary = editSummary ?? []
+  const hasEdits = resolvedEditSummary.length > 0
   const allergenCopy =
     allergens.length > 0
       ? `Allergens: ${allergens.join(", ")}`
@@ -111,7 +115,16 @@ export function MenuItemCard({
         {description && (
           <p className="menu-item-desc">{description}</p>
         )}
-        <p className="menu-item-allergens">{allergenCopy}</p>
+        
+        {hasEdits && resolvedEditSummary.length > 0 ? (
+          <div className="menu-item-edits">
+            {resolvedEditSummary.map((line, idx) => (
+              <p key={idx} className="menu-item-edit-line">{line}</p>
+            ))}
+          </div>
+        ) : (
+          <p className="menu-item-allergens">{allergenCopy}</p>
+        )}
 
         {children ??
           (typeof quantity === "number" &&

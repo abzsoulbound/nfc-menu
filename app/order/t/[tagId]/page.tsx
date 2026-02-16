@@ -1,9 +1,10 @@
 'use client'
 
-import { useEffect, useMemo, useRef, useState, type TouchEvent } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type TouchEvent } from 'react'
 import { usePathname, useRouter } from 'next/navigation'
 import { MenuSection } from "@/components/menu/MenuSection"
 import { MenuItemCard } from "@/components/menu/MenuItemCard"
+import { IngredientEditor } from "@/components/order/IngredientEditor"
 import { useSessionStore } from "@/store/useSessionStore"
 import {
   cartLoadErrorMessage,
@@ -79,17 +80,23 @@ type PendingSyncEntry = {
   revision: number
 }
 
+type DebugEntry = {
+  name: string
+  ok: boolean
+  status?: number
+  ms: number
+  requestId?: string | null
+  attempt?: number
+  detail?: string
+  time: string
+}
+
 type CustomizerGroup = MenuCustomization["groups"][number]
 
 const INCLUDED_PAGE_SIZE = 8
-const GROUP_OPTION_PAGE_SIZE = 4
 const ALLERGY_NOTICE_TEXT =
   "Allergen information is available on request. Our kitchen handles common allergens, so traces may be present."
 
-function clampIndex(index: number, length: number) {
-  if (length <= 0) return 0
-  return Math.max(0, Math.min(index, length - 1))
-}
 
 function isObject(value: unknown): value is Record<string, unknown> {
   return (
@@ -157,15 +164,14 @@ export default function TagPage({ params }: { params: { tagId: string } }) {
   const [sessionId, setSessionId] = useState<string | null>(null)
   const [cartByKey, setCartByKey] = useState<Record<string, CartItem>>({})
   const [customizer, setCustomizer] = useState<CustomizerState | null>(null)
-  const [expandedSectionId, setExpandedSectionId] =
-    useState<string | null>(null)
-  const [customizerOptionPages, setCustomizerOptionPages] =
-    useState<Record<string, number>>({})
   const [customizerDragOffset, setCustomizerDragOffset] = useState(0)
   const [customizerError, setCustomizerError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [restaurantId, setRestaurantId] = useState<string>('unknown')
+  const [debugEnabled, setDebugEnabled] = useState(false)
+  const [debugEntries, setDebugEntries] = useState<DebugEntry[]>([])
+  const [debugCopyStatus, setDebugCopyStatus] = useState<'idle' | 'copied' | 'failed'>('idle')
 
   const cartByKeyRef = useRef<Record<string, CartItem>>({})
   const syncTimersRef = useRef<Record<string, number>>({})
@@ -175,6 +181,21 @@ export default function TagPage({ params }: { params: { tagId: string } }) {
   const lastRequestIdRef = useRef<string>('unknown')
   const menuViewTrackedRef = useRef(false)
   const lastCategoryTrackedRef = useRef<string | null>(null)
+  const isMountedRef = useRef(true)
+  const errorStickyUntilRef = useRef<number>(0)
+  const errorClearTimerRef = useRef<number | null>(null)
+  // Circuit breaker: prevent cascading retries after repeated failures
+  const circuitBreakerRef = useRef<{
+    sessionConsecutiveFailures: number
+    sessionCircuitOpenUntil: number
+    cartConsecutiveFailures: Record<string, number>
+    cartCircuitOpenUntil: Record<string, number>
+  }>({
+    sessionConsecutiveFailures: 0,
+    sessionCircuitOpenUntil: 0,
+    cartConsecutiveFailures: {},
+    cartCircuitOpenUntil: {},
+  })
 
   const activeSection = menu.find(
     section => section.id === selectedCategoryId
@@ -184,6 +205,28 @@ export default function TagPage({ params }: { params: { tagId: string } }) {
     cartByKeyRef.current = cartByKey
   }, [cartByKey])
 
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const params = new URLSearchParams(window.location.search)
+    setDebugEnabled(params.has('debug'))
+  }, [])
+
+  const logDebug = useCallback((entry: Omit<DebugEntry, 'time'>) => {
+    if (!debugEnabled) return
+    const payload: DebugEntry = {
+      ...entry,
+      time: new Date().toISOString(),
+    }
+    setDebugEntries(prev => {
+      const next = [payload, ...prev].slice(0, 50)
+      if (typeof window !== 'undefined') {
+        ;(window as unknown as { __NFC_DEBUG_LOGS?: DebugEntry[] }).__NFC_DEBUG_LOGS = next
+      }
+      return next
+    })
+    console.info('[nfc-debug]', payload)
+  }, [debugEnabled])
+
   const notifyHeader = () => {
     if (typeof window === 'undefined') return
     window.dispatchEvent(new Event('nfc-cart-updated'))
@@ -192,6 +235,31 @@ export default function TagPage({ params }: { params: { tagId: string } }) {
   useEffect(() => {
     notifyHeader()
   }, [cartByKey])
+
+  const setErrorSticky = useCallback((next: string | null) => {
+    const now = Date.now()
+    if (errorClearTimerRef.current) {
+      window.clearTimeout(errorClearTimerRef.current)
+      errorClearTimerRef.current = null
+    }
+
+    if (next) {
+      errorStickyUntilRef.current = now + 3000
+      setError(next)
+      return
+    }
+
+    const remaining = errorStickyUntilRef.current - now
+    if (remaining > 0) {
+      errorClearTimerRef.current = window.setTimeout(() => {
+        errorClearTimerRef.current = null
+        setError(null)
+      }, remaining)
+      return
+    }
+
+    setError(null)
+  }, [])
 
   useEffect(() => {
     if (!selectedCategoryId) return
@@ -213,16 +281,27 @@ export default function TagPage({ params }: { params: { tagId: string } }) {
   }, [selectedCategoryId, restaurantId])
 
   useEffect(() => {
-    setExpandedSectionId(null)
-    setCustomizerOptionPages({})
     setCustomizerDragOffset(0)
   }, [customizer?.item.id])
 
-  const loadCart = async (sid: string) => {
+  const loadCart = async (sid: string, isInitialLoad = false) => {
     const activeClientKey = ensureClientKey()
+    const cb = circuitBreakerRef.current
+
+    // Circuit breaker: if too many recent failures, back off exponentially
+    if (cb.cartCircuitOpenUntil[sid] && cb.cartCircuitOpenUntil[sid] > Date.now()) {
+      logDebug({
+        name: 'cart.get',
+        ok: false,
+        ms: 0,
+        detail: 'circuit_breaker_open',
+      })
+      return false
+    }
 
     for (let attempt = 0; attempt < 2; attempt += 1) {
       try {
+        const startedAt = Date.now()
         const res = await fetch('/api/cart/get', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -236,12 +315,38 @@ export default function TagPage({ params }: { params: { tagId: string } }) {
           lastRequestIdRef.current = requestId
         }
 
+        logDebug({
+          name: 'cart.get',
+          ok: res.ok,
+          status: res.status,
+          ms: Date.now() - startedAt,
+          requestId,
+          attempt,
+          detail: isInitialLoad ? 'initial' : 'poll',
+        })
+
         if (!res.ok) {
+          // Increment failure counter and open circuit if needed
+          cb.cartConsecutiveFailures[sid] = (cb.cartConsecutiveFailures[sid] ?? 0) + 1
+          const failures = cb.cartConsecutiveFailures[sid]
+          
+          if (failures >= 3) {
+            // After 3 consecutive failures, open circuit for 10s exponentially
+            const backoffMs = 10000 * Math.pow(2, Math.min(failures - 3, 2))
+            cb.cartCircuitOpenUntil[sid] = Date.now() + backoffMs
+          }
+
           if (attempt === 0) continue
-          const errorInfo = await readApiErrorInfo(res)
-          setError(cartLoadErrorMessage(errorInfo))
+          if (isInitialLoad) {
+            const errorInfo = await readApiErrorInfo(res)
+            setErrorSticky(cartLoadErrorMessage(errorInfo))
+          }
           return false
         }
+
+        // Success: reset circuit breaker
+        cb.cartConsecutiveFailures[sid] = 0
+        cb.cartCircuitOpenUntil[sid] = 0
 
         const payload = await res.json()
         const items = (payload?.items ?? []) as Array<CartItem & {
@@ -274,20 +379,30 @@ export default function TagPage({ params }: { params: { tagId: string } }) {
         }
 
         setCartByKey(next)
-        setError(current =>
-          current &&
-          (
-            current.toLowerCase().includes('basket') ||
-            current.toLowerCase().includes('cart') ||
-            current.toLowerCase().includes('session')
-          )
-            ? null
-            : current
-        )
+        // Clear cart/basket/session errors on successful load
+        if (error) {
+          const lower = error.toLowerCase()
+          if (
+            lower.includes('basket') ||
+            lower.includes('cart') ||
+            lower.includes('session')
+          ) {
+            setErrorSticky(null)
+          }
+        }
         return true
-      } catch {
+      } catch (err) {
+        logDebug({
+          name: 'cart.get',
+          ok: false,
+          ms: 0,
+          attempt,
+          detail: err instanceof Error ? err.message : 'network_error',
+        })
         if (attempt === 0) continue
-        setError(networkErrorMessage('open your basket'))
+        if (isInitialLoad) {
+          setErrorSticky(networkErrorMessage('open your basket'))
+        }
         return false
       }
     }
@@ -297,16 +412,22 @@ export default function TagPage({ params }: { params: { tagId: string } }) {
 
   const loadMenu = async () => {
     try {
-      const res = await fetch('/api/menu', {
-        cache: 'no-store',
-      })
+      const startedAt = Date.now()
+      const res = await fetch('/api/menu')
       const requestId = res.headers.get('x-request-id')
       if (requestId) {
         lastRequestIdRef.current = requestId
       }
+      logDebug({
+        name: 'menu.get',
+        ok: res.ok,
+        status: res.status,
+        ms: Date.now() - startedAt,
+        requestId,
+      })
       if (!res.ok) {
         const errorInfo = await readApiErrorInfo(res)
-        setError(menuLoadErrorMessage(errorInfo))
+        setErrorSticky(menuLoadErrorMessage(errorInfo))
         return
       }
 
@@ -333,12 +454,9 @@ export default function TagPage({ params }: { params: { tagId: string } }) {
         }
         return visible[0]?.id ?? null
       })
-      setError(current =>
-        current &&
-        current.toLowerCase().includes('menu')
-          ? null
-          : current
-      )
+      if (error && error.toLowerCase().includes('menu')) {
+        setErrorSticky(null)
+      }
       if (!menuViewTrackedRef.current) {
         trackEvent('menu_view', {
           restaurantId:
@@ -350,84 +468,179 @@ export default function TagPage({ params }: { params: { tagId: string } }) {
         menuViewTrackedRef.current = true
       }
     } catch {
-      setError(networkErrorMessage('load the menu'))
+      logDebug({
+        name: 'menu.get',
+        ok: false,
+        ms: 0,
+        detail: 'network_error',
+      })
+      setErrorSticky(networkErrorMessage('load the menu'))
     } finally {
       setMenuLoading(false)
     }
   }
 
   useEffect(() => {
-    ensureClientKey()
-  }, [ensureClientKey])
+    isMountedRef.current = true
+    return () => {
+      isMountedRef.current = false
+    }
+  }, [])
 
-  useEffect(() => {
-    let mounted = true
+  const connectSession = useCallback(async (tagId: string) => {
+    let lastError: string | null = null
+    const cb = circuitBreakerRef.current
 
-    const init = async () => {
+    // Circuit breaker: if recent failures, apply exponential backoff
+    if (cb.sessionCircuitOpenUntil > Date.now()) {
+      logDebug({
+        name: 'session.post',
+        ok: false,
+        ms: 0,
+        detail: 'circuit_breaker_open',
+      })
+      if (isMountedRef.current) {
+        setLoading(false)
+        setErrorSticky('Service temporarily overloaded. Retrying in a moment...')
+      }
+      return
+    }
+
+    setLoading(true)
+    if (error && error.toLowerCase().includes('connect')) {
+      setErrorSticky(null)
+    }
+
+    // Retry session creation up to 5 times with exponential backoff (300ms, 600ms, 1.2s, 2.4s, 4.8s)
+    for (let attempt = 0; attempt < 5; attempt += 1) {
       try {
+        const controller = new AbortController()
+        const timeoutId = setTimeout(() => controller.abort(), 15000)
+        const startedAt = Date.now()
+
         const res = await fetch('/api/session', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ tagId: params.tagId }),
+          body: JSON.stringify({ tagId }),
+          signal: controller.signal,
         })
+        clearTimeout(timeoutId)
+
         const requestId = res.headers.get('x-request-id')
         if (requestId) {
           lastRequestIdRef.current = requestId
         }
 
+        logDebug({
+          name: 'session.post',
+          ok: res.ok,
+          status: res.status,
+          ms: Date.now() - startedAt,
+          requestId,
+          attempt,
+        })
+
         if (!res.ok) {
+          // Increment failure counter and open circuit if needed
+          cb.sessionConsecutiveFailures += 1
+          const failures = cb.sessionConsecutiveFailures
+
+          if (failures >= 3) {
+            // After 3 consecutive failures, open circuit and back off exponentially
+            const backoffMs = 15000 * Math.pow(2, Math.min(failures - 3, 2))
+            cb.sessionCircuitOpenUntil = Date.now() + backoffMs
+          }
+
           const errorInfo = await readApiErrorInfo(res)
           if (res.status === 409 && errorInfo.code === 'TABLE_CLOSED') {
-            router.replace(
-              tenantTagPath(pathname, params.tagId, "/closed")
-            )
+            if (isMountedRef.current) {
+              setLoading(false)
+              router.replace(
+                tenantTagPath(pathname, tagId, "/closed")
+              )
+            }
             return
           }
-          setError(
-            sessionConnectErrorMessage(errorInfo, params.tagId)
-          )
+          lastError = sessionConnectErrorMessage(errorInfo, tagId)
+          if (attempt < 4) {
+            const delay = 300 * Math.pow(2, attempt)
+            await new Promise(resolve => setTimeout(resolve, delay))
+            continue
+          }
+          if (isMountedRef.current) {
+            setLoading(false)
+            setErrorSticky(lastError)
+          }
           return
         }
 
+        // Success: reset circuit breaker and consecutive failures
+        cb.sessionConsecutiveFailures = 0
+        cb.sessionCircuitOpenUntil = 0
+
         const payload = await res.json()
-        if (!mounted) return
+        if (!isMountedRef.current) return
 
         const sid = payload.sessionId as string
         setSessionId(sid)
         setGlobalSession(sid, 'customer')
-        await loadCart(sid)
-      } catch {
-        if (!mounted) return
-        setError(networkErrorMessage('connect this table'))
-      } finally {
-        if (mounted) {
+        await loadCart(sid, true)
+        if (isMountedRef.current) {
           setLoading(false)
         }
+        return
+      } catch (err) {
+        logDebug({
+          name: 'session.post',
+          ok: false,
+          ms: 0,
+          attempt,
+          detail: err instanceof Error ? err.message : 'network_error',
+        })
+
+        cb.sessionConsecutiveFailures += 1
+        const failures = cb.sessionConsecutiveFailures
+        if (failures >= 3) {
+          const backoffMs = 15000 * Math.pow(2, Math.min(failures - 3, 2))
+          cb.sessionCircuitOpenUntil = Date.now() + backoffMs
+        }
+
+        lastError = networkErrorMessage('connect this table')
+        if (attempt < 4) {
+          const delay = 300 * Math.pow(2, attempt)
+          await new Promise(resolve => setTimeout(resolve, delay))
+          continue
+        }
+        if (isMountedRef.current) {
+          setLoading(false)
+          setErrorSticky(lastError)
+        }
+        return
       }
     }
+  }, [error, loadCart, pathname, router, setErrorSticky, setGlobalSession])
 
-    void init()
+  useEffect(() => {
+    ensureClientKey()
+  }, [ensureClientKey])
 
-    return () => {
-      mounted = false
-    }
-  }, [params.tagId, router, setGlobalSession])
+  useEffect(() => {
+    void connectSession(params.tagId)
+  }, [connectSession, params.tagId])
 
   useEffect(() => {
     void loadMenu()
-    const interval = window.setInterval(() => {
-      void loadMenu()
-    }, 15000)
-
-    return () => window.clearInterval(interval)
+    // Menu is static; only load once. If item is 86'd, customer sees it when they try to order.
+    // Manual refresh available via button if needed.
   }, [params.tagId])
 
   useEffect(() => {
     if (!sessionId) return
 
+    // Poll cart frequently since it changes with customer actions
     const interval = window.setInterval(() => {
       void loadCart(sessionId)
-    }, 3000)
+    }, 5000)
 
     return () => window.clearInterval(interval)
   }, [sessionId])
@@ -636,23 +849,12 @@ export default function TagPage({ params }: { params: { tagId: string } }) {
     const defaultSelections = defaultModifierSelections(
       item.customization
     )
-    const firstGroupId = hasCustomization(item.customization)
-      ? item.customization.groups[0]?.id ?? null
-      : null
-    const included = getBaseIngredientLabels(item.customization)
 
     setCustomizer({
       item,
       quantity: 1,
       selections: defaultSelections,
     })
-    if (firstGroupId) {
-      setExpandedSectionId(`group:${firstGroupId}`)
-    } else if (included.length > 0) {
-      setExpandedSectionId('included')
-    } else {
-      setExpandedSectionId('allergens')
-    }
     setCustomizerError(null)
     trackEvent('item_opened', {
       restaurantId,
@@ -663,7 +865,6 @@ export default function TagPage({ params }: { params: { tagId: string } }) {
 
   const closeCustomizer = () => {
     setCustomizer(null)
-    setExpandedSectionId(null)
     setCustomizerError(null)
     setCustomizerDragOffset(0)
     customizerTouchStartYRef.current = null
@@ -833,16 +1034,24 @@ export default function TagPage({ params }: { params: { tagId: string } }) {
     if (!customizer || !hasCustomization(customizer.item.customization)) {
       return {
         groups: [] as CustomizerGroup[],
-        includedLines: [] as string[],
+        includedLines: [] as Array<{ label: string; ingredientId: string }>,
       }
     }
 
     const customization = customizer.item.customization
     const groups = customization.groups
+    const baseIngredientIds = customization.baseIngredientIds ?? []
+    const labels = getBaseIngredientLabels(customization)
+
+    // Map ingredient IDs to labels (they're in the same order)
+    const includedLines = baseIngredientIds.slice(0, labels.length).map((id, idx) => ({
+      label: labels[idx],
+      ingredientId: id,
+    }))
 
     return {
       groups,
-      includedLines: getBaseIngredientLabels(customization),
+      includedLines,
     }
   }, [customizer])
 
@@ -889,20 +1098,16 @@ export default function TagPage({ params }: { params: { tagId: string } }) {
 
   const retryOrderData = () => {
     if (sessionId) {
-      void loadCart(sessionId)
+      void loadCart(sessionId, true)
     } else {
-      window.location.reload()
+      void connectSession(params.tagId)
     }
     void loadMenu()
   }
 
-  const toggleSection = (sectionId: string) => {
-    setExpandedSectionId(current =>
-      current === sectionId ? null : sectionId
-    )
-  }
+  const isRetrying = loading || menuLoading
 
-  if (loading || menuLoading) {
+  if (menuLoading) {
     return (
       <div className="order-page">
         <div className="order-skeleton">
@@ -920,9 +1125,80 @@ export default function TagPage({ params }: { params: { tagId: string } }) {
 
   return (
     <div className="menu-page">
+      {debugEnabled && debugEntries.length > 0 && (
+        <div className="debug-panel" role="status" aria-live="polite">
+          <div className="debug-panel-header">
+            <div className="debug-panel-title">Debug: Network</div>
+            <button
+              type="button"
+              className="debug-panel-copy"
+              onClick={async () => {
+                try {
+                  const payload = JSON.stringify(debugEntries, null, 2)
+                  if (navigator?.clipboard?.writeText) {
+                    await navigator.clipboard.writeText(payload)
+                  } else {
+                    const textArea = document.createElement('textarea')
+                    textArea.value = payload
+                    textArea.style.position = 'fixed'
+                    textArea.style.opacity = '0'
+                    document.body.appendChild(textArea)
+                    textArea.focus()
+                    textArea.select()
+                    document.execCommand('copy')
+                    document.body.removeChild(textArea)
+                  }
+                  setDebugCopyStatus('copied')
+                  window.setTimeout(() => setDebugCopyStatus('idle'), 1500)
+                } catch {
+                  setDebugCopyStatus('failed')
+                  window.setTimeout(() => setDebugCopyStatus('idle'), 1500)
+                }
+              }}
+            >
+              {debugCopyStatus === 'copied'
+                ? 'Copied'
+                : debugCopyStatus === 'failed'
+                ? 'Copy failed'
+                : 'Copy logs'}
+            </button>
+          </div>
+          <div className="debug-panel-list">
+            {debugEntries.map((entry, idx) => (
+              <div key={`${entry.time}-${idx}`} className="debug-panel-row">
+                <span className="debug-panel-name">{entry.name}</span>
+                <span className={entry.ok ? "debug-panel-ok" : "debug-panel-fail"}>
+                  {entry.ok ? "OK" : "FAIL"}
+                </span>
+                <span className="debug-panel-ms">{entry.ms}ms</span>
+                {entry.status ? (
+                  <span className="debug-panel-status">{entry.status}</span>
+                ) : null}
+                {entry.requestId ? (
+                  <span className="debug-panel-req">{entry.requestId}</span>
+                ) : null}
+                {entry.detail ? (
+                  <span className="debug-panel-detail">{entry.detail}</span>
+                ) : null}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {loading && !sessionId && (
+        <div className="menu-lock-banner">
+          Connecting your table...
+        </div>
+      )}
+
       {error && (
         <div className="menu-lock-banner menu-lock-banner--error">
-          <span>{error}</span>
+          <div className="flex items-center gap-2">
+            <span className="menu-error-icon">i</span>
+            <span>{error}</span>
+            {isRetrying && <span className="menu-error-spinner" aria-hidden="true" />}
+          </div>
           <button
             type="button"
             className="menu-error-retry"
@@ -999,41 +1275,6 @@ export default function TagPage({ params }: { params: { tagId: string } }) {
             }
           >
             <header className="customizer-top">
-              <div
-                className={
-                  customizerImageSrc
-                    ? "customizer-top-image"
-                    : "customizer-top-image customizer-top-image--fallback"
-                }
-                aria-hidden="true"
-              >
-                {customizerImageSrc ? (
-                  <img
-                    className="customizer-hero-image"
-                    src={customizerImageSrc}
-                    alt=""
-                  />
-                ) : (
-                  <div className="customizer-hero-fallback" />
-                )}
-              </div>
-              <div className="customizer-meta">
-                <div className="customizer-summary-head">
-                  <h2 id={customizerTitleId} className="customizer-title">
-                    {customizer.item.name}
-                  </h2>
-                  <span className="customizer-base-price">
-                    From £{customizer.item.basePrice.toFixed(2)}
-                  </span>
-                </div>
-                <p
-                  id={customizerDescriptionId}
-                  className="customizer-description customizer-description--compact"
-                >
-                  {customizer.item.description ||
-                    "Customize ingredients and quantity before adding to your order."}
-                </p>
-              </div>
               <button
                 type="button"
                 onClick={closeCustomizer}
@@ -1042,338 +1283,75 @@ export default function TagPage({ params }: { params: { tagId: string } }) {
               >
                 ×
               </button>
+              <div className="customizer-top-body">
+                <div
+                  className={
+                    customizerImageSrc
+                      ? "customizer-top-image"
+                      : "customizer-top-image customizer-top-image--fallback"
+                  }
+                  aria-hidden="true"
+                >
+                  {customizerImageSrc ? (
+                    <img
+                      className="customizer-hero-image"
+                      src={customizerImageSrc}
+                      alt=""
+                    />
+                  ) : (
+                    <div className="customizer-hero-fallback" />
+                  )}
+                </div>
+                <div className="customizer-meta">
+                  <h2 id={customizerTitleId} className="customizer-title">
+                    {customizer.item.name}
+                  </h2>
+                  <p
+                    id={customizerDescriptionId}
+                    className="customizer-description customizer-description--compact"
+                  >
+                    {customizer.item.description ||
+                      "Customize ingredients and quantity before adding to your order."}
+                  </p>
+                </div>
+              </div>
             </header>
 
             <div className="customizer-stage customizer-stage--single">
               <section className="customizer-pane customizer-pane--stack">
-                {customizerGroups.length > 0 ? (
-                  customizerGroups.map(group => {
-                    const sectionId = `group:${group.id}`
-                    const isOpen = expandedSectionId === sectionId
-                    const min = groupSelectionMin(group)
-                    const max = groupSelectionMax(group)
-                    const selectedCount =
-                      customizer.selections[group.id]?.length ?? 0
-                    const pageCount = Math.max(
-                      1,
-                      Math.ceil(group.options.length / GROUP_OPTION_PAGE_SIZE)
-                    )
-                    const page = clampIndex(
-                      customizerOptionPages[group.id] ?? 0,
-                      pageCount
-                    )
-                    const visibleOptions = isOpen
-                      ? group.options.slice(
-                          page * GROUP_OPTION_PAGE_SIZE,
-                          page * GROUP_OPTION_PAGE_SIZE +
-                            GROUP_OPTION_PAGE_SIZE
-                        )
-                      : []
+                {customizer.item.customization && (
+                  <IngredientEditor
+                    customization={customizer.item.customization}
+                    selections={customizer.selections}
+                    onSelectionChange={updateCustomizerSelection}
+                  />
+                )}
 
-                    return (
-                      <article
-                        key={group.id}
-                        className={
-                          isOpen
-                            ? "customizer-section-card is-open"
-                            : "customizer-section-card"
-                        }
-                      >
-                        <button
-                          type="button"
-                          className="customizer-section-trigger"
-                          onClick={() => toggleSection(sectionId)}
-                          aria-expanded={isOpen}
+                {customizerAllergens.length > 0 && (
+                  <div className="customizer-allergen-section">
+                    <div className="customizer-allergen-label">
+                      Allergens
+                    </div>
+                    <div className="customizer-allergen-chip-wrap">
+                      {customizerAllergens.map(allergen => (
+                        <span
+                          key={allergen}
+                          className="customizer-allergen-chip"
                         >
-                          <span className="customizer-section-copy">
-                            <span className="customizer-group-label">
-                              {group.name}
-                            </span>
-                            <span className="customizer-group-meta">
-                              {min > 0 ? "Required" : "Optional"} ·{" "}
-                              {groupSelectionHint(group)}
-                            </span>
-                          </span>
-                          <span className="customizer-section-trailing">
-                            <span className="customizer-panel-badge">
-                              {selectedCount}/{max}
-                            </span>
-                            <span
-                              className="customizer-section-chevron"
-                              aria-hidden="true"
-                            >
-                              {isOpen ? "−" : "+"}
-                            </span>
-                          </span>
-                        </button>
+                          {allergen}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
 
-                        {isOpen && (
-                          <div className="customizer-section-body">
-                            <div className="customizer-options customizer-options--checks">
-                              {visibleOptions.map(option => {
-                                const selected =
-                                  customizer.selections[
-                                    group.id
-                                  ]?.includes(option.id) ?? false
-                                const disabled =
-                                  group.type === "multi" &&
-                                  !selected &&
-                                  selectedCount >= max
-
-                                return (
-                                  <button
-                                    key={option.id}
-                                    type="button"
-                                    className={
-                                      selected
-                                        ? "customizer-option-row is-active"
-                                        : disabled
-                                        ? "customizer-option-row is-disabled"
-                                        : "customizer-option-row"
-                                    }
-                                    onClick={() => {
-                                      if (disabled) return
-                                      if (group.type === "single") {
-                                        const canClear =
-                                          groupSelectionMin(group) === 0
-                                        updateCustomizerSelection(
-                                          group.id,
-                                          option.id,
-                                          selected ? canClear : true
-                                        )
-                                        return
-                                      }
-
-                                      updateCustomizerSelection(
-                                        group.id,
-                                        option.id,
-                                        !selected
-                                      )
-                                    }}
-                                    aria-pressed={selected}
-                                  >
-                                    <span
-                                      className={
-                                        customizerImageSrc
-                                          ? "customizer-option-thumb"
-                                          : "customizer-option-thumb customizer-option-thumb--fallback"
-                                      }
-                                      aria-hidden="true"
-                                    >
-                                      {customizerImageSrc ? (
-                                        <img
-                                          src={customizerImageSrc}
-                                          alt=""
-                                        />
-                                      ) : null}
-                                    </span>
-                                    <span className="customizer-option-copy">
-                                      <span>{option.label}</span>
-                                      {option.allergens &&
-                                        option.allergens.length > 0 && (
-                                          <span className="customizer-option-allergens">
-                                            Allergens:{" "}
-                                            {option.allergens.join(", ")}
-                                          </span>
-                                        )}
-                                    </span>
-                                    {option.priceDelta !== 0 && (
-                                      <span className="customizer-option-price">
-                                        {option.priceDelta > 0 ? "+" : ""}£
-                                        {option.priceDelta.toFixed(2)}
-                                      </span>
-                                    )}
-                                    <span className="customizer-option-end">
-                                      {group.type === "single" ? (
-                                        <span
-                                          className={
-                                            selected
-                                              ? "customizer-radio is-active"
-                                              : "customizer-radio"
-                                          }
-                                          aria-hidden="true"
-                                        />
-                                      ) : (
-                                        <span
-                                          className={
-                                            selected
-                                              ? "customizer-check-mark is-inline is-active"
-                                              : "customizer-check-mark is-inline"
-                                          }
-                                          aria-hidden="true"
-                                        />
-                                      )}
-                                    </span>
-                                  </button>
-                                )
-                              })}
-                            </div>
-
-                            {pageCount > 1 && (
-                              <div className="customizer-pager-row">
-                                <button
-                                  type="button"
-                                  className="customizer-more-btn"
-                                  onClick={() =>
-                                    setCustomizerOptionPages(current => ({
-                                      ...current,
-                                      [group.id]: clampIndex(
-                                        page - 1,
-                                        pageCount
-                                      ),
-                                    }))
-                                  }
-                                  disabled={page <= 0}
-                                >
-                                  Previous options
-                                </button>
-                                <span className="customizer-pager-state">
-                                  {page + 1}/{pageCount}
-                                </span>
-                                <button
-                                  type="button"
-                                  className="customizer-more-btn"
-                                  onClick={() =>
-                                    setCustomizerOptionPages(current => ({
-                                      ...current,
-                                      [group.id]: clampIndex(
-                                        page + 1,
-                                        pageCount
-                                      ),
-                                    }))
-                                  }
-                                  disabled={page >= pageCount - 1}
-                                >
-                                  More options
-                                </button>
-                              </div>
-                            )}
-                          </div>
-                        )}
-                      </article>
-                    )
-                  })
-                ) : (
+                {!customizer.item.customization && (
                   <p className="customizer-pane-empty">
-                    No customization options for this item.
+                    No ingredients to customize for this item.
                   </p>
                 )}
 
-                {customizerLayout.includedLines.length > 0 && (
-                  <article
-                    className={
-                      expandedSectionId === 'included'
-                        ? "customizer-section-card is-open"
-                        : "customizer-section-card"
-                    }
-                  >
-                    <button
-                      type="button"
-                      className="customizer-section-trigger"
-                      onClick={() => toggleSection('included')}
-                      aria-expanded={expandedSectionId === 'included'}
-                    >
-                      <span className="customizer-section-copy">
-                        <span className="customizer-group-label">
-                          Included ingredients
-                        </span>
-                        <span className="customizer-group-meta">
-                          Tap to review what is included by default.
-                        </span>
-                      </span>
-                      <span className="customizer-section-trailing">
-                        <span className="customizer-panel-badge">
-                          {customizerLayout.includedLines.length}
-                        </span>
-                        <span
-                          className="customizer-section-chevron"
-                          aria-hidden="true"
-                        >
-                          {expandedSectionId === 'included' ? "−" : "+"}
-                        </span>
-                      </span>
-                    </button>
-                    {expandedSectionId === 'included' && (
-                      <div className="customizer-section-body">
-                        <div className="customizer-included-grid">
-                          {customizerLayout.includedLines
-                            .slice(0, INCLUDED_PAGE_SIZE)
-                            .map(ingredient => (
-                              <span
-                                key={ingredient}
-                                className="customizer-ingredient-chip"
-                              >
-                                {ingredient}
-                              </span>
-                            ))}
-                        </div>
-                        {customizerLayout.includedLines.length >
-                          INCLUDED_PAGE_SIZE && (
-                          <p className="customizer-pane-copy">
-                            +{" "}
-                            {customizerLayout.includedLines.length -
-                              INCLUDED_PAGE_SIZE}{" "}
-                            more included ingredients
-                          </p>
-                        )}
-                      </div>
-                    )}
-                  </article>
-                )}
-
-                <article
-                  className={
-                    expandedSectionId === 'allergens'
-                      ? "customizer-section-card is-open"
-                      : "customizer-section-card"
-                  }
-                >
-                  <button
-                    type="button"
-                    className="customizer-section-trigger"
-                    onClick={() => toggleSection('allergens')}
-                    aria-expanded={expandedSectionId === 'allergens'}
-                  >
-                    <span className="customizer-section-copy">
-                      <span className="customizer-group-label">
-                        Allergy requests
-                      </span>
-                      <span className="customizer-group-meta">
-                        Important information before ordering.
-                      </span>
-                    </span>
-                    <span className="customizer-section-trailing">
-                      <span className="customizer-panel-badge">
-                        {customizerAllergens.length}
-                      </span>
-                      <span
-                        className="customizer-section-chevron"
-                        aria-hidden="true"
-                      >
-                        {expandedSectionId === 'allergens' ? "−" : "+"}
-                      </span>
-                    </span>
-                  </button>
-                  {expandedSectionId === 'allergens' && (
-                    <div className="customizer-section-body">
-                      <p className="customizer-disclosure-copy">
-                        {ALLERGY_NOTICE_TEXT}
-                      </p>
-                      {customizerAllergens.length > 0 && (
-                        <div className="customizer-allergen-chip-wrap">
-                          {customizerAllergens.map(allergen => (
-                            <span
-                              key={allergen}
-                              className="customizer-allergen-chip"
-                            >
-                              {allergen}
-                            </span>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </article>
+                <div className="customizer-spacer" />
               </section>
             </div>
 
@@ -1392,69 +1370,57 @@ export default function TagPage({ params }: { params: { tagId: string } }) {
             )}
 
             <footer className="customizer-footer">
-              <div className="customizer-qty-control">
+              <div className="customizer-footer-row">
+                <div className="customizer-qty-control">
+                  <button
+                    type="button"
+                    className="menu-qty-btn"
+                    onClick={() =>
+                      setCustomizer(current =>
+                        current
+                          ? {
+                              ...current,
+                              quantity: Math.max(1, current.quantity - 1),
+                            }
+                          : current
+                      )
+                    }
+                    disabled={customizer.quantity <= 1}
+                  >
+                    −
+                  </button>
+                  <div className="menu-qty-value">{customizer.quantity}</div>
+                  <button
+                    type="button"
+                    className="menu-qty-btn"
+                    onClick={() =>
+                      setCustomizer(current =>
+                        current
+                          ? {
+                              ...current,
+                              quantity: Math.min(20, current.quantity + 1),
+                            }
+                          : current
+                      )
+                    }
+                  >
+                    +
+                  </button>
+                </div>
+
                 <button
                   type="button"
-                  className="menu-qty-btn"
-                  onClick={() =>
-                    setCustomizer(current =>
-                      current
-                        ? {
-                            ...current,
-                            quantity: Math.max(1, current.quantity - 1),
-                          }
-                        : current
-                    )
+                  onClick={applyCustomizedItem}
+                  disabled={
+                    Boolean(customizerValidation && !customizerValidation.ok) ||
+                    requiredRemaining > 0
                   }
-                  disabled={customizer.quantity <= 1}
+                  className="customizer-footer-primary"
                 >
-                  −
-                </button>
-                <div className="menu-qty-value">{customizer.quantity}</div>
-                <button
-                  type="button"
-                  className="menu-qty-btn"
-                  onClick={() =>
-                    setCustomizer(current =>
-                      current
-                        ? {
-                            ...current,
-                            quantity: Math.min(20, current.quantity + 1),
-                          }
-                        : current
-                    )
-                  }
-                >
-                  +
+                  Add to basket • £
+                  {(customizerUnitPrice * customizer.quantity).toFixed(2)}
                 </button>
               </div>
-
-              <div className="customizer-footer-total">
-                <span>Total</span>
-                <strong>
-                  £{(customizerUnitPrice * customizer.quantity).toFixed(2)}
-                </strong>
-              </div>
-
-              <button
-                type="button"
-                onClick={closeCustomizer}
-                className="customizer-footer-cancel"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={applyCustomizedItem}
-                disabled={
-                  Boolean(customizerValidation && !customizerValidation.ok) ||
-                  requiredRemaining > 0
-                }
-                className="customizer-footer-primary"
-              >
-                Add to basket • £
-                {(customizerUnitPrice * customizer.quantity).toFixed(2)}
-              </button>
             </footer>
           </section>
         </div>

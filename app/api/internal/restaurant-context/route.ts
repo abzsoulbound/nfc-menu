@@ -1,18 +1,10 @@
+export const runtime = 'nodejs'
+
 import { NextResponse } from "next/server"
 import {
   normalizeDomain,
   resolveRestaurantContext,
 } from "@/lib/restaurants"
-
-function normalizeSlug(value: string | null) {
-  if (!value) return ""
-  return value
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9-]/g, "-")
-    .replace(/-+/g, "-")
-    .replace(/^-|-$/g, "")
-}
 
 export const dynamic = "force-dynamic"
 
@@ -23,11 +15,9 @@ export async function GET(req: Request) {
 
   const { searchParams } = new URL(req.url)
   const hostname = normalizeDomain(searchParams.get("hostname"))
-  const slug = normalizeSlug(searchParams.get("slug"))
 
   const restaurant = await resolveRestaurantContext({
     hostname,
-    slug,
   })
 
   return NextResponse.json(

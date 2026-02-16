@@ -112,10 +112,9 @@ export default function PublicMenuPage() {
     }
 
     loadMenu()
-    const interval = setInterval(loadMenu, 15000)
+    // Menu is static; no polling needed
     return () => {
       cancelled = true
-      clearInterval(interval)
     }
   }, [])
 

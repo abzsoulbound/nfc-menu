@@ -7,6 +7,7 @@ import { Divider } from "@/components/ui/Divider"
 import { Button } from "@/components/ui/Button"
 import { Toast } from "@/components/ui/Toast"
 import { Modal } from "@/components/ui/Modal"
+import { IngredientEditor } from "@/components/order/IngredientEditor"
 import { useCartStore } from "@/store/useCartStore"
 import { useSessionStore } from "@/store/useSessionStore"
 import { calculateCartTotals } from "@/lib/pricing"
@@ -15,6 +16,13 @@ import {
   getEditNote,
   hasVisibleEdits,
 } from "@/lib/itemEdits"
+import {
+  buildModifierSummary,
+  normalizeModifierSelections,
+  validateModifierSelections,
+  type MenuCustomization,
+  type ModifierSelections,
+} from "@/lib/menuCustomizations"
 import {
   cartLoadErrorMessage,
   networkErrorMessage,
@@ -133,6 +141,10 @@ function ReviewSkeleton() {
         <div className="skeleton-block skeleton-title" />
         <div className="skeleton-block skeleton-line" />
       </div>
+      <div className="card">
+        <div className="skeleton-block skeleton-line" />
+        <div className="skeleton-block skeleton-line" />
+      </div>
       <div className="card review-skeleton-list">
         <div className="skeleton-block skeleton-row" />
         <div className="skeleton-block skeleton-row" />
@@ -143,9 +155,11 @@ function ReviewSkeleton() {
         <div className="skeleton-block skeleton-line" />
         <div className="skeleton-block skeleton-line" />
       </div>
-      <div className="review-skeleton-actions">
-        <div className="skeleton-block skeleton-button" />
-        <div className="skeleton-block skeleton-button" />
+      <div className="review-actions-bar">
+        <div className="review-actions-inner">
+          <div className="skeleton-block skeleton-button" />
+          <div className="skeleton-block skeleton-button" />
+        </div>
       </div>
     </div>
   )
@@ -181,6 +195,8 @@ export default function PerUserReviewPage({
   const [editDraft, setEditDraft] = useState("")
   const [savingEdit, setSavingEdit] = useState(false)
   const [restaurantId, setRestaurantId] = useState("unknown")
+  const [menuData, setMenuData] = useState<Map<string, MenuCustomization | null>>(new Map())
+  const [editingSelections, setEditingSelections] = useState<ModifierSelections>({})
   const cartItemsRef = useRef<ReviewItem[]>([])
   const syncTimersRef = useRef<Record<string, number>>({})
   const syncInFlightRef = useRef<Record<string, boolean>>({})
@@ -332,6 +348,33 @@ export default function PerUserReviewPage({
     }
 
     return null
+  }
+
+  const loadMenuData = async () => {
+    try {
+      const res = await fetch(`/api/menu?tagId=${tagId}`, {
+        cache: "no-store",
+      })
+      if (!res.ok) return
+
+      const payload = await res.json()
+      const sections = Array.isArray(payload?.sections) ? payload.sections : []
+      const customizationMap = new Map<string, MenuCustomization | null>()
+
+      for (const section of sections) {
+        const items = Array.isArray(section.items) ? section.items : []
+        for (const item of items) {
+          customizationMap.set(
+            item.id,
+            item.customization ?? null
+          )
+        }
+      }
+
+      setMenuData(customizationMap)
+    } catch {
+      // Menu load failure is non-critical
+    }
   }
 
   const loadSubmittedItems = async (): Promise<{
@@ -555,6 +598,7 @@ export default function PerUserReviewPage({
   useEffect(() => {
     if (!sessionId) return
     void refreshAll(true)
+    void loadMenuData()
   }, [sessionId, clientKey])
 
   useEffect(() => {
@@ -1015,6 +1059,13 @@ export default function PerUserReviewPage({
 
     setEditingItem(item)
     setEditDraft(getEditNote(item.edits))
+    
+    // Initialize ingredient editor selections from current edits
+    if (item.menuItemId && isObject(item.edits) && isObject(item.edits.modifiers)) {
+      setEditingSelections(item.edits.modifiers as ModifierSelections)
+    } else {
+      setEditingSelections({})
+    }
   }
 
   async function saveEdit() {
@@ -1025,11 +1076,27 @@ export default function PerUserReviewPage({
 
     try {
       const activeClientKey = ensureClientKey()
-      const nextEdits = applyEditNote(
-        editingItem.edits,
-        editDraft,
-        activeClientKey
-      )
+      
+      // Build new edits from ingredient selections and note
+      const customization = editingItem.menuItemId 
+        ? menuData.get(editingItem.menuItemId)
+        : null
+      const modifierSummary = customization
+        ? buildModifierSummary(customization, editingSelections)
+        : []
+      
+      // Create new edits object with modifiers and note
+      let nextEdits: unknown = null
+      if (modifierSummary.length > 0 || editDraft.trim().length > 0) {
+        nextEdits = {
+          modifiers: editingSelections,
+          modifierSummary,
+          ...(editDraft.trim().length > 0 && {
+            note: editDraft.trim(),
+            noteClientKey: activeClientKey,
+          }),
+        }
+      }
 
       if (editingItem.orderItemId) {
         if (!editingItem.isMine) {
@@ -1167,7 +1234,7 @@ export default function PerUserReviewPage({
   }
 
   return (
-    <div className="p-4 space-y-4">
+    <div className="p-4 space-y-3 review-page">
       {error && (
         <Toast>
           <div className="review-error-row">
@@ -1184,15 +1251,15 @@ export default function PerUserReviewPage({
       )}
 
       <Card>
-        <div className="text-lg font-semibold">
+        <div className="review-title">
           Review additions
         </div>
-        <div className="text-sm opacity-70">
+        <div className="review-subtitle">
           Pending items stay editable until the table order is sent. Sent items
           are locked.
         </div>
         {firstSubmittedAt && (
-          <div className="text-xs opacity-60 mt-2">
+          <div className="review-meta">
             Table has active additions since{" "}
             {new Date(firstSubmittedAt).toLocaleTimeString([], {
               hour: "2-digit",
@@ -1203,21 +1270,73 @@ export default function PerUserReviewPage({
         )}
       </Card>
 
+      {isSharedSession && cartItems.length > 0 && (
+        <Card className="review-status-card">
+          <div className="review-status-title">Confirmation progress</div>
+          <div className="review-status-row">
+            <div className="review-status-count">
+              {activePendingMembers.filter(member => member.confirmed).length}/
+              {activePendingMembers.length} confirmed
+            </div>
+            <div className="review-status-note">
+              {requesterConfirmed
+                ? "Your items are confirmed. Unconfirm to edit."
+                : "Confirm your items to send."}
+            </div>
+          </div>
+          {inactivePendingMembers.length > 0 && (
+            <div className="review-status-note">
+              {inactivePendingMembers.length} inactive
+            </div>
+          )}
+          {!allMembersConfirmed && (
+            <div className="review-status-note">
+              Waiting for {unconfirmedMemberCount}{" "}
+              {unconfirmedMemberCount === 1 ? "active member" : "active members"} to confirm.
+            </div>
+          )}
+        </Card>
+      )}
+
       {cartItems.length > 0 && (
         <>
           <Divider />
           <Card>
-            <div className="text-sm font-semibold mb-2">
+            <div className="review-section-title">
               Your pending additions
             </div>
-            <div className="text-xs opacity-70 mb-3">
+            <div className="review-section-caption">
               These stay in review until every active member confirms.
             </div>
+            {isSharedSession && cartItems.length > 0 && (
+              <div className="flex justify-between items-center gap-2">
+                <div className="review-inline-note">
+                  {requesterConfirmed
+                    ? "Your pending items are confirmed. Unconfirm to edit before send."
+                    : "Confirm your items first."}
+                </div>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  disabled={
+                    confirmingMine ||
+                    myPendingItems.length === 0
+                  }
+                  onClick={() =>
+                    setMyPendingConfirmation(!requesterConfirmed)
+                  }
+                >
+                  {requesterConfirmed
+                    ? "Edit items"
+                    : "Confirm my items"}
+                </Button>
+              </div>
+            )}
             <div className="space-y-3">
               {myPendingItems.map(item => (
                 <div
                   key={item.id}
-                  className="flex justify-between items-center gap-3"
+                  className="review-item-row"
                 >
                   <div>
                     <div className="font-medium">
@@ -1241,7 +1360,7 @@ export default function PerUserReviewPage({
                   <div className="flex items-center gap-2">
                     <button
                       type="button"
-                      className="px-2 py-1 rounded border"
+                      className="review-qty-btn"
                       disabled={
                         submitting ||
                         !canEditPendingItem(item)
@@ -1255,7 +1374,7 @@ export default function PerUserReviewPage({
                     </span>
                     <button
                       type="button"
-                      className="px-2 py-1 rounded border"
+                      className="review-qty-btn"
                       disabled={
                         submitting ||
                         !canEditPendingItem(item)
@@ -1266,7 +1385,7 @@ export default function PerUserReviewPage({
                     </button>
                     <button
                       type="button"
-                      className="px-2 py-1 rounded border"
+                      className="review-edit-btn"
                       disabled={
                         submitting ||
                         !canEditPendingItem(item)
@@ -1275,14 +1394,14 @@ export default function PerUserReviewPage({
                     >
                       Edit
                     </button>
-                    <div className="text-sm min-w-16 text-right">
+                    <div className="review-price">
                       £{(item.unitPrice * item.quantity).toFixed(2)}
                     </div>
                   </div>
                 </div>
               ))}
               {myPendingItems.length === 0 && (
-                <div className="text-xs opacity-60">
+                <div className="review-empty-copy">
                   You have no pending items.
                 </div>
               )}
@@ -1291,17 +1410,17 @@ export default function PerUserReviewPage({
             {otherPendingGroups.length > 0 && (
               <>
                 <Divider />
-                <div className="text-sm font-semibold mb-2">
+                <div className="review-section-title">
                   Other members at your table ordered
                 </div>
-                <div className="text-xs opacity-70 mb-3">
+                <div className="review-section-caption">
                   Grouped by guest. You can assist-edit items after 2 minutes of
                   inactivity.
                 </div>
                 <div className="space-y-4">
                   {otherPendingGroups.map(group => (
                     <div key={group.clientKey} className="space-y-2">
-                      <div className="text-xs font-semibold opacity-70">
+                      <div className="review-group-label">
                         {group.label}
                         {group.inactive ? " · inactive" : ""}
                       </div>
@@ -1309,11 +1428,7 @@ export default function PerUserReviewPage({
                         {group.items.map(item => (
                           <div
                             key={item.id}
-                            className="flex justify-between items-center gap-3 rounded border px-3 py-2 opacity-80"
-                            style={{
-                              background: "rgba(145, 158, 173, 0.16)",
-                              borderColor: "rgba(110, 128, 145, 0.32)",
-                            }}
+                            className="review-item-row review-item-row--muted"
                           >
                             <div>
                               <div className="font-medium">
@@ -1338,7 +1453,7 @@ export default function PerUserReviewPage({
                                 <>
                                   <button
                                     type="button"
-                                    className="px-2 py-1 rounded border"
+                                    className="review-qty-btn"
                                     disabled={
                                       submitting ||
                                       !canEditPendingItem(item)
@@ -1354,7 +1469,7 @@ export default function PerUserReviewPage({
                                   </span>
                                   <button
                                     type="button"
-                                    className="px-2 py-1 rounded border"
+                                    className="review-qty-btn"
                                     disabled={
                                       submitting ||
                                       !canEditPendingItem(item)
@@ -1367,7 +1482,7 @@ export default function PerUserReviewPage({
                                   </button>
                                   <button
                                     type="button"
-                                    className="px-2 py-1 rounded border"
+                                    className="review-edit-btn"
                                     disabled={
                                       submitting ||
                                       !canEditPendingItem(item)
@@ -1378,7 +1493,7 @@ export default function PerUserReviewPage({
                                   </button>
                                 </>
                               )}
-                              <div className="text-sm min-w-16 text-right">
+                              <div className="review-price">
                                 £{(item.unitPrice * item.quantity).toFixed(2)}
                               </div>
                             </div>
@@ -1391,36 +1506,8 @@ export default function PerUserReviewPage({
               </>
             )}
 
-            {isSharedSession && cartItems.length > 0 && (
-              <>
-                <Divider />
-                <div className="flex justify-between items-center gap-2">
-                  <div className="text-xs opacity-70">
-                    {requesterConfirmed
-                      ? "Your pending items are confirmed. Unconfirm to edit before send."
-                      : "Confirm your items first."}
-                  </div>
-                  <Button
-                    type="button"
-                    variant={requesterConfirmed ? "secondary" : "primary"}
-                    disabled={
-                      confirmingMine ||
-                      myPendingItems.length === 0
-                    }
-                    onClick={() =>
-                      setMyPendingConfirmation(!requesterConfirmed)
-                    }
-                  >
-                    {requesterConfirmed
-                      ? "Edit items"
-                      : "Confirm my items"}
-                  </Button>
-                </div>
-              </>
-            )}
-
             {isSharedSession && pendingMembers.length > 0 && (
-              <div className="text-xs opacity-60 mt-2">
+              <div className="review-meta">
                 {activePendingMembers.filter(member => member.confirmed).length}/
                 {activePendingMembers.length} active members confirmed
                 {inactivePendingMembers.length > 0 &&
@@ -1435,21 +1522,17 @@ export default function PerUserReviewPage({
         <>
           <Divider />
           <Card>
-            <div className="text-sm font-semibold mb-2">
+            <div className="review-section-title">
               In the kitchen / bar
             </div>
-            <div className="text-xs opacity-70 mb-3">
+            <div className="review-section-caption">
               Sent items are locked. Status updates automatically.
             </div>
             <div className="space-y-3">
               {inKitchenItems.map(item => (
                 <div
                   key={item.id}
-                  className="flex justify-between items-center gap-3 rounded border px-3 py-2 opacity-80"
-                  style={{
-                    background: "rgba(145, 158, 173, 0.16)",
-                    borderColor: "rgba(110, 128, 145, 0.32)",
-                  }}
+                  className="review-item-row review-item-row--muted"
                 >
                   <div>
                     <div className="font-medium">
@@ -1468,7 +1551,7 @@ export default function PerUserReviewPage({
                     ))}
                   </div>
 
-                  <div className="text-sm min-w-16 text-right">
+                  <div className="review-price">
                     £{(item.unitPrice * item.quantity).toFixed(2)}
                   </div>
                 </div>
@@ -1481,22 +1564,18 @@ export default function PerUserReviewPage({
       {deliveredItems.length > 0 && (
         <>
           <Divider />
-          <Card>
-            <div className="text-sm font-semibold mb-2">
+          <Card className="review-delivered-card">
+            <div className="review-section-title">
               Delivered
             </div>
-            <div className="text-xs opacity-70 mb-3">
+            <div className="review-section-caption">
               Completed items for this table.
             </div>
             <div className="space-y-3">
               {deliveredItems.map(item => (
                 <div
                   key={item.id}
-                  className="flex justify-between items-center gap-3 rounded border px-3 py-2 opacity-70"
-                  style={{
-                    background: "rgba(145, 158, 173, 0.12)",
-                    borderColor: "rgba(110, 128, 145, 0.28)",
-                  }}
+                  className="review-item-row review-item-row--soft"
                 >
                   <div>
                     <div className="font-medium">
@@ -1507,7 +1586,7 @@ export default function PerUserReviewPage({
                     </div>
                   </div>
 
-                  <div className="text-sm min-w-16 text-right">
+                  <div className="review-price">
                     £{(item.unitPrice * item.quantity).toFixed(2)}
                   </div>
                 </div>
@@ -1520,7 +1599,7 @@ export default function PerUserReviewPage({
       <Divider />
 
       <Card>
-        <div className="text-sm font-semibold mb-2">
+        <div className="review-section-title">
           Totals
         </div>
         <div className="flex justify-between text-sm">
@@ -1543,30 +1622,24 @@ export default function PerUserReviewPage({
         </div>
       </Card>
 
-      <div className="grid grid-cols-2 gap-2">
-        <Button
-          variant="secondary"
-          onClick={() => router.push(tenantTagPath(pathname, tagId))}
-          disabled={submitting}
-        >
-          Back
-        </Button>
+      <div className="review-actions-bar">
+        <div className="review-actions-inner">
+          <Button
+            variant="secondary"
+            onClick={() => router.push(tenantTagPath(pathname, tagId))}
+            disabled={submitting}
+          >
+            Back
+          </Button>
 
-        <Button
-          onClick={() => setShowConfirm(true)}
-          disabled={sendDisabled}
-        >
-          Send table order
-        </Button>
-      </div>
-
-      {isSharedSession && cartItems.length > 0 && !allMembersConfirmed && (
-        <div className="text-xs opacity-70 text-center">
-          Waiting for {unconfirmedMemberCount}{" "}
-          {unconfirmedMemberCount === 1 ? "active member" : "active members"} to confirm
-          pending items.
+          <Button
+            onClick={() => setShowConfirm(true)}
+            disabled={sendDisabled}
+          >
+            Send table order
+          </Button>
         </div>
-      )}
+      </div>
 
       {showConfirm && (
         <Modal
@@ -1588,28 +1661,47 @@ export default function PerUserReviewPage({
           onCancel={() => {
             setEditingItem(null)
             setEditDraft("")
+            setEditingSelections({})
           }}
           onConfirm={saveEdit}
           confirmDisabled={savingEdit}
         >
-          <div className="space-y-2">
-            <label
-              htmlFor="item-edit-note"
-              className="text-xs opacity-70"
-            >
-              Special request note
-            </label>
-            <textarea
-              id="item-edit-note"
-              className="w-full border rounded p-2"
-              rows={4}
-              value={editDraft}
-              onChange={event => setEditDraft(event.target.value)}
-              placeholder="No onions, extra crispy, sauce on side..."
-            />
-            <p className="text-xs opacity-60">
-              Leave this blank to clear the note.
-            </p>
+          <div className="space-y-3">
+            {editingItem.menuItemId && menuData.has(editingItem.menuItemId) ? (
+              <IngredientEditor
+                customization={menuData.get(editingItem.menuItemId)}
+                selections={editingSelections}
+                onSelectionChange={(groupId, optionId, selected) => {
+                  setEditingSelections(current => {
+                    const existing = current[groupId] ?? []
+                    const next = selected
+                      ? [...existing, optionId]
+                      : existing.filter(id => id !== optionId)
+                    return {
+                      ...current,
+                      [groupId]: next,
+                    }
+                  })
+                }}
+              />
+            ) : null}
+            
+            <div>
+              <label
+                htmlFor="item-edit-note"
+                className="text-xs opacity-70"
+              >
+                Additional note (optional)
+              </label>
+              <textarea
+                id="item-edit-note"
+                className="w-full border rounded p-2 text-sm mt-1"
+                rows={3}
+                value={editDraft}
+                onChange={event => setEditDraft(event.target.value)}
+                placeholder="No onions, extra crispy, sauce on side..."
+              />
+            </div>
           </div>
         </Modal>
       )}

@@ -12,8 +12,7 @@ Architecture:
 
 Routes:
 - /order/menu public menu (canonical)
-- /order/t/[tagId] customer ordering (default tenant)
-- /order/r/[restaurantSlug]/t/[tagId] customer ordering (tenant)
+- /order/t/[tagId] customer ordering (canonical)
 - /staff operational control
 - /kitchen kitchen station
 - /bar bar station

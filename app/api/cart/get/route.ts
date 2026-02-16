@@ -1,3 +1,5 @@
+export const runtime = 'nodejs'
+
 import { prisma } from '@/lib/prisma'
 import {
   ASSIST_EDIT_UNLOCK_MS,

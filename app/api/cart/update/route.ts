@@ -1,3 +1,5 @@
+export const runtime = 'nodejs'
+
 import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { appendSystemEvent } from '@/lib/events'

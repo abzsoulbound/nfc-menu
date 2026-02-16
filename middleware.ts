@@ -3,7 +3,6 @@ import {
   DEFAULT_RESTAURANT_ID,
   DEFAULT_RESTAURANT_NAME,
   DEFAULT_RESTAURANT_SLUG,
-  RESTAURANT_COOKIE,
 } from "@/lib/restaurantConstants"
 
 type MiddlewareRestaurantContext = {
@@ -20,7 +19,7 @@ type MiddlewareRestaurantContext = {
 
 const RESTAURANT_CONTEXT_HEADER = "x-restaurant-context"
 const REQUEST_ID_HEADER = "x-request-id"
-const RESOLVER_CACHE_TTL_MS = 30_000
+const RESOLVER_CACHE_TTL_MS = 5 * 60_000
 
 const resolverCache = new Map<
   string,
@@ -29,16 +28,6 @@ const resolverCache = new Map<
     context: MiddlewareRestaurantContext
   }
 >()
-
-function normalizedSlug(value: string | undefined) {
-  if (!value) return ""
-  return value
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9-]/g, "-")
-    .replace(/-+/g, "-")
-    .replace(/^-|-$/g, "")
-}
 
 function normalizedDomain(value: string | undefined | null) {
   if (!value) return ""
@@ -63,16 +52,6 @@ function normalizedDomain(value: string | undefined | null) {
     .split(":")[0]
     .trim()
     .replace(/\.+$/, "")
-}
-
-function slugFromPath(pathname: string) {
-  const prefixedMatch = pathname.match(/^\/r\/([^/]+)/i)
-  if (prefixedMatch?.[1]) return normalizedSlug(prefixedMatch[1])
-
-  const orderMatch = pathname.match(/^\/order\/r\/([^/]+)/i)
-  if (orderMatch?.[1]) return normalizedSlug(orderMatch[1])
-
-  return ""
 }
 
 function parseRestaurantContext(value: unknown) {
@@ -132,10 +111,9 @@ function fallbackContext() {
 async function resolveContextInMiddleware(
   req: NextRequest,
   hostname: string,
-  slugFromRoute: string,
   requestId: string
 ) {
-  const cacheKey = `${hostname}::${slugFromRoute}`
+  const cacheKey = hostname
   const cached = resolverCache.get(cacheKey)
   if (cached && cached.expiresAt > Date.now()) {
     return {
@@ -150,9 +128,6 @@ async function resolveContextInMiddleware(
   )
   if (hostname) {
     resolverUrl.searchParams.set("hostname", hostname)
-  }
-  if (slugFromRoute) {
-    resolverUrl.searchParams.set("slug", slugFromRoute)
   }
 
   try {
@@ -204,16 +179,7 @@ function encodeContextHeader(context: MiddlewareRestaurantContext) {
   return encodeURIComponent(JSON.stringify(context))
 }
 
-function staffLoginPath(pathname: string, restaurantSlug: string) {
-  const tenantMatch = pathname.match(/^\/r\/([^/]+)/i)
-  if (tenantMatch?.[1]) {
-    return `/r/${encodeURIComponent(tenantMatch[1])}/staff/login`
-  }
-
-  if (restaurantSlug && restaurantSlug !== DEFAULT_RESTAURANT_SLUG) {
-    return `/r/${encodeURIComponent(restaurantSlug)}/staff/login`
-  }
-
+function staffLoginPath() {
   return "/staff/login"
 }
 
@@ -237,33 +203,28 @@ function demoRoleForPath(
 ) {
   if (
     pathname === "/bar" ||
-    pathname.startsWith("/bar/") ||
-    /^\/r\/[^/]+\/bar(\/.*)?$/.test(pathname)
+    pathname.startsWith("/bar/")
   ) {
     return "bar"
   }
 
   if (
     pathname === "/kitchen" ||
-    pathname.startsWith("/kitchen/") ||
-    /^\/r\/[^/]+\/kitchen(\/.*)?$/.test(pathname)
+    pathname.startsWith("/kitchen/")
   ) {
     return "kitchen"
   }
 
   if (
     pathname === "/admin" ||
-    pathname.startsWith("/admin/") ||
-    /^\/r\/[^/]+\/admin(\/.*)?$/.test(pathname) ||
-    /^\/r\/[^/]+\/dashboard(\/.*)?$/.test(pathname)
+    pathname.startsWith("/admin/")
   ) {
     return "admin"
   }
 
   if (
     pathname === "/staff" ||
-    pathname.startsWith("/staff/") ||
-    /^\/r\/[^/]+\/staff(\/.*)?$/.test(pathname)
+    pathname.startsWith("/staff/")
   ) {
     return "waiter"
   }
@@ -274,41 +235,35 @@ function demoRoleForPath(
 
 function requiredStaffRoles(pathname: string) {
   if (
-    pathname === "/staff/login" ||
-    /^\/r\/[^/]+\/staff\/login$/.test(pathname)
+    pathname === "/staff/login"
   ) {
     return null
   }
 
   if (
     pathname === "/admin" ||
-    pathname.startsWith("/admin/") ||
-    /^\/r\/[^/]+\/admin(\/.*)?$/.test(pathname) ||
-    /^\/r\/[^/]+\/dashboard(\/.*)?$/.test(pathname)
+    pathname.startsWith("/admin/")
   ) {
     return ["admin"] as const
   }
 
   if (
     pathname === "/bar" ||
-    pathname.startsWith("/bar/") ||
-    /^\/r\/[^/]+\/bar(\/.*)?$/.test(pathname)
+    pathname.startsWith("/bar/")
   ) {
     return ["admin", "bar"] as const
   }
 
   if (
     pathname === "/kitchen" ||
-    pathname.startsWith("/kitchen/") ||
-    /^\/r\/[^/]+\/kitchen(\/.*)?$/.test(pathname)
+    pathname.startsWith("/kitchen/")
   ) {
     return ["admin", "kitchen"] as const
   }
 
   if (
     pathname === "/staff" ||
-    pathname.startsWith("/staff/") ||
-    /^\/r\/[^/]+\/staff(\/.*)?$/.test(pathname)
+    pathname.startsWith("/staff/")
   ) {
     return ["admin", "waiter"] as const
   }
@@ -359,15 +314,6 @@ async function resolveStaffAccess(input: {
 
 export async function middleware(req: NextRequest) {
   const pathname = req.nextUrl.pathname
-  const slugFromRoute = slugFromPath(pathname)
-  const slugFromQuery = normalizedSlug(
-    req.nextUrl.searchParams.get("restaurantSlug") ?? undefined
-  )
-  const slugFromCookie = normalizedSlug(
-    req.cookies.get(RESTAURANT_COOKIE)?.value
-  )
-  const tenantSlugHint =
-    slugFromRoute || slugFromQuery || slugFromCookie
   const requestId =
     req.headers.get(REQUEST_ID_HEADER) || crypto.randomUUID()
   const hostname = normalizedDomain(
@@ -375,35 +321,38 @@ export async function middleware(req: NextRequest) {
       req.headers.get("host") ??
       req.nextUrl.hostname
   )
-  const contextResult = await resolveContextInMiddleware(
-    req,
-    hostname,
-    tenantSlugHint,
-    requestId
-  )
-  const context = contextResult.context
-  const slug = context.slug
-  const requiresTenantContext =
+  const isHighTrafficCustomerApi =
     pathname.startsWith("/api/cart/") ||
     pathname === "/api/session" ||
     pathname === "/api/sessions"
 
-    // Allow fallback (default restaurant) to satisfy tenant context for customer APIs.
-  // If the resolver fails, we still proceed with DEFAULT_RESTAURANT_* context.
-  if (requiresTenantContext && !contextResult.resolved) {
-    // do nothing: fallbackContext() is already set in `context`
-  }
+  const contextResult = isHighTrafficCustomerApi
+    ? {
+        context: fallbackContext(),
+        resolved: false,
+      }
+    : await resolveContextInMiddleware(
+        req,
+        hostname,
+        requestId
+      )
+  const context = contextResult.context
 
   const requestHeaders = new Headers(req.headers)
   requestHeaders.set(REQUEST_ID_HEADER, requestId)
-  requestHeaders.set("x-restaurant-id", context.id)
-  requestHeaders.set("x-restaurant-slug", slug)
-  if (context.domain) {
-    requestHeaders.set("x-restaurant-domain", context.domain)
+  if (!isHighTrafficCustomerApi) {
+    requestHeaders.set("x-restaurant-id", context.id)
+    if (context.domain) {
+      requestHeaders.set("x-restaurant-domain", context.domain)
+    } else {
+      requestHeaders.delete("x-restaurant-domain")
+    }
+    requestHeaders.set(RESTAURANT_CONTEXT_HEADER, encodeContextHeader(context))
   } else {
+    requestHeaders.delete("x-restaurant-id")
     requestHeaders.delete("x-restaurant-domain")
+    requestHeaders.delete(RESTAURANT_CONTEXT_HEADER)
   }
-  requestHeaders.set(RESTAURANT_CONTEXT_HEADER, encodeContextHeader(context))
 
   const roles = requiredStaffRoles(pathname)
   if (roles) {
@@ -422,7 +371,7 @@ export async function middleware(req: NextRequest) {
     })
 
     if (!staffAccess) {
-      const loginPath = staffLoginPath(pathname, slug)
+      const loginPath = staffLoginPath()
       const loginUrl = new URL(loginPath, req.url)
       loginUrl.searchParams.set("next", pathname)
       const redirectRes = NextResponse.redirect(loginUrl, { status: 307 })
@@ -444,19 +393,6 @@ export async function middleware(req: NextRequest) {
     },
   })
   res.headers.set(REQUEST_ID_HEADER, requestId)
-
-  const existingCookieSlug = normalizedSlug(
-    req.cookies.get(RESTAURANT_COOKIE)?.value
-  )
-  if (existingCookieSlug !== slug) {
-    res.cookies.set(RESTAURANT_COOKIE, slug, {
-      path: "/",
-      sameSite: "lax",
-      httpOnly: false,
-      secure: process.env.NODE_ENV === "production",
-      maxAge: 60 * 60 * 24 * 365,
-    })
-  }
 
   return res
 }

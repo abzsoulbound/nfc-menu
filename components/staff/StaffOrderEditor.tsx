@@ -3,27 +3,23 @@
 import { useEffect, useState } from "react"
 import { MenuItemCard } from "@/components/menu/MenuItemCard"
 import { QuantitySelector } from "@/components/order/QuantitySelector"
-import EditPanel from "@/components/order/EditPanel"
 import { Button } from "@/components/ui/Button"
 import { useCartStore } from "@/store/useCartStore"
+
+type Station = "KITCHEN" | "BAR"
 
 type MenuItem = {
   id: string
   name: string
-  description: string
+  description?: string
   basePrice: number
-  vatRate: number
+  vatRate?: number
   allergens?: string[]
-  station?: string
+  station?: Station | string
 }
 
-type MenuSection = {
-  items: MenuItem[]
-}
-
-type MenuResponse = {
-  menu: MenuSection[]
-}
+type MenuSection = { items: MenuItem[] }
+type MenuResponse = { menu: MenuSection[] }
 
 export function StaffOrderEditor({
   sessionId,
@@ -33,18 +29,15 @@ export function StaffOrderEditor({
   onBack: () => void
 }) {
   const [menu, setMenu] = useState<MenuItem[]>([])
-  const { items, addItem, updateItem, removeItem } =
-    useCartStore()
+  const { items, addItem, updateItem, removeItem } = useCartStore()
 
   useEffect(() => {
-    const loadMenu = async () => {
+    const load = async () => {
       const res = await fetch("/api/menu")
-      const data: MenuResponse = await res.json()
-      const flatItems = data.menu.flatMap(section => section.items)
-      setMenu(flatItems)
+      const data = (await res.json()) as MenuResponse
+      setMenu(data.menu.flatMap(s => s.items))
     }
-
-    loadMenu()
+    load()
   }, [])
 
   return (
@@ -56,15 +49,18 @@ export function StaffOrderEditor({
       {menu.map(item => {
         const cartItem = items.find(i => i.id === item.id)
 
+        const allergens: string[] = Array.isArray(item.allergens) ? item.allergens : []
+        const station: Station = item.station === "BAR" ? "BAR" : "KITCHEN"
+
         return (
           <MenuItemCard
             key={item.id}
             mode="editor"
             name={item.name}
-            description={item.description}
+            description={item.description ?? ""}
             price={item.basePrice}
-            vatRate={item.vatRate}
-            allergens={item.allergens}
+            vatRate={item.vatRate ?? 0}
+            allergens={allergens}
           >
             <QuantitySelector
               value={cartItem?.quantity ?? 0}
@@ -76,29 +72,20 @@ export function StaffOrderEditor({
 
                 if (cartItem) {
                   updateItem(item.id, { quantity: q })
-                } else {
-                  addItem({
-                    id: item.id,
-                    name: item.name,
-                    quantity: q,
-                    edits: null as unknown,
-                    allergens: item.allergens,
-                    unitPrice: item.basePrice,
-                    station: item.station,
-                  })
+                  return
                 }
+
+                addItem({
+                  id: item.id,
+                  name: item.name,
+                  quantity: q,
+                  edits: null,
+                  allergens,
+                  unitPrice: item.basePrice,
+                  station,
+                })
               }}
             />
-
-            {cartItem && (
-              <EditPanel
-                item={item}
-                value={cartItem.edits}
-                onChange={(edits: unknown) =>
-                  updateItem(item.id, { edits })
-                }
-              />
-            )}
           </MenuItemCard>
         )
       })}

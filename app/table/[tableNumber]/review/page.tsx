@@ -99,7 +99,8 @@ export default function TableReviewPage({
   useEffect(() => {
     fetchTable()
 
-    const timer = setInterval(fetchTable, 3000)
+    // Poll table state every 10 seconds (confirmation doesn't need tight polling)
+    const timer = setInterval(fetchTable, 10000)
 
     return () => clearInterval(timer)
   }, [tableNumber])

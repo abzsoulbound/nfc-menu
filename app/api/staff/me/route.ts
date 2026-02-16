@@ -25,7 +25,6 @@ export async function GET(req: Request) {
           id: staff.staffUserId,
           role: staff.role,
           restaurantId: staff.restaurantId,
-          restaurantSlug: staff.restaurantSlug,
         },
       },
       { status: 200 },

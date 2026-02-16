@@ -204,12 +204,13 @@ export default function StaffTablesPage() {
     refreshData()
 
     const activeTableNumber = activeTable?.number
+    // Poll tables every 10 seconds; billing less time-sensitive than active orders
     const interval = setInterval(() => {
       refreshData()
       if (activeTableNumber) {
         fetchBilling(activeTableNumber, { silent: true })
       }
-    }, 5000)
+    }, 10000)
     return () => clearInterval(interval)
   }, [activeTable?.number])
 

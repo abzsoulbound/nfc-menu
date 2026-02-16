@@ -1,3 +1,5 @@
+export const runtime = 'nodejs'
+
 import { prisma } from '@/lib/prisma'
 import { appendSystemEvent } from '@/lib/events'
 import { ASSIST_EDIT_UNLOCK_MS } from '@/lib/constants'

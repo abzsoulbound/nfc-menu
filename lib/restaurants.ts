@@ -6,7 +6,6 @@ import {
   DEFAULT_RESTAURANT_SLUG,
   RESTAURANT_COOKIE,
 } from "@/lib/restaurantConstants"
-import { requireRestaurantContext } from "@/lib/db/tenant"
 
 export {
   DEFAULT_RESTAURANT_BRANDING,
@@ -89,12 +88,6 @@ function hostFromHeaders(headers: HeaderLike) {
   const host = headers.get("x-forwarded-host") ?? headers.get("host")
   const normalized = normalizeDomain(host)
   return normalized || null
-}
-
-function slugFromPath(pathname: string) {
-  const match = pathname.match(/^\/(?:order\/)?r\/([^/]+)/i)
-  if (!match?.[1]) return ""
-  return normalizeSlug(match[1])
 }
 
 export async function ensureDefaultRestaurant() {
@@ -218,7 +211,6 @@ function parseRestaurantContextHeader(raw: string | null) {
 
 export async function resolveRestaurantContext(input: {
   hostname?: string | null
-  slug?: string | null
 }) {
   const normalizedHostname = normalizeDomain(input.hostname)
   if (normalizedHostname) {
@@ -226,18 +218,10 @@ export async function resolveRestaurantContext(input: {
     if (byDomain) return toRestaurantContext(byDomain)
   }
 
-  const normalizedSlug = normalizeSlug(input.slug)
-  if (normalizedSlug) {
-    const bySlug = await getRestaurantBySlug(normalizedSlug)
-    if (bySlug) return toRestaurantContext(bySlug)
-  }
-
-  return toRestaurantContext(await ensureDefaultRestaurant())
+  throw new Error("TENANT_CONTEXT_INVALID")
 }
 
-export async function resolveRestaurantFromRequest(req: Request, opts?: {
-  restaurantSlug?: string | null
-}) {
+export async function resolveRestaurantFromRequest(req: Request) {
   const contextFromHeader = parseRestaurantContextHeader(
     req.headers.get("x-restaurant-context")
   )
@@ -245,25 +229,24 @@ export async function resolveRestaurantFromRequest(req: Request, opts?: {
     return contextFromHeader
   }
 
-  const tenantContext = requireRestaurantContext(req.headers)
-  const byId = await prisma.restaurant.findUnique({
-    where: { id: tenantContext.restaurantId },
-  })
-  if (byId) {
-    return toRestaurantContext(byId)
+  const byHeaderId = req.headers.get("x-restaurant-id")?.trim()
+  if (byHeaderId) {
+    const byId = await prisma.restaurant.findUnique({
+      where: { id: byHeaderId },
+    })
+    if (byId) {
+      return toRestaurantContext(byId)
+    }
   }
 
-  if (tenantContext.restaurantId === DEFAULT_RESTAURANT_ID) {
-    return toRestaurantContext(await ensureDefaultRestaurant())
+  const hostname = hostFromHeaders(req.headers)
+  if (!hostname) {
+    throw new Error("TENANT_CONTEXT_MISSING")
   }
 
-  const explicitSlug = normalizeSlug(opts?.restaurantSlug)
-  const headerSlug = normalizeSlug(req.headers.get("x-restaurant-slug"))
-  const fallbackSlug =
-    explicitSlug || headerSlug || tenantContext.restaurantSlug
-  const bySlug = await getRestaurantBySlug(fallbackSlug)
-  if (bySlug) {
-    return toRestaurantContext(bySlug)
+  const byDomain = await resolveRestaurantByDomain(hostname)
+  if (byDomain) {
+    return toRestaurantContext(byDomain)
   }
 
   throw new Error("TENANT_CONTEXT_INVALID")
@@ -294,35 +277,20 @@ export function getBrandingConfig(input: {
   }
 }
 
-export function tenantPath(restaurantSlug: string, path: string) {
-  const slug = normalizeSlug(restaurantSlug) || DEFAULT_RESTAURANT_SLUG
+export function tenantPath(path: string) {
   const cleanPath = path.startsWith("/") ? path : `/${path}`
-  const basePath = `${DEFAULT_ORDER_BASE_PATH}${cleanPath}`
-  if (slug === DEFAULT_RESTAURANT_SLUG) {
-    return basePath
-  }
-  const separator = basePath.includes("?") ? "&" : "?"
-  return `${basePath}${separator}restaurantSlug=${encodeURIComponent(slug)}`
+  return `${DEFAULT_ORDER_BASE_PATH}${cleanPath}`
 }
 
-export function tenantOrderPath(restaurantSlug: string, tableId: string) {
-  const slug = normalizeSlug(restaurantSlug) || DEFAULT_RESTAURANT_SLUG
-  const basePath = `${DEFAULT_ORDER_BASE_PATH}/t/${encodeURIComponent(
-    tableId
-  )}`
-  if (slug === DEFAULT_RESTAURANT_SLUG) {
-    return basePath
-  }
-  return `${basePath}?restaurantSlug=${encodeURIComponent(slug)}`
+export function tenantOrderPath(tableId: string) {
+  return `${DEFAULT_ORDER_BASE_PATH}/t/${encodeURIComponent(tableId)}`
 }
 
 export function externalOrderUrl(input: {
   baseUrl?: string | null
-  restaurantSlug: string
   tableId: string
 }) {
-  const slug = normalizeSlug(input.restaurantSlug) || DEFAULT_RESTAURANT_SLUG
-  const fallbackTenantPath = tenantOrderPath(slug, input.tableId)
+  const fallbackTenantPath = tenantOrderPath(input.tableId)
   const domainPath = `/t/${encodeURIComponent(input.tableId)}`
   const baseUrl = input.baseUrl?.trim()
   if (!baseUrl) return fallbackTenantPath

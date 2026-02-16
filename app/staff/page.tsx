@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react"
 import Link from "next/link"
-import { usePathname } from "next/navigation"
 import { Card } from "@/components/ui/Card"
 import { Badge } from "@/components/ui/Badge"
 import { Divider } from "@/components/ui/Divider"
@@ -31,11 +30,6 @@ type Session = {
 }
 
 export default function StaffDashboard() {
-  const pathname = usePathname() ?? "/staff"
-  const tenantSlugMatch = pathname.match(/^\/r\/([^/]+)/)
-  const tenantPrefix = tenantSlugMatch?.[1]
-    ? `/r/${encodeURIComponent(tenantSlugMatch[1])}`
-    : ""
   const [tags, setTags] = useState<Tag[]>([])
   const [tables, setTables] = useState<Table[]>([])
   const [sessions, setSessions] = useState<Session[]>([])
@@ -78,7 +72,8 @@ export default function StaffDashboard() {
 
   useEffect(() => {
     fetchAll()
-    const interval = setInterval(fetchAll, 5000)
+    // Poll all staff data every 10 seconds (overview data changes less frequently)
+    const interval = setInterval(fetchAll, 10000)
     return () => clearInterval(interval)
   }, [])
 
@@ -94,7 +89,7 @@ export default function StaffDashboard() {
   return (
     <div className="p-4 space-y-6">
       <div className="grid grid-cols-3 gap-4">
-        <Link href={tenantPrefix ? `${tenantPrefix}/staff/tables` : "/staff/tables"}>
+        <Link href="/staff/tables">
           <Card className="cursor-pointer">
             <div className="text-lg font-semibold">Tables</div>
             <div className="text-sm opacity-70">
@@ -103,7 +98,7 @@ export default function StaffDashboard() {
           </Card>
         </Link>
 
-        <Link href={tenantPrefix ? `${tenantPrefix}/staff/tags` : "/staff/tags"}>
+        <Link href="/staff/tags">
           <Card className="cursor-pointer">
             <div className="text-lg font-semibold">NFC Tags</div>
             <div className="text-sm opacity-70">
@@ -112,9 +107,7 @@ export default function StaffDashboard() {
           </Card>
         </Link>
 
-        <Link
-          href={tenantPrefix ? `${tenantPrefix}/staff/sessions` : "/staff/sessions"}
-        >
+        <Link href="/staff/sessions">
           <Card className="cursor-pointer">
             <div className="text-lg font-semibold">Sessions</div>
             <div className="text-sm opacity-70">
@@ -129,9 +122,7 @@ export default function StaffDashboard() {
           No active sessions yet. Opening <code>/order/menu</code> does not create a
           table session. Sessions appear when guests open a tag URL like{" "}
           <code>
-            {tenantPrefix
-              ? `/order${tenantPrefix}/t/<tagId>`
-              : "/order/t/<tagId>"}
+            /order/t/&lt;tagId&gt;
           </code>
           .
         </Card>

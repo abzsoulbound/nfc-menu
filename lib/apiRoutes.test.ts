@@ -36,11 +36,10 @@ import { POST as staffLoginPost } from "@/app/api/staff/login/route"
 import { POST as staffLogoutPost } from "@/app/api/staff/logout/route"
 import { GET as ordersGet } from "@/app/api/orders/route"
 
-function tenantHeaders(restaurantId = "rest_test", slug = "test") {
+function tenantHeaders(restaurantId = "rest_test") {
   return {
     "content-type": "application/json",
     "x-restaurant-id": restaurantId,
-    "x-restaurant-slug": slug,
     "x-request-id": "req_test_1",
   }
 }

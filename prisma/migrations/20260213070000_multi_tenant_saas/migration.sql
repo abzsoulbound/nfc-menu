@@ -1,6 +1,3 @@
--- DropIndex
-DROP INDEX "MenuCategory_slug_key";
-
 -- AlterTable
 ALTER TABLE "CartItem" ADD COLUMN     "restaurantId" TEXT NOT NULL DEFAULT 'marlos';
 

@@ -256,13 +256,9 @@ export async function POST(req: Request) {
       serviceCharge: restaurant.serviceCharge,
       orderUrl: externalOrderUrl({
         baseUrl: toBaseUrl(restaurant.domain),
-        restaurantSlug: restaurant.slug,
         tableId: "1",
       }),
-      dashboardUrl:
-        restaurant.slug === DEFAULT_RESTAURANT_SLUG
-          ? "/admin"
-          : `/r/${restaurant.slug}/dashboard`,
+      dashboardUrl: "/admin",
     },
   })
 }
