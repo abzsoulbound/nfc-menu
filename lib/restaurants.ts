@@ -86,11 +86,6 @@ export function normalizeDomain(value: string | null | undefined) {
 
 function hostFromHeaders(headers: HeaderLike) {
   const host = headers.get("x-forwarded-host") ?? headers.get("host")
-  console.log('hostFromHeaders: raw host values', { 
-    'x-forwarded-host': headers.get("x-forwarded-host"),
-    'host': headers.get("host"),
-    selected: host
-  })
   const normalized = normalizeDomain(host)
   return normalized || null
 }
@@ -135,16 +130,10 @@ export async function getRestaurantBySlug(slug: string) {
 
 export async function resolveRestaurantByDomain(domain: string | null) {
   const normalizedDomain = normalizeDomain(domain)
-  if (!normalizedDomain) {
-    console.log('resolveRestaurantByDomain: blank domain after normalization', { domain, normalizedDomain })
-    return null
-  }
-  console.log('resolveRestaurantByDomain: looking up', { domain, normalizedDomain })
-  const result = await prisma.restaurant.findUnique({
+  if (!normalizedDomain) return null
+  return prisma.restaurant.findUnique({
     where: { domain: normalizedDomain },
   })
-  console.log('resolveRestaurantByDomain: result', { normalizedDomain, found: !!result })
-  return result
 }
 
 function toRestaurantContext(restaurant: {
