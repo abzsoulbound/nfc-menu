@@ -1,11 +1,12 @@
 import { redirect } from "next/navigation"
 
-export default function OrderEntryPage({
+export default async function OrderEntryPage({
   searchParams,
 }: {
-  searchParams: { t?: string }
+  searchParams: Promise<{ t?: string }>
 }) {
-  const tableToken = searchParams.t?.trim()
+  const resolvedSearchParams = await searchParams
+  const tableToken = resolvedSearchParams.t?.trim()
   if (!tableToken) {
     redirect("/order/menu")
   }

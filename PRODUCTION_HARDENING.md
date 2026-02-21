@@ -26,8 +26,9 @@
 - **Impact**: Kills slow queries before they exhaust connection pool
 
 ### 4. **Connection Pool Settings**
-- Supabase Session Pooler URL configured in both `DATABASE_URL` and `DIRECT_URL`
-- PgBouncer pooling mode enabled (vs direct connection)
+- Vercel Postgres (Neon) pooled URL in `POSTGRES_PRISMA_URL`
+- Vercel Postgres non-pooled URL in `POSTGRES_URL_NON_POOLING`
+- Prisma uses pooled for app traffic and direct for migration/introspection
 - **Impact**: Allows 100+ concurrent clients on 5 server connections
 
 ## How This Prevents Future Issues
@@ -54,8 +55,8 @@
 ## Next Steps
 
 1. ✅ **Verify pooler credentials** in Vercel env vars:
-   - Both `DATABASE_URL` and `DIRECT_URL` set to pooler URL
-   - Password reset and updated
+   - `POSTGRES_PRISMA_URL` is present (pooled)
+   - `POSTGRES_URL_NON_POOLING` is present (direct)
 
 2. **Redeploy to production**:
    ```bash
@@ -79,6 +80,7 @@ If scaling to 10+ restaurants:
 2. **Implement request deduplication** for simultaneous identical requests
 3. **Consider database read replicas** for menu/catalog queries
 4. **Monitor Supabase connection pool** monthly (scale if hitting 80%+ usage)
+4. **Monitor Vercel Postgres/Neon connection and compute usage** monthly
 
 ## Files Modified
 

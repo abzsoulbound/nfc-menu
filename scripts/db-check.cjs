@@ -10,7 +10,7 @@ function maskConnectionUrl(raw) {
     }
     return url.toString()
   } catch {
-    return "(unparseable DATABASE_URL)"
+    return "(unparseable DB URL)"
   }
 }
 
@@ -21,9 +21,13 @@ function formatError(error) {
 }
 
 async function main() {
-  const databaseUrl = process.env.DATABASE_URL
+  const databaseUrl =
+    process.env.POSTGRES_PRISMA_URL ??
+    process.env.DATABASE_URL
   if (!databaseUrl) {
-    console.error("DATABASE_URL is missing.")
+    console.error(
+      "POSTGRES_PRISMA_URL is missing (fallback: DATABASE_URL)."
+    )
     process.exit(1)
   }
 

@@ -1,10 +1,9 @@
 "use client"
 
 import Link from "next/link"
-import { usePathname } from "next/navigation"
+import { usePathname, useRouter } from "next/navigation"
 import { useEffect, useMemo, useState } from "react"
 import { useSessionStore } from "@/store/useSessionStore"
-import { readApiErrorInfo } from "@/lib/clientApiErrors"
 import styles from "./Header.module.css"
 
 function safeDecode(value: string) {
@@ -38,16 +37,16 @@ function CartIcon() {
 }
 
 export function Header() {
+  const router = useRouter()
   const pathname = usePathname() ?? "/"
   const sessionId = useSessionStore(s => s.sessionId)
-  const ensureClientKey = useSessionStore(s => s.ensureClientKey)
   const [cartCount, setCartCount] = useState(0)
   const [cartUnavailable, setCartUnavailable] = useState(false)
-  const [cartOpen, setCartOpen] = useState(false)
   const [scrolled, setScrolled] = useState(false)
   const [branding, setBranding] = useState({
-    name: "Marlo's Brasserie",
-    logoUrl: "/images/marlos-wordmark-alpha.svg",
+    slug: "marlos",
+    name: "Restaurant",
+    logoUrl: "",
     primaryColor: "#12649a",
     secondaryColor: "#d5e4ee",
   })
@@ -93,6 +92,7 @@ export function Header() {
         if (!res.ok) return
         const payload = (await res.json()) as {
           restaurant?: {
+            slug?: string
             name?: string
             logoUrl?: string
             primaryColor?: string
@@ -102,6 +102,7 @@ export function Header() {
         if (!active || !payload.restaurant) return
 
         setBranding(current => ({
+          slug: payload.restaurant?.slug || current.slug,
           name: payload.restaurant?.name || current.name,
           logoUrl: payload.restaurant?.logoUrl || current.logoUrl,
           primaryColor: payload.restaurant?.primaryColor || current.primaryColor,
@@ -129,10 +130,6 @@ export function Header() {
   }, [branding.primaryColor])
 
   useEffect(() => {
-    setCartOpen(false)
-  }, [pathname])
-
-  useEffect(() => {
     const onScroll = () => {
       setScrolled(window.scrollY > 2)
     }
@@ -149,68 +146,37 @@ export function Header() {
     }
 
     if (!routeContext.tagId || !sessionId) {
+      setCartCount(0)
       setCartUnavailable(true)
       return
     }
 
-    let cancelled = false
-    const syncLiveCount = async () => {
-      try {
-        const res = await fetch("/api/cart/get", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            sessionId,
-            clientKey: ensureClientKey(),
-          }),
-        })
-        if (!res.ok) {
-          if (!cancelled) {
-            setCartUnavailable(true)
-          }
-          return
-        }
-        const payload = await res.json()
-        if (cancelled) return
+    setCartUnavailable(false)
 
-        const items = (
-          Array.isArray(payload?.items) ? payload.items : []
-        ) as Array<{ quantity?: unknown; isMine?: boolean }>
-        const ownItems = items.filter(item => item.isMine !== false)
-        const count = ownItems.reduce(
-          (sum: number, item: { quantity?: unknown }) => {
-            const quantity = Number(item?.quantity ?? 0)
-            return Number.isFinite(quantity) && quantity > 0
-              ? sum + quantity
-              : sum
-          },
-          0
-        )
-        setCartCount(count)
-        setCartUnavailable(false)
-      } catch {
-        if (!cancelled) {
-          setCartUnavailable(true)
-        }
+    const onCartUpdated: EventListener = event => {
+      const detail = (
+        event as CustomEvent<{
+          count?: unknown
+          available?: unknown
+        }>
+      ).detail
+
+      const nextCount = Number(detail?.count)
+      if (Number.isFinite(nextCount)) {
+        setCartCount(Math.max(0, Math.trunc(nextCount)))
+      }
+
+      if (typeof detail?.available === "boolean") {
+        setCartUnavailable(!detail.available)
       }
     }
 
-    const onCartUpdated: EventListener = () => {
-      void syncLiveCount()
-    }
-
-    void syncLiveCount()
-    const timer = window.setInterval(() => {
-      void syncLiveCount()
-    }, 3000)
     window.addEventListener("nfc-cart-updated", onCartUpdated)
 
     return () => {
-      cancelled = true
-      window.clearInterval(timer)
       window.removeEventListener("nfc-cart-updated", onCartUpdated)
     }
-  }, [routeContext, sessionId, ensureClientKey])
+  }, [routeContext.isOrderingRoute, routeContext.tagId, sessionId])
 
   if (!routeContext.isOrderingRoute) {
     return null
@@ -223,8 +189,11 @@ export function Header() {
     : String(cartCount)
   const showBadge = cartUnavailable || cartCount > 0
   const cartAriaLabel = cartUnavailable
-    ? "Basket status unavailable. Tap to retry."
+    ? "Basket is syncing. Tap to view basket status."
     : `Open cart (${cartCount} item${cartCount === 1 ? "" : "s"})`
+  const isFableTenant =
+    branding.slug === "fable-stores" ||
+    branding.name.toLowerCase().includes("fable")
 
   return (
     <header
@@ -233,17 +202,23 @@ export function Header() {
       <div className={styles.inner}>
         <Link
           href={routeContext.homeHref}
-          className={styles.brand}
+          className={
+            isFableTenant ? `${styles.brand} ${styles.brandFable}` : styles.brand
+          }
           aria-label={branding.name}
         >
           <img
-            src={branding.logoUrl || "/images/marlos-wordmark-alpha.svg"}
+            src={
+              branding.logoUrl ||
+              "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw=="
+            }
             alt={branding.name}
             className={styles.logo}
             loading="eager"
             decoding="async"
             onError={event => {
-              event.currentTarget.src = "/images/marlos-wordmark-alpha-tight.png"
+              event.currentTarget.src =
+                "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw=="
             }}
           />
         </Link>
@@ -256,49 +231,8 @@ export function Header() {
               : styles.cart
           }
           aria-label={cartAriaLabel}
-          aria-disabled={cartUnavailable}
-          aria-expanded={cartOpen}
-          onClick={event => {
-            if (cartUnavailable) {
-              event.preventDefault()
-              if (!sessionId) return
-              void (async () => {
-                try {
-                  const res = await fetch("/api/cart/get", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({
-                      sessionId,
-                      clientKey: ensureClientKey(),
-                    }),
-                  })
-                  if (!res.ok) {
-                    await readApiErrorInfo(res)
-                    return
-                  }
-                  const payload = await res.json()
-                  const items = (
-                    Array.isArray(payload?.items) ? payload.items : []
-                  ) as Array<{ quantity?: unknown; isMine?: boolean }>
-                  const ownItems = items.filter(item => item.isMine !== false)
-                  const count = ownItems.reduce(
-                    (sum: number, item: { quantity?: unknown }) => {
-                      const quantity = Number(item?.quantity ?? 0)
-                      return Number.isFinite(quantity) && quantity > 0
-                        ? sum + quantity
-                        : sum
-                    },
-                    0
-                  )
-                  setCartCount(count)
-                  setCartUnavailable(false)
-                } catch {
-                  // keep warning badge until next successful poll
-                }
-              })()
-              return
-            }
-            setCartOpen(true)
+          onClick={() => {
+            router.push(routeContext.cartHref)
           }}
         >
           <CartIcon />
@@ -315,46 +249,6 @@ export function Header() {
           )}
         </button>
       </div>
-
-      {cartOpen && (
-        <div
-          className={styles.cartDrawerOverlay}
-          role="dialog"
-          aria-modal="true"
-          onClick={() => setCartOpen(false)}
-        >
-          <div
-            className={styles.cartDrawer}
-            onClick={event => event.stopPropagation()}
-          >
-            <div className={styles.cartDrawerHeader}>
-              <div className={styles.cartDrawerTitle}>Basket</div>
-              <button
-                type="button"
-                className={styles.cartDrawerClose}
-                onClick={() => setCartOpen(false)}
-                aria-label="Close basket"
-              >
-                ×
-              </button>
-            </div>
-            <div className={styles.cartDrawerBody}>
-              <div className={styles.cartDrawerCount}>
-                {cartUnavailable
-                  ? "Basket count unavailable"
-                  : `${cartCount} item${cartCount === 1 ? "" : "s"} in your basket`}
-              </div>
-              <Link
-                href={routeContext.cartHref}
-                className={styles.cartDrawerAction}
-                onClick={() => setCartOpen(false)}
-              >
-                View basket
-              </Link>
-            </div>
-          </div>
-        </div>
-      )}
     </header>
   )
 }

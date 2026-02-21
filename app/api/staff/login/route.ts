@@ -182,7 +182,7 @@ export async function POST(req: Request) {
     )
   }
 
-  const staffUser = await prisma.staffUser.findFirst({
+  let staffUser = await prisma.staffUser.findFirst({
     where: {
       restaurantId: context.restaurantId,
       role: payload.role,
@@ -193,25 +193,68 @@ export async function POST(req: Request) {
     },
   })
 
+  const fallbackEnvKey = ROLE_PASSCODE_ENV[payload.role]
+  const fallbackPasscode = process.env[fallbackEnvKey]?.trim() ?? ""
+  const fallbackMatched =
+    fallbackPasscode.length > 0 && payload.passcode === fallbackPasscode
+
   let passcodeHash = staffUser?.passcodeHash ?? null
-  if (staffUser && !passcodeHash) {
-    const fallbackEnvKey = ROLE_PASSCODE_ENV[payload.role]
-    const fallbackPasscode = process.env[fallbackEnvKey]?.trim()
-    if (fallbackPasscode && payload.passcode === fallbackPasscode) {
-      passcodeHash = await hashPasscode(payload.passcode)
-      await prisma.staffUser.update({
+  let verified = staffUser
+    ? await verifyPasscode(payload.passcode, passcodeHash)
+    : false
+
+  // Env passcode must be able to recover/rotate auth even if DB hash is stale.
+  if (!verified && fallbackMatched) {
+    const nextPasscodeHash = await hashPasscode(payload.passcode)
+
+    if (!staffUser) {
+      const existingByRole = await prisma.staffUser.findFirst({
+        where: {
+          restaurantId: context.restaurantId,
+          role: payload.role,
+        },
+        orderBy: {
+          updatedAt: "desc",
+        },
+      })
+
+      if (existingByRole) {
+        staffUser = await prisma.staffUser.update({
+          where: { id: existingByRole.id },
+          data: {
+            active: true,
+            passcodeHash: nextPasscodeHash,
+            passcodeUpdatedAt: new Date(),
+          },
+        })
+      } else {
+        staffUser = await prisma.staffUser.create({
+          data: {
+            restaurantId: context.restaurantId,
+            name: `default-${payload.role}-${crypto
+              .randomUUID()
+              .slice(0, 6)}`,
+            role: payload.role,
+            active: true,
+            passcodeHash: nextPasscodeHash,
+            passcodeUpdatedAt: new Date(),
+          },
+        })
+      }
+    } else {
+      staffUser = await prisma.staffUser.update({
         where: { id: staffUser.id },
         data: {
-          passcodeHash,
+          active: true,
+          passcodeHash: nextPasscodeHash,
           passcodeUpdatedAt: new Date(),
         },
       })
     }
-  }
 
-  const verified = staffUser
-    ? await verifyPasscode(payload.passcode, passcodeHash)
-    : false
+    passcodeHash = nextPasscodeHash
+    verified = true
+  }
 
   if (!staffUser || !verified) {
     await recordAttempt({

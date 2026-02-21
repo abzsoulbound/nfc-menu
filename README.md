@@ -20,7 +20,9 @@ Routes:
 Development:
 - npm install
 - create a `.env` file
-- set DATABASE_URL to your managed Postgres URL
+- set Vercel Postgres/Neon URLs:
+  - `POSTGRES_PRISMA_URL` (pooled)
+  - `POSTGRES_URL_NON_POOLING` (direct)
 - set TABLE_NUMBERS to fixed table numbers (example: `1-20,30,32`)
 - set role passcodes for bootstrap:
   - `ADMIN_PASSCODE`
@@ -40,8 +42,10 @@ Health checks:
 - `GET /api/health` returns service/db status plus latency and request id.
 
 Online DB Cutover:
-1. Provision a managed Postgres database (Neon/Supabase/RDS).
-2. Put its connection string in `.env` as `DATABASE_URL`.
+1. Provision Vercel Postgres (Neon) and attach integration to the project.
+2. Put connection strings in `.env` as:
+  - `POSTGRES_PRISMA_URL` (pooled)
+  - `POSTGRES_URL_NON_POOLING` (direct)
 3. Apply schema: `npm run prisma:migrate:deploy`.
 4. Verify connectivity and schema: `npm run db:check`.
 5. Start app: `npm run dev`.

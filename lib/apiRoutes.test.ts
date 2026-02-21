@@ -143,7 +143,7 @@ describe("api route safety", () => {
       "http://localhost/api/orders?sessionId=session_other_restaurant",
       {
         method: "GET",
-        headers: tenantHeaders("rest_test", "test"),
+        headers: tenantHeaders("rest_test"),
       }
     )
 

@@ -1,6 +1,7 @@
 import "@/app/globals.css"
 import { ReactNode } from "react"
 import { Fraunces, Plus_Jakarta_Sans } from "next/font/google"
+import { Analytics } from "@vercel/analytics/next"
 import { Providers } from "@/app/providers"
 import { AppShell } from "@/components/layout/AppShell"
 
@@ -28,6 +29,7 @@ export default function RootLayout({
           <AppShell>
             {children}
           </AppShell>
+          <Analytics />
         </Providers>
       </body>
     </html>

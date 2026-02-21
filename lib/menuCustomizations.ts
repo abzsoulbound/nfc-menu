@@ -851,7 +851,236 @@ const milkChoiceGroup: MenuModifierGroup = {
   ],
 }
 
+const drinkTemperatureGroup: MenuModifierGroup = {
+  id: "temperature",
+  name: "Temperature",
+  type: "single",
+  required: true,
+  options: [
+    {
+      id: "hot",
+      label: "Hot",
+      priceDelta: 0,
+      default: true,
+    },
+    {
+      id: "iced",
+      label: "Iced",
+      priceDelta: 0,
+    },
+  ],
+}
+
+const syrupFlavorGroup: MenuModifierGroup = {
+  id: "syrup_flavor",
+  name: "Syrup flavour",
+  type: "single",
+  required: true,
+  options: [
+    {
+      id: "vanilla",
+      label: "Vanilla",
+      priceDelta: 0,
+      default: true,
+    },
+    {
+      id: "caramel",
+      label: "Caramel",
+      priceDelta: 0,
+    },
+    {
+      id: "hazelnut",
+      label: "Hazelnut",
+      priceDelta: 0,
+    },
+    {
+      id: "coconut",
+      label: "Coconut",
+      priceDelta: 0,
+    },
+  ],
+}
+
+const alternativeMilkGroup: MenuModifierGroup = {
+  id: "alternative_milk",
+  name: "Milk type",
+  type: "single",
+  required: true,
+  options: [
+    {
+      id: "oat",
+      label: "Oat",
+      priceDelta: 0,
+      default: true,
+      ingredientIds: ["oat_milk"],
+    },
+    {
+      id: "almond",
+      label: "Almond",
+      priceDelta: 0,
+      ingredientIds: ["almond_milk"],
+    },
+    {
+      id: "soya",
+      label: "Soya",
+      priceDelta: 0,
+      ingredientIds: ["soy_milk"],
+    },
+    {
+      id: "coconut",
+      label: "Coconut",
+      priceDelta: 0,
+      ingredientIds: ["coconut_milk"],
+    },
+  ],
+}
+
+const toppingChoiceGroup: MenuModifierGroup = {
+  id: "topping_choice",
+  name: "Choose topping",
+  type: "single",
+  required: true,
+  options: [
+    {
+      id: "whipping_cream",
+      label: "Whipping Cream",
+      priceDelta: 0,
+      default: true,
+    },
+    {
+      id: "marshmallow",
+      label: "Marshmallow",
+      priceDelta: 0,
+    },
+  ],
+}
+
+const teaBlendGroup: MenuModifierGroup = {
+  id: "tea_blend",
+  name: "Choose tea",
+  type: "single",
+  required: true,
+  options: [
+    {
+      id: "english_breakfast_gold",
+      label: "English Breakfast Gold",
+      priceDelta: 0,
+      default: true,
+    },
+    {
+      id: "decaf",
+      label: "Decaf",
+      priceDelta: 0,
+    },
+    {
+      id: "earl_grey",
+      label: "Earl Grey",
+      priceDelta: 0,
+    },
+  ],
+}
+
+const omeletteCustomization = finalizeCustomization({
+  editPolicy: "full",
+  needsOwnerReview: true,
+  baseIngredientIds: ["omelette_egg", "salad", "chips"],
+  lockedIngredientIds: ["omelette_egg"],
+  autoRemovalGroup: false,
+  autoExtraGroup: false,
+  groups: [
+    {
+      id: "fillings",
+      name: "Choose any 3 fillings",
+      type: "multi",
+      min: 3,
+      max: 3,
+      required: true,
+      options: [
+        {
+          id: "ham",
+          label: "Ham",
+          priceDelta: 0,
+          ingredientIds: ["ham"],
+        },
+        {
+          id: "onions",
+          label: "Onions",
+          priceDelta: 0,
+          ingredientIds: ["onion"],
+        },
+        {
+          id: "peppers",
+          label: "Peppers",
+          priceDelta: 0,
+          ingredientIds: ["pepper"],
+        },
+        {
+          id: "cheese",
+          label: "Cheese",
+          priceDelta: 0,
+          ingredientIds: ["cheese"],
+        },
+        {
+          id: "feta_cheese",
+          label: "Feta Cheese",
+          priceDelta: 0,
+          ingredientIds: ["feta"],
+        },
+        {
+          id: "mushrooms",
+          label: "Mushrooms",
+          priceDelta: 0,
+          ingredientIds: ["mushroom"],
+        },
+        {
+          id: "spinach",
+          label: "Spinach",
+          priceDelta: 0,
+          ingredientIds: ["spinach"],
+        },
+      ],
+    },
+  ],
+})
+
 const explicitCustomizationByItemId: Record<string, MenuCustomization> = {
+  "las-vegas-breakfast": finalizeCustomization({
+    editPolicy: "full",
+    needsOwnerReview: true,
+    baseIngredientIds: [
+      "bacon",
+      "hash_browns",
+      "egg",
+      "cumberland_sausage",
+      "homemade_pancakes",
+      "berries",
+      "maple_syrup",
+    ],
+    lockedIngredientIds: [],
+    groups: [
+      {
+        id: "egg_style",
+        name: "Egg style",
+        type: "single",
+        required: false,
+        options: [
+          {
+            id: "fried",
+            label: "Fried Egg",
+            priceDelta: 0,
+            default: true,
+            ingredientIds: ["egg"],
+          },
+          {
+            id: "scrambled",
+            label: "Scrambled Egg",
+            priceDelta: 1,
+            ingredientIds: ["egg"],
+          },
+        ],
+      },
+    ],
+  }),
   "smashed-avocado-choice": finalizeCustomization({
     editPolicy: "full",
     needsOwnerReview: true,
@@ -910,65 +1139,38 @@ const explicitCustomizationByItemId: Record<string, MenuCustomization> = {
       },
     ],
   }),
-  omelette: finalizeCustomization({
-    editPolicy: "full",
-    needsOwnerReview: true,
-    baseIngredientIds: ["omelette_egg", "salad", "chips"],
-    lockedIngredientIds: ["omelette_egg"],
-    groups: [
-      {
-        id: "fillings",
-        name: "Add fillings (+1 each)",
-        type: "multi",
-        min: 0,
-        max: 6,
-        options: [
-          {
-            id: "ham",
-            label: "Ham",
-            priceDelta: 1,
-            ingredientIds: ["ham"],
-          },
-          {
-            id: "onions",
-            label: "Onions",
-            priceDelta: 1,
-            ingredientIds: ["onion"],
-          },
-          {
-            id: "peppers",
-            label: "Peppers",
-            priceDelta: 1,
-            ingredientIds: ["pepper"],
-          },
-          {
-            id: "cheese",
-            label: "Cheese",
-            priceDelta: 1,
-            ingredientIds: ["cheese"],
-          },
-          {
-            id: "feta_cheese",
-            label: "Feta Cheese",
-            priceDelta: 1,
-            ingredientIds: ["feta"],
-          },
-          {
-            id: "mushrooms",
-            label: "Mushrooms",
-            priceDelta: 1,
-            ingredientIds: ["mushroom"],
-          },
-          {
-            id: "spinach",
-            label: "Spinach",
-            priceDelta: 1,
-            ingredientIds: ["spinach"],
-          },
-        ],
-      },
-    ],
-  }),
+  "homemade-sourdough-bread-smashed-avocado-poached-scrambled-egg":
+    finalizeCustomization({
+      editPolicy: "full",
+      needsOwnerReview: true,
+      baseIngredientIds: ["sourdough_bread", "smashed_avocado", "egg"],
+      lockedIngredientIds: ["sourdough_bread", "smashed_avocado"],
+      groups: [
+        {
+          id: "egg_style",
+          name: "Egg style",
+          type: "single",
+          required: true,
+          options: [
+            {
+              id: "poached",
+              label: "Poached",
+              priceDelta: 0,
+              default: true,
+              ingredientIds: ["egg"],
+            },
+            {
+              id: "scrambled",
+              label: "Scrambled",
+              priceDelta: 0,
+              ingredientIds: ["egg"],
+            },
+          ],
+        },
+      ],
+    }),
+  omelette: omeletteCustomization,
+  "omelette-with-any-3-fillings": omeletteCustomization,
   "lamb-chops": finalizeCustomization({
     editPolicy: "full",
     needsOwnerReview: true,
@@ -1386,6 +1588,57 @@ const explicitCustomizationByItemId: Record<string, MenuCustomization> = {
     autoRemovalGroup: false,
     autoExtraGroup: false,
   }),
+  "latte-hot-iced": finalizeCustomization({
+    editPolicy: "full",
+    needsOwnerReview: false,
+    baseIngredientIds: ["espresso_shot"],
+    lockedIngredientIds: ["espresso_shot"],
+    groups: [drinkTemperatureGroup, milkChoiceGroup],
+    autoRemovalGroup: false,
+    autoExtraGroup: false,
+  }),
+  "matcha-latte-hot-iced": finalizeCustomization({
+    editPolicy: "full",
+    needsOwnerReview: false,
+    groups: [drinkTemperatureGroup, milkChoiceGroup],
+    autoRemovalGroup: false,
+    autoExtraGroup: false,
+  }),
+  "chai-latte-hot-iced": finalizeCustomization({
+    editPolicy: "full",
+    needsOwnerReview: false,
+    groups: [drinkTemperatureGroup, milkChoiceGroup],
+    autoRemovalGroup: false,
+    autoExtraGroup: false,
+  }),
+  "syrup-vanilla-caramel-hazelnut-coconut": finalizeCustomization({
+    editPolicy: "full",
+    needsOwnerReview: false,
+    groups: [syrupFlavorGroup],
+    autoRemovalGroup: false,
+    autoExtraGroup: false,
+  }),
+  "alternative-milk-oat-almond-soya-coconut": finalizeCustomization({
+    editPolicy: "full",
+    needsOwnerReview: false,
+    groups: [alternativeMilkGroup],
+    autoRemovalGroup: false,
+    autoExtraGroup: false,
+  }),
+  "whipping-cream-marshmallow": finalizeCustomization({
+    editPolicy: "full",
+    needsOwnerReview: false,
+    groups: [toppingChoiceGroup],
+    autoRemovalGroup: false,
+    autoExtraGroup: false,
+  }),
+  "english-breakfast-gold-decaf-earl-grey": finalizeCustomization({
+    editPolicy: "full",
+    needsOwnerReview: false,
+    groups: [teaBlendGroup],
+    autoRemovalGroup: false,
+    autoExtraGroup: false,
+  }),
 }
 
 function isObject(value: unknown): value is Record<string, unknown> {
@@ -1398,6 +1651,32 @@ function isObject(value: unknown): value is Record<string, unknown> {
 
 function unique(input: string[]): string[] {
   return Array.from(new Set(input))
+}
+
+function candidateIdsForLookup(rawId: string): string[] {
+  const trimmed = rawId.trim()
+  if (!trimmed) return []
+
+  const candidates = [trimmed]
+  const scopedSeparatorIndex = trimmed.lastIndexOf("::")
+  if (scopedSeparatorIndex >= 0 && scopedSeparatorIndex + 2 < trimmed.length) {
+    candidates.push(trimmed.slice(scopedSeparatorIndex + 2))
+  }
+
+  const withScopeStripped = candidates[candidates.length - 1]
+  const skuSeparatorIndex = withScopeStripped.lastIndexOf("--")
+  if (skuSeparatorIndex >= 0 && skuSeparatorIndex + 2 < withScopeStripped.length) {
+    candidates.push(withScopeStripped.slice(skuSeparatorIndex + 2))
+  }
+
+  return unique(candidates)
+}
+
+function slugifyLookupName(rawName: string): string {
+  return rawName
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
 }
 
 function normalizeIngredientIds(input: unknown): string[] {
@@ -1618,7 +1897,9 @@ function finalizeCustomization(
 function buildInferredCustomization(
   context: MenuItemCustomizationContext
 ): MenuCustomization | null {
-  const override = itemIngredientOverrides[context.id]
+  const override = candidateIdsForLookup(context.id)
+    .map(candidateId => itemIngredientOverrides[candidateId])
+    .find(value => Boolean(value))
   const baseIngredientIds = override
     ? normalizeIngredientIds(override.baseIngredientIds)
     : parseDescriptionIngredientIds(context.description ?? "")
@@ -1791,9 +2072,18 @@ export function getMenuItemCustomization(
       ? { id: item }
       : item
 
-  const explicit = explicitCustomizationByItemId[context.id]
-  if (explicit) {
-    return explicit
+  const lookupCandidates = [
+    ...candidateIdsForLookup(context.id),
+    ...(typeof context.name === "string" && context.name.trim().length > 0
+      ? [slugifyLookupName(context.name)]
+      : []),
+  ]
+
+  for (const candidateId of unique(lookupCandidates)) {
+    const explicit = explicitCustomizationByItemId[candidateId]
+    if (explicit) {
+      return explicit
+    }
   }
 
   return buildInferredCustomization(context)

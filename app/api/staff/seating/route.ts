@@ -4,6 +4,10 @@ import { prisma } from "@/lib/prisma"
 import { requireStaff } from "@/lib/auth"
 import { appendSystemEvent } from "@/lib/events"
 import {
+  ensureTagByToken,
+  normalizeTagToken,
+} from "@/lib/db/tags"
+import {
   getFixedTableNumbers,
   isAllowedTemporaryTableNumber,
 } from "@/lib/tableCatalog"
@@ -29,7 +33,9 @@ function normalizeTagIds(raw: unknown): string[] {
   if (!Array.isArray(raw)) return []
 
   const normalized = raw
-    .map(value => (typeof value === "string" ? value.trim() : ""))
+    .map(value =>
+      typeof value === "string" ? normalizeTagToken(value) : ""
+    )
     .filter(Boolean)
 
   const unique = new Set(normalized)
@@ -83,32 +89,27 @@ export async function POST(req: Request) {
     )
   }
 
-  const registeredTags = await prisma.nfcTag.findMany({
-    where: {
-      restaurantId: restaurant.id,
-      tagId: {
-        in: tagIds,
-      },
-    },
-    select: {
-      id: true,
-      tagId: true,
-    },
-  })
-  const registeredSet = new Set(registeredTags.map(tag => tag.tagId))
-  const tagIdToNfcTagId = new Map(
-    registeredTags.map(tag => [tag.tagId, tag.id])
-  )
-  const missingTagIds = tagIds.filter(tagId => !registeredSet.has(tagId))
-  if (missingTagIds.length > 0) {
-    return NextResponse.json(
-      {
-        error: "TAG_NOT_REGISTERED",
-        missingTagIds,
-      },
-      { status: 404 }
+  const resolvedTags = await Promise.all(
+    tagIds.map(tagId =>
+      ensureTagByToken({
+        restaurantId: restaurant.id,
+        tagId,
+      })
     )
-  }
+  )
+
+  const canonicalTagIds = Array.from(
+    new Set(
+      resolvedTags
+        .map(tag => tag?.tagId)
+        .filter((tagId): tagId is string => Boolean(tagId))
+    )
+  )
+  const tagIdToNfcTagId = new Map(
+    resolvedTags
+      .filter((tag): tag is { id: string; tagId: string } => Boolean(tag))
+      .map(tag => [tag.tagId, tag.id])
+  )
 
   try {
     const result = await prisma.$transaction(
@@ -119,7 +120,7 @@ export async function POST(req: Request) {
             OR: [
               {
                 tagId: {
-                  in: tagIds,
+                  in: canonicalTagIds,
                 },
               },
               {
@@ -134,7 +135,7 @@ export async function POST(req: Request) {
           },
         })
 
-        const tagIdSet = new Set(tagIds)
+        const tagIdSet = new Set(canonicalTagIds)
 
         const conflictingAssignments = previousAssignments.filter(
           assignment =>
@@ -160,7 +161,7 @@ export async function POST(req: Request) {
           currentTagId => !tagIdSet.has(currentTagId)
         )
 
-        for (const tagId of tagIds) {
+        for (const tagId of canonicalTagIds) {
           const nfcTagId = tagIdToNfcTagId.get(tagId)
           if (!nfcTagId) {
             throw new SeatingError(404, {
@@ -233,6 +234,10 @@ export async function POST(req: Request) {
             masterTableId = nextMasterId
           }
 
+          const groupedTagIds = assignments.map(
+            assignment => assignment.tagId
+          )
+
           await tx.tableAssignment.updateMany({
             where: {
               restaurantId: restaurant.id,
@@ -245,18 +250,96 @@ export async function POST(req: Request) {
             },
           })
 
-          await tx.session.updateMany({
+          const activeSessions = await tx.session.findMany({
             where: {
               restaurantId: restaurant.id,
-              tagId: {
-                in: assignments.map(assignment => assignment.tagId),
-              },
               status: "ACTIVE",
+              tagId: {
+                in: groupedTagIds,
+              },
             },
-            data: {
-              tableId: nextMasterId,
+            orderBy: [
+              { openedAt: "asc" },
+              { lastActivityAt: "asc" },
+              { id: "asc" },
+            ],
+            select: {
+              id: true,
+              tableId: true,
+              lastActivityAt: true,
             },
           })
+
+          if (activeSessions.length === 0) {
+            continue
+          }
+
+          const oldestSession = activeSessions[0]
+          let masterSessionCart = await tx.sessionCart.findUnique({
+            where: { sessionId: oldestSession.id },
+            select: { id: true },
+          })
+          if (!masterSessionCart) {
+            masterSessionCart = await tx.sessionCart.create({
+              data: {
+                sessionId: oldestSession.id,
+                restaurantId: restaurant.id,
+              },
+              select: { id: true },
+            })
+          }
+
+          const latestActivityAt = activeSessions.reduce(
+            (latest, current) =>
+              current.lastActivityAt > latest
+                ? current.lastActivityAt
+                : latest,
+            oldestSession.lastActivityAt
+          )
+
+          await tx.session.update({
+            where: { id: oldestSession.id },
+            data: {
+              tableId: nextMasterId,
+              lastActivityAt: latestActivityAt,
+            },
+          })
+
+          for (const session of activeSessions.slice(1)) {
+            await tx.order.updateMany({
+              where: {
+                restaurantId: restaurant.id,
+                sessionId: session.id,
+              },
+              data: {
+                sessionId: oldestSession.id,
+              },
+            })
+
+            const childCart = await tx.sessionCart.findUnique({
+              where: { sessionId: session.id },
+              select: { id: true },
+            })
+            if (childCart) {
+              await tx.cartItem.updateMany({
+                where: {
+                  restaurantId: restaurant.id,
+                  cartId: childCart.id,
+                },
+                data: {
+                  cartId: masterSessionCart.id,
+                },
+              })
+
+              await tx.sessionCart.delete({
+                where: { sessionId: session.id },
+              })
+            }
+
+            await tx.session.delete({
+              where: { id: session.id },
+            })
+          }
         }
 
         if (tagsToUnassign.length > 0) {

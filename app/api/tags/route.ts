@@ -72,17 +72,17 @@ export async function POST(req: Request) {
     return NextResponse.json({
       ok: true,
       created: false,
-      tagId,
+      tagId: existing.tagId,
     })
   }
-  await ensureTagByToken({
+  const createdTag = await ensureTagByToken({
     restaurantId: restaurant.id,
     tagId,
   })
 
   await appendSystemEvent(
     "tag_registered",
-    { tagId },
+    { tagId: createdTag.tagId },
     { req, restaurantId: restaurant.id }
   )
 
@@ -90,7 +90,7 @@ export async function POST(req: Request) {
     {
       ok: true,
       created: true,
-      tagId,
+      tagId: createdTag.tagId,
     },
     { status: 201 }
   )
@@ -136,9 +136,11 @@ export async function PATCH(req: Request) {
     )
   }
 
+  const canonicalTagId = tag.tagId
+
   const previousAssignment = await prisma.tableAssignment.findFirst({
     where: {
-      tagId,
+      tagId: canonicalTagId,
       restaurantId: restaurant.id,
     },
     select: {
@@ -149,14 +151,14 @@ export async function PATCH(req: Request) {
   if (tableId === null) {
     await prisma.tableAssignment.deleteMany({
       where: {
-        tagId,
+        tagId: canonicalTagId,
         restaurantId: restaurant.id,
       },
     })
     await prisma.session.updateMany({
       where: {
         restaurantId: restaurant.id,
-        tagId,
+        tagId: canonicalTagId,
         status: "ACTIVE",
       },
       data: {
@@ -188,7 +190,7 @@ export async function PATCH(req: Request) {
 
     await appendSystemEvent(
       "tag_unassigned",
-      { tagId },
+      { tagId, canonicalTagId },
       { req, restaurantId: restaurant.id }
     )
     return NextResponse.json({ ok: true, unassigned: true })
@@ -206,7 +208,7 @@ export async function PATCH(req: Request) {
     where: {
       restaurantId_tagId: {
         restaurantId: restaurant.id,
-        tagId,
+        tagId: canonicalTagId,
       },
     },
     update: {
@@ -216,7 +218,7 @@ export async function PATCH(req: Request) {
     create: {
       restaurantId: restaurant.id,
       nfcTagId: tag.id,
-      tagId,
+      tagId: canonicalTagId,
       tableNo: table.tableNo,
     },
   })
@@ -229,7 +231,7 @@ export async function PATCH(req: Request) {
   await prisma.session.updateMany({
     where: {
       restaurantId: restaurant.id,
-      tagId,
+      tagId: canonicalTagId,
       status: "ACTIVE",
     },
     data: {
@@ -266,6 +268,7 @@ export async function PATCH(req: Request) {
     "tag_assigned",
     {
       tagId,
+      canonicalTagId,
       tableId: masterTableId,
       tableNo: table.tableNo,
       assignmentId: assignment.id,

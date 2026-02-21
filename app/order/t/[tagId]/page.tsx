@@ -1,10 +1,13 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useRef, useState, type TouchEvent } from 'react'
-import { usePathname, useRouter } from 'next/navigation'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useParams, usePathname, useRouter } from 'next/navigation'
 import { MenuSection } from "@/components/menu/MenuSection"
 import { MenuItemCard } from "@/components/menu/MenuItemCard"
-import { IngredientEditor } from "@/components/order/IngredientEditor"
+import {
+  ProductDetail,
+  type ProductOptionGroup,
+} from "@/components/order/ProductDetail"
 import { useSessionStore } from "@/store/useSessionStore"
 import {
   cartLoadErrorMessage,
@@ -20,7 +23,6 @@ import {
   calculateModifierDelta,
   collectModifierAllergens,
   defaultModifierSelections,
-  getBaseIngredientLabels,
   hasCustomization,
   normalizeModifierSelections,
   type MenuCustomization,
@@ -41,6 +43,7 @@ type MenuItem = {
   station?: "KITCHEN" | "BAR"
   available?: boolean
   customization?: MenuCustomization | null
+  optionGroups?: ProductOptionGroup[]
 }
 
 type MenuSectionType = {
@@ -93,9 +96,306 @@ type DebugEntry = {
 
 type CustomizerGroup = MenuCustomization["groups"][number]
 
-const INCLUDED_PAGE_SIZE = 8
-const ALLERGY_NOTICE_TEXT =
-  "Allergen information is available on request. Our kitchen handles common allergens, so traces may be present."
+function resolveOptionType(
+  value: unknown,
+  fallbackMulti: boolean
+): ProductOptionGroup["type"] {
+  if (value === "single" || value === "multi" || value === "adjustable") {
+    return value
+  }
+  return fallbackMulti ? "multi" : "single"
+}
+
+function ingredientBaseLabel(value: string): string {
+  return value
+    .replace(/^\s*(no|extra)\s+/i, "")
+    .trim()
+}
+
+function ingredientLabelFromId(ingredientId: string): string {
+  return ingredientId
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, ch => ch.toUpperCase())
+}
+
+function actionLabelForGroup(group: {
+  id: string
+  title: string
+  type: ProductOptionGroup["type"]
+}): string {
+  const idTitle = `${group.id} ${group.title}`.toLowerCase()
+  if (idTitle.includes("substitute") || group.type === "adjustable") {
+    return "Replace"
+  }
+  if (group.type === "multi") return "Choose"
+  return "Select"
+}
+
+function normalizeItemOptionGroups(item: MenuItem): ProductOptionGroup[] {
+  if (Array.isArray(item.optionGroups) && item.optionGroups.length > 0) {
+    return item.optionGroups.map(group => {
+      const type = resolveOptionType(group.type, Boolean(group.multiSelect))
+      const options = Array.isArray(group.options)
+        ? group.options.map(option => ({
+            id: String(option.id),
+            name: String(option.name),
+            priceDelta: Number(option.priceDelta ?? 0),
+            sourceGroupId: String(group.id),
+            sourceOptionId: String(option.id),
+          }))
+        : []
+
+      const normalizedOptions =
+        type === "adjustable" && options.length > 0
+          ? options.some(option => option.name.toLowerCase().includes("normal"))
+            ? options
+            : [{ id: `${group.id}:normal`, name: "Normal", priceDelta: 0 }, ...options]
+          : options
+
+      return {
+        id: String(group.id),
+        title: String(group.title),
+        required: Boolean(group.required),
+        multiSelect: type === "multi",
+        type,
+        min:
+          typeof (group as { min?: unknown }).min === "number"
+            ? Number((group as { min?: number }).min)
+            : undefined,
+        max:
+          typeof (group as { max?: unknown }).max === "number"
+            ? Number((group as { max?: number }).max)
+            : undefined,
+        actionLabel: actionLabelForGroup({
+          id: String(group.id),
+          title: String(group.title),
+          type,
+        }),
+        options: normalizedOptions,
+      }
+    })
+  }
+
+  if (!hasCustomization(item.customization)) {
+    return []
+  }
+
+  const hiddenSystemGroupIds = new Set(["remove_ingredients", "extra_ingredients"])
+  const groups = item.customization.groups
+  const replacementGroups = groups.filter(group => {
+    if (hiddenSystemGroupIds.has(group.id)) {
+      return false
+    }
+    return group.options.some(
+      option =>
+        (option.removeIngredientIds?.length ?? 0) > 0 &&
+        (option.ingredientIds?.length ?? 0) > 0
+    )
+  })
+
+  const ingredientAdjustables: ProductOptionGroup[] =
+    replacementGroups.length > 0
+      ? (() => {
+          const byIngredient = new Map<
+            string,
+            {
+              title: string
+              replaceOptions: Array<{
+                id: string
+                name: string
+                priceDelta: number
+                sourceGroupId?: string
+                sourceOptionId?: string
+              }>
+            }
+          >()
+
+          for (const group of replacementGroups) {
+            for (const option of group.options) {
+              const removedIds = option.removeIngredientIds ?? []
+              if (removedIds.length === 0) continue
+
+              for (const removedIngredientId of removedIds) {
+                const key = removedIngredientId.toLowerCase()
+                const existing =
+                  byIngredient.get(key) ??
+                  {
+                    title: ingredientLabelFromId(removedIngredientId),
+                    replaceOptions: [],
+                  }
+
+                const replaceOption = {
+                  id: `${group.id}:${option.id}:replace:${removedIngredientId}`,
+                  name: `Replace with ${option.label}`,
+                  priceDelta: Number(option.priceDelta ?? 0),
+                  sourceGroupId: group.id,
+                  sourceOptionId: option.id,
+                }
+
+                const dedupeKey = `${replaceOption.sourceGroupId}:${replaceOption.sourceOptionId}`
+                if (
+                  !existing.replaceOptions.some(
+                    value => `${value.sourceGroupId}:${value.sourceOptionId}` === dedupeKey
+                  )
+                ) {
+                  existing.replaceOptions.push(replaceOption)
+                }
+
+                byIngredient.set(key, existing)
+              }
+            }
+          }
+
+          return Array.from(byIngredient.entries()).map(([key, value]) => {
+            const options = [...value.replaceOptions]
+
+            const hasReplace = value.replaceOptions.length > 0
+
+            return {
+              id: `ingredient:${key}`,
+              title: value.title,
+              required: false,
+              multiSelect: false,
+              type: "adjustable" as const,
+              min: 0,
+              max: 1,
+              actionLabel: hasReplace ? "Replace" : "Select",
+              options,
+            }
+          }).filter(group => group.options.length > 0)
+        })()
+      : []
+
+  const mappedGroups = groups
+    .filter(
+      group => !hiddenSystemGroupIds.has(group.id)
+    )
+    .filter(
+      group => !replacementGroups.some(value => value.id === group.id)
+    )
+    .map(group => {
+    const required =
+      (typeof group.min === "number" ? group.min : undefined) !== undefined
+        ? Number(group.min) > 0
+        : Boolean(group.required)
+
+    const type = group.type
+
+    return {
+      id: group.id,
+      title: group.name,
+      required,
+      multiSelect: type === "multi",
+      type,
+      min: typeof group.min === "number" ? group.min : undefined,
+      max: typeof group.max === "number" ? group.max : undefined,
+      actionLabel: actionLabelForGroup({
+        id: group.id,
+        title: group.name,
+        type,
+      }),
+      options: group.options.map(option => ({
+        id: option.id,
+        name: option.label,
+        priceDelta: Number(option.priceDelta ?? 0),
+        sourceGroupId: group.id,
+        sourceOptionId: option.id,
+      })),
+    }
+  })
+
+  return [...mappedGroups, ...ingredientAdjustables]
+}
+
+function projectSelectionsToSourceGroups(
+  groups: ProductOptionGroup[],
+  selections: ModifierSelections
+): ModifierSelections {
+  const next: ModifierSelections = {}
+
+  for (const group of groups) {
+    const selectedIds = selections[group.id] ?? []
+    for (const selectedId of selectedIds) {
+      const option = group.options.find(value => value.id === selectedId)
+      if (!option?.sourceGroupId || !option.sourceOptionId) continue
+      const existing = next[option.sourceGroupId] ?? []
+      if (!existing.includes(option.sourceOptionId)) {
+        next[option.sourceGroupId] = [...existing, option.sourceOptionId]
+      }
+    }
+  }
+
+  return next
+}
+
+function defaultSelectionsFromOptionGroups(
+  groups: ProductOptionGroup[]
+): ModifierSelections {
+  const defaults: ModifierSelections = {}
+
+  for (const group of groups) {
+    if (group.type !== "adjustable") continue
+    const normalOption = group.options.find(
+      option => option.name.trim().toLowerCase() === "normal"
+    )
+    if (normalOption) {
+      defaults[group.id] = [normalOption.id]
+    }
+  }
+
+  return defaults
+}
+
+function calculateOptionGroupsDelta(
+  groups: ProductOptionGroup[],
+  selections: ModifierSelections
+): number {
+  let delta = 0
+  for (const group of groups) {
+    const selectedIds = selections[group.id] ?? []
+    for (const option of group.options) {
+      if (selectedIds.includes(option.id)) {
+        delta += Number(option.priceDelta ?? 0)
+      }
+    }
+  }
+  return Number(delta.toFixed(2))
+}
+
+function isOptionGroupSatisfied(
+  group: ProductOptionGroup,
+  selectedIds: string[]
+): boolean {
+  if (!group.required) return true
+
+  if (group.type === "single") {
+    return selectedIds.length === 1
+  }
+
+  if (group.type === "multi") {
+    const min = typeof group.min === "number" && group.min > 0 ? group.min : 1
+    return selectedIds.length >= min
+  }
+
+  return selectedIds.length >= 1
+}
+
+function buildOptionGroupSummary(
+  groups: ProductOptionGroup[],
+  selections: ModifierSelections
+): string[] {
+  const lines: string[] = []
+  for (const group of groups) {
+    const selectedIds = selections[group.id] ?? []
+    const selectedLabels = group.options
+      .filter(option => selectedIds.includes(option.id))
+      .map(option => option.name)
+    if (selectedLabels.length > 0) {
+      lines.push(`${group.title}: ${selectedLabels.join(", ")}`)
+    }
+  }
+  return lines
+}
 
 
 function isObject(value: unknown): value is Record<string, unknown> {
@@ -151,9 +451,34 @@ function groupSelectionHint(group: CustomizerGroup): string {
   return `Choose ${min}-${max}`
 }
 
-export default function TagPage({ params }: { params: { tagId: string } }) {
+export default function TagPage({
+  params,
+}: {
+  params?: { tagId?: string; itemId?: string }
+}) {
   const router = useRouter()
+  const routeParams = useParams<{ tagId?: string; itemId?: string }>()
   const pathname = usePathname()
+  const tagId =
+    typeof routeParams?.tagId === 'string' && routeParams.tagId.trim().length > 0
+      ? routeParams.tagId.trim()
+      : typeof params?.tagId === 'string'
+      ? params.tagId.trim()
+      : ''
+  const routeItemId =
+    typeof routeParams?.itemId === 'string' && routeParams.itemId.trim().length > 0
+      ? routeParams.itemId.trim()
+      : typeof params?.itemId === 'string' && params.itemId.trim().length > 0
+      ? params.itemId.trim()
+      : null
+  const resolvedRouteItemId = useMemo(() => {
+    if (!routeItemId) return null
+    try {
+      return decodeURIComponent(routeItemId)
+    } catch {
+      return routeItemId
+    }
+  }, [routeItemId])
   const setGlobalSession = useSessionStore(s => s.setSession)
   const ensureClientKey = useSessionStore(s => s.ensureClientKey)
 
@@ -164,7 +489,6 @@ export default function TagPage({ params }: { params: { tagId: string } }) {
   const [sessionId, setSessionId] = useState<string | null>(null)
   const [cartByKey, setCartByKey] = useState<Record<string, CartItem>>({})
   const [customizer, setCustomizer] = useState<CustomizerState | null>(null)
-  const [customizerDragOffset, setCustomizerDragOffset] = useState(0)
   const [customizerError, setCustomizerError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -177,25 +501,13 @@ export default function TagPage({ params }: { params: { tagId: string } }) {
   const syncTimersRef = useRef<Record<string, number>>({})
   const syncInFlightRef = useRef<Record<string, boolean>>({})
   const pendingSyncRef = useRef<Record<string, PendingSyncEntry>>({})
-  const customizerTouchStartYRef = useRef<number | null>(null)
   const lastRequestIdRef = useRef<string>('unknown')
   const menuViewTrackedRef = useRef(false)
   const lastCategoryTrackedRef = useRef<string | null>(null)
   const isMountedRef = useRef(true)
+  const errorRef = useRef<string | null>(null)
   const errorStickyUntilRef = useRef<number>(0)
   const errorClearTimerRef = useRef<number | null>(null)
-  // Circuit breaker: prevent cascading retries after repeated failures
-  const circuitBreakerRef = useRef<{
-    sessionConsecutiveFailures: number
-    sessionCircuitOpenUntil: number
-    cartConsecutiveFailures: Record<string, number>
-    cartCircuitOpenUntil: Record<string, number>
-  }>({
-    sessionConsecutiveFailures: 0,
-    sessionCircuitOpenUntil: 0,
-    cartConsecutiveFailures: {},
-    cartCircuitOpenUntil: {},
-  })
 
   const activeSection = menu.find(
     section => section.id === selectedCategoryId
@@ -204,6 +516,10 @@ export default function TagPage({ params }: { params: { tagId: string } }) {
   useEffect(() => {
     cartByKeyRef.current = cartByKey
   }, [cartByKey])
+
+  useEffect(() => {
+    errorRef.current = error
+  }, [error])
 
   useEffect(() => {
     if (typeof window === 'undefined') return
@@ -229,12 +545,23 @@ export default function TagPage({ params }: { params: { tagId: string } }) {
 
   const notifyHeader = () => {
     if (typeof window === 'undefined') return
-    window.dispatchEvent(new Event('nfc-cart-updated'))
+    const count = Object.values(cartByKeyRef.current).reduce(
+      (sum, item) => sum + Number(item.quantity ?? 0),
+      0
+    )
+    window.dispatchEvent(
+      new CustomEvent('nfc-cart-updated', {
+        detail: {
+          count,
+          available: Boolean(sessionId),
+        },
+      })
+    )
   }
 
   useEffect(() => {
     notifyHeader()
-  }, [cartByKey])
+  }, [cartByKey, sessionId])
 
   const setErrorSticky = useCallback((next: string | null) => {
     const now = Date.now()
@@ -280,24 +607,8 @@ export default function TagPage({ params }: { params: { tagId: string } }) {
     }
   }, [selectedCategoryId, restaurantId])
 
-  useEffect(() => {
-    setCustomizerDragOffset(0)
-  }, [customizer?.item.id])
-
-  const loadCart = async (sid: string, isInitialLoad = false) => {
+  const loadCart = useCallback(async (sid: string, isInitialLoad = false) => {
     const activeClientKey = ensureClientKey()
-    const cb = circuitBreakerRef.current
-
-    // Circuit breaker: if too many recent failures, back off exponentially
-    if (cb.cartCircuitOpenUntil[sid] && cb.cartCircuitOpenUntil[sid] > Date.now()) {
-      logDebug({
-        name: 'cart.get',
-        ok: false,
-        ms: 0,
-        detail: 'circuit_breaker_open',
-      })
-      return false
-    }
 
     for (let attempt = 0; attempt < 2; attempt += 1) {
       try {
@@ -326,16 +637,6 @@ export default function TagPage({ params }: { params: { tagId: string } }) {
         })
 
         if (!res.ok) {
-          // Increment failure counter and open circuit if needed
-          cb.cartConsecutiveFailures[sid] = (cb.cartConsecutiveFailures[sid] ?? 0) + 1
-          const failures = cb.cartConsecutiveFailures[sid]
-          
-          if (failures >= 3) {
-            // After 3 consecutive failures, open circuit for 10s exponentially
-            const backoffMs = 10000 * Math.pow(2, Math.min(failures - 3, 2))
-            cb.cartCircuitOpenUntil[sid] = Date.now() + backoffMs
-          }
-
           if (attempt === 0) continue
           if (isInitialLoad) {
             const errorInfo = await readApiErrorInfo(res)
@@ -343,10 +644,6 @@ export default function TagPage({ params }: { params: { tagId: string } }) {
           }
           return false
         }
-
-        // Success: reset circuit breaker
-        cb.cartConsecutiveFailures[sid] = 0
-        cb.cartCircuitOpenUntil[sid] = 0
 
         const payload = await res.json()
         const items = (payload?.items ?? []) as Array<CartItem & {
@@ -380,8 +677,8 @@ export default function TagPage({ params }: { params: { tagId: string } }) {
 
         setCartByKey(next)
         // Clear cart/basket/session errors on successful load
-        if (error) {
-          const lower = error.toLowerCase()
+        if (errorRef.current) {
+          const lower = errorRef.current.toLowerCase()
           if (
             lower.includes('basket') ||
             lower.includes('cart') ||
@@ -408,7 +705,7 @@ export default function TagPage({ params }: { params: { tagId: string } }) {
     }
 
     return false
-  }
+  }, [ensureClientKey, logDebug, setErrorSticky])
 
   const loadMenu = async () => {
     try {
@@ -489,25 +786,9 @@ export default function TagPage({ params }: { params: { tagId: string } }) {
 
   const connectSession = useCallback(async (tagId: string) => {
     let lastError: string | null = null
-    const cb = circuitBreakerRef.current
-
-    // Circuit breaker: if recent failures, apply exponential backoff
-    if (cb.sessionCircuitOpenUntil > Date.now()) {
-      logDebug({
-        name: 'session.post',
-        ok: false,
-        ms: 0,
-        detail: 'circuit_breaker_open',
-      })
-      if (isMountedRef.current) {
-        setLoading(false)
-        setErrorSticky('Service temporarily overloaded. Retrying in a moment...')
-      }
-      return
-    }
 
     setLoading(true)
-    if (error && error.toLowerCase().includes('connect')) {
+    if (errorRef.current && errorRef.current.toLowerCase().includes('connect')) {
       setErrorSticky(null)
     }
 
@@ -515,16 +796,20 @@ export default function TagPage({ params }: { params: { tagId: string } }) {
     for (let attempt = 0; attempt < 5; attempt += 1) {
       try {
         const controller = new AbortController()
-        const timeoutId = setTimeout(() => controller.abort(), 15000)
+        const timeoutId = window.setTimeout(() => controller.abort(), 15000)
         const startedAt = Date.now()
 
-        const res = await fetch('/api/session', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ tagId }),
-          signal: controller.signal,
-        })
-        clearTimeout(timeoutId)
+        let res: Response
+        try {
+          res = await fetch('/api/session', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ tagId }),
+            signal: controller.signal,
+          })
+        } finally {
+          window.clearTimeout(timeoutId)
+        }
 
         const requestId = res.headers.get('x-request-id')
         if (requestId) {
@@ -541,16 +826,6 @@ export default function TagPage({ params }: { params: { tagId: string } }) {
         })
 
         if (!res.ok) {
-          // Increment failure counter and open circuit if needed
-          cb.sessionConsecutiveFailures += 1
-          const failures = cb.sessionConsecutiveFailures
-
-          if (failures >= 3) {
-            // After 3 consecutive failures, open circuit and back off exponentially
-            const backoffMs = 15000 * Math.pow(2, Math.min(failures - 3, 2))
-            cb.sessionCircuitOpenUntil = Date.now() + backoffMs
-          }
-
           const errorInfo = await readApiErrorInfo(res)
           if (res.status === 409 && errorInfo.code === 'TABLE_CLOSED') {
             if (isMountedRef.current) {
@@ -574,10 +849,6 @@ export default function TagPage({ params }: { params: { tagId: string } }) {
           return
         }
 
-        // Success: reset circuit breaker and consecutive failures
-        cb.sessionConsecutiveFailures = 0
-        cb.sessionCircuitOpenUntil = 0
-
         const payload = await res.json()
         if (!isMountedRef.current) return
 
@@ -598,13 +869,6 @@ export default function TagPage({ params }: { params: { tagId: string } }) {
           detail: err instanceof Error ? err.message : 'network_error',
         })
 
-        cb.sessionConsecutiveFailures += 1
-        const failures = cb.sessionConsecutiveFailures
-        if (failures >= 3) {
-          const backoffMs = 15000 * Math.pow(2, Math.min(failures - 3, 2))
-          cb.sessionCircuitOpenUntil = Date.now() + backoffMs
-        }
-
         lastError = networkErrorMessage('connect this table')
         if (attempt < 4) {
           const delay = 300 * Math.pow(2, attempt)
@@ -618,37 +882,87 @@ export default function TagPage({ params }: { params: { tagId: string } }) {
         return
       }
     }
-  }, [error, loadCart, pathname, router, setErrorSticky, setGlobalSession])
+  }, [loadCart, logDebug, pathname, router, setErrorSticky, setGlobalSession])
 
   useEffect(() => {
     ensureClientKey()
   }, [ensureClientKey])
 
   useEffect(() => {
-    void connectSession(params.tagId)
-  }, [connectSession, params.tagId])
+    if (!tagId) return
+    void connectSession(tagId)
+  }, [connectSession, tagId])
 
   useEffect(() => {
     void loadMenu()
     // Menu is static; only load once. If item is 86'd, customer sees it when they try to order.
     // Manual refresh available via button if needed.
-  }, [params.tagId])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   useEffect(() => {
     if (!sessionId) return
 
-    // Poll cart frequently since it changes with customer actions
-    const interval = window.setInterval(() => {
-      void loadCart(sessionId)
-    }, 5000)
+    let stream: EventSource | null = null
+    let reconnectAttempts = 0
+    let reconnectTimer: ReturnType<typeof setTimeout> | null = null
+    let lastCartFetchAt = 0
+    const CART_FETCH_COOLDOWN_MS = 1000  // Max 1 cart fetch per second from SSE
 
-    return () => window.clearInterval(interval)
-  }, [sessionId])
+    const connect = () => {
+      if (stream) return
+
+      stream = new EventSource(
+        `/api/cart/stream?sessionId=${encodeURIComponent(sessionId)}`
+      )
+
+      stream.onmessage = () => {
+        reconnectAttempts = 0  // Reset backoff on successful message
+        
+        // Throttle cart fetches triggered by SSE
+        const now = Date.now()
+        if (now - lastCartFetchAt >= CART_FETCH_COOLDOWN_MS) {
+          lastCartFetchAt = now
+          void loadCart(sessionId)
+        }
+      }
+
+      stream.onerror = () => {
+        stream?.close()
+        stream = null
+
+        // Exponential backoff: 2s, 4s, 8s, 16s, max 30s
+        // Keep retrying silently - SSE critical for multi-guest orders
+        reconnectAttempts += 1
+        const backoffMs = Math.min(2000 * Math.pow(2, reconnectAttempts - 1), 30000)
+
+        reconnectTimer = setTimeout(() => {
+          reconnectTimer = null
+          connect()
+        }, backoffMs)
+      }
+    }
+
+    connect()
+
+    return () => {
+      if (reconnectTimer) {
+        clearTimeout(reconnectTimer)
+        reconnectTimer = null
+      }
+      stream?.close()
+      stream = null
+    }
+  }, [sessionId, loadCart])
 
   useEffect(() => {
     return () => {
       for (const timer of Object.values(syncTimersRef.current)) {
         window.clearTimeout(timer)
+      }
+      if (errorClearTimerRef.current) {
+        window.clearTimeout(errorClearTimerRef.current)
+        errorClearTimerRef.current = null
       }
       syncTimersRef.current = {}
       syncInFlightRef.current = {}
@@ -840,15 +1154,16 @@ export default function TagPage({ params }: { params: { tagId: string } }) {
     })
   }
 
-  const openCustomizer = (item: MenuItem) => {
-    if (menuLocked) return
+  const openCustomizer = useCallback((item: MenuItem, navigate = false) => {
     if (!sessionId) {
       setError('Live connection required. Please reload table.')
       return
     }
-    const defaultSelections = defaultModifierSelections(
-      item.customization
-    )
+    const groups = normalizeItemOptionGroups(item)
+    const defaultSelections = {
+      ...defaultModifierSelections(item.customization),
+      ...defaultSelectionsFromOptionGroups(groups),
+    }
 
     setCustomizer({
       item,
@@ -861,45 +1176,48 @@ export default function TagPage({ params }: { params: { tagId: string } }) {
       requestId: lastRequestIdRef.current,
       menuItemId: item.id,
     })
-  }
+    if (navigate && tagId) {
+      router.push(tenantTagPath(pathname, tagId, `/menu/${item.id}`))
+    }
+  }, [pathname, restaurantId, router, sessionId, tagId])
 
-  const closeCustomizer = () => {
+  const closeCustomizer = useCallback((navigate = true) => {
     setCustomizer(null)
     setCustomizerError(null)
-    setCustomizerDragOffset(0)
-    customizerTouchStartYRef.current = null
-  }
+    if (navigate && routeItemId && tagId) {
+      router.replace(tenantTagPath(pathname, tagId))
+    }
+  }, [pathname, routeItemId, router, tagId])
 
-  const handleCustomizerTouchStart = (
-    event: TouchEvent<HTMLElement>
-  ) => {
-    if (typeof window === 'undefined' || window.innerWidth > 760) return
-    customizerTouchStartYRef.current = event.touches[0]?.clientY ?? null
-  }
+  useEffect(() => {
+    if (!routeItemId || menuLoading) return
 
-  const handleCustomizerTouchMove = (
-    event: TouchEvent<HTMLElement>
-  ) => {
-    const startY = customizerTouchStartYRef.current
-    if (startY === null) return
-    const nextY = event.touches[0]?.clientY ?? startY
-    const delta = nextY - startY
-    if (delta <= 0) {
-      setCustomizerDragOffset(0)
+    const menuItems = menu.flatMap(section => section.items)
+    const item = menuItems
+      .find(value => value.id === resolvedRouteItemId || value.id === routeItemId)
+
+    if (!item) {
+      // Deep link is stale or malformed; return to menu instead of hanging on loader.
+      setErrorSticky("We couldn't open that item. Please choose it from the menu.")
+      if (tagId) {
+        router.replace(tenantTagPath(pathname, tagId))
+      }
       return
     }
-    setCustomizerDragOffset(Math.min(delta, 150))
-  }
+    if (customizer?.item.id === item.id) return
 
-  const handleCustomizerTouchEnd = () => {
-    if (customizerTouchStartYRef.current === null) return
-    const shouldClose = customizerDragOffset > 96
-    customizerTouchStartYRef.current = null
-    setCustomizerDragOffset(0)
-    if (shouldClose) {
-      closeCustomizer()
-    }
-  }
+    openCustomizer(item, false)
+  }, [
+    customizer?.item.id,
+    menu,
+    menuLoading,
+    openCustomizer,
+    pathname,
+    resolvedRouteItemId,
+    routeItemId,
+    router,
+    tagId,
+  ])
 
   const updateCustomizerSelection = (
     groupId: string,
@@ -908,37 +1226,39 @@ export default function TagPage({ params }: { params: { tagId: string } }) {
   ) => {
     setCustomizer(current => {
       if (!current) return current
-      const customization = current.item.customization
-      if (!hasCustomization(customization)) return current
-
-      const group = customization.groups.find(value => value.id === groupId)
-      if (!group) return current
+      const optionGroups = normalizeItemOptionGroups(current.item)
+      const optionGroup = optionGroups.find(group => group.id === groupId)
+      if (!optionGroup) return current
 
       const existing = current.selections[groupId] ?? []
       let nextForGroup = [...existing]
 
-      if (group.type === 'single') {
+      if (optionGroup.type === 'single' || optionGroup.type === 'adjustable') {
         nextForGroup = selected ? [optionId] : []
       } else if (selected) {
-        nextForGroup = [...existing, optionId]
+        nextForGroup = [...new Set([...existing, optionId])]
       } else {
         nextForGroup = existing.filter(value => value !== optionId)
       }
 
-      const normalized = normalizeModifierSelections(customization, {
+      const nextSelections = {
         ...current.selections,
         [groupId]: nextForGroup,
-      })
+      }
 
       return {
         ...current,
-        selections: normalized,
+        selections: nextSelections,
       }
     })
   }
 
   const applyCustomizedItem = () => {
     if (!customizer) return
+    if (menuLocked) {
+      setCustomizerError('Ordering is temporarily paused by staff.')
+      return
+    }
     if (!sessionId) {
       setError('Live connection required. Please reload table.')
       return
@@ -946,31 +1266,58 @@ export default function TagPage({ params }: { params: { tagId: string } }) {
 
     const item = customizer.item
     const customization = item.customization
+    const optionGroups = normalizeItemOptionGroups(item)
+    const projectedSelections = projectSelectionsToSourceGroups(
+      optionGroups,
+      customizer.selections
+    )
 
-    const validation = validateModifierSelections(customization, customizer.selections)
-    if (!validation.ok) {
+    const requiredRemainingLocal = optionGroups.reduce((count, group) => {
+      const selectedIds = customizer.selections[group.id] ?? []
+      return isOptionGroupSatisfied(group, selectedIds) ? count : count + 1
+    }, 0)
+
+    if (requiredRemainingLocal > 0) {
+      setCustomizerError(
+        `Select required options in ${requiredRemainingLocal} ${
+          requiredRemainingLocal === 1 ? 'group' : 'groups'
+        } before adding.`
+      )
+      return
+    }
+
+    const validation = validateModifierSelections(
+      customization,
+      projectedSelections
+    )
+    if (hasCustomization(customization) && !validation.ok) {
       setCustomizerError(validation.error ?? 'Invalid selection')
       return
     }
 
-    const normalized = validation.normalized
-    const modifierSummary = buildModifierSummary(customization, normalized)
-    const modifierDelta = calculateModifierDelta(customization, normalized)
-    const lineAllergens = collectModifierAllergens(
-      customization,
-      normalized,
-      item.allergens ?? []
-    )
+    const normalized = hasCustomization(customization)
+      ? validation.normalized
+      : projectedSelections
+    const modifierSummary = hasCustomization(customization)
+      ? buildModifierSummary(customization, normalized)
+      : buildOptionGroupSummary(optionGroups, normalized)
+    const modifierDelta = hasCustomization(customization)
+      ? calculateModifierDelta(customization, normalized)
+      : calculateOptionGroupsDelta(optionGroups, normalized)
+    const lineAllergens = hasCustomization(customization)
+      ? collectModifierAllergens(
+          customization,
+          normalized,
+          item.allergens ?? []
+        )
+      : item.allergens ?? []
     const unitPrice = Number((item.basePrice + modifierDelta).toFixed(2))
-    const lineSignature =
-      hasCustomization(customization)
-        ? buildModifierSignature(normalized) || 'base'
-        : 'base'
+    const lineSignature = buildModifierSignature(normalized) || 'base'
     const lineKey = `${item.id}::${lineSignature}`
 
     const existing = cartByKeyRef.current[lineKey]
     const nextQty = Number(existing?.quantity ?? 0) + customizer.quantity
-    const edits = hasCustomization(customization)
+    const edits = optionGroups.length > 0
       ? {
           modifiers: normalized,
           modifierPriceDelta: modifierDelta,
@@ -1015,92 +1362,54 @@ export default function TagPage({ params }: { params: { tagId: string } }) {
 
   const customizerValidation = useMemo(() => {
     if (!customizer) return null
-    return validateModifierSelections(
-      customizer.item.customization,
+    const optionGroups = normalizeItemOptionGroups(customizer.item)
+    const projectedSelections = projectSelectionsToSourceGroups(
+      optionGroups,
       customizer.selections
     )
+    if (!hasCustomization(customizer.item.customization)) {
+      return { ok: true, normalized: projectedSelections }
+    }
+    return validateModifierSelections(
+      customizer.item.customization,
+      projectedSelections
+    )
+  }, [customizer])
+
+  const customizerOptionGroups = useMemo(() => {
+    if (!customizer) return [] as ProductOptionGroup[]
+    return normalizeItemOptionGroups(customizer.item)
   }, [customizer])
 
   const customizerUnitPrice = useMemo(() => {
     if (!customizer) return 0
-    const delta = calculateModifierDelta(
-      customizer.item.customization,
-      customizerValidation?.normalized ?? {}
-    )
-    return Number((customizer.item.basePrice + delta).toFixed(2))
-  }, [customizer, customizerValidation])
-
-  const customizerLayout = useMemo(() => {
-    if (!customizer || !hasCustomization(customizer.item.customization)) {
-      return {
-        groups: [] as CustomizerGroup[],
-        includedLines: [] as Array<{ label: string; ingredientId: string }>,
-      }
-    }
-
     const customization = customizer.item.customization
-    const groups = customization.groups
-    const baseIngredientIds = customization.baseIngredientIds ?? []
-    const labels = getBaseIngredientLabels(customization)
-
-    // Map ingredient IDs to labels (they're in the same order)
-    const includedLines = baseIngredientIds.slice(0, labels.length).map((id, idx) => ({
-      label: labels[idx],
-      ingredientId: id,
-    }))
-
-    return {
-      groups,
-      includedLines,
-    }
-  }, [customizer])
-
-  const customizerAllergens = useMemo(() => {
-    if (!customizer) return []
-    const baseAllergens = customizer.item.allergens ?? []
-    const fromSelections = collectModifierAllergens(
-      customizer.item.customization,
-      customizerValidation?.normalized ?? {},
-      baseAllergens
+    const optionGroups = customizerOptionGroups
+    const projectedSelections = projectSelectionsToSourceGroups(
+      optionGroups,
+      customizer.selections
     )
-
-    return Array.from(
-      new Set(
-        fromSelections
-          .map(value => value.trim().toLowerCase())
-          .filter(Boolean)
-      )
-    ).sort((a, b) => a.localeCompare(b))
-  }, [customizer, customizerValidation])
-
-  const customizerGroups = customizerLayout.groups
+    const normalized =
+      customizerValidation?.normalized ?? projectedSelections
+    const delta = hasCustomization(customization)
+      ? calculateModifierDelta(customization, normalized)
+      : calculateOptionGroupsDelta(customizerOptionGroups, customizer.selections)
+    return Number((customizer.item.basePrice + delta).toFixed(2))
+  }, [customizer, customizerOptionGroups, customizerValidation])
 
   const requiredRemaining = useMemo(() => {
     if (!customizer) return 0
-    return customizerGroups.reduce((count, group) => {
-      const min = groupSelectionMin(group)
-      if (min <= 0) return count
-      const selected = customizer.selections[group.id]?.length ?? 0
-      return selected >= min ? count : count + 1
+    return customizerOptionGroups.reduce((count, group) => {
+      const selectedIds = customizer.selections[group.id] ?? []
+      return isOptionGroupSatisfied(group, selectedIds) ? count : count + 1
     }, 0)
-  }, [customizer, customizerGroups])
-
-  const customizerTitleId = customizer
-    ? `customizer-title-${customizer.item.id}`
-    : 'customizer-title'
-  const customizerDescriptionId = customizer
-    ? `customizer-description-${customizer.item.id}`
-    : 'customizer-description'
-  const customizerImageSrc =
-    customizer?.item.image && customizer.item.image.trim().length > 0
-      ? customizer.item.image
-      : null
+  }, [customizer, customizerOptionGroups])
 
   const retryOrderData = () => {
     if (sessionId) {
       void loadCart(sessionId, true)
-    } else {
-      void connectSession(params.tagId)
+    } else if (tagId) {
+      void connectSession(tagId)
     }
     void loadMenu()
   }
@@ -1119,6 +1428,48 @@ export default function TagPage({ params }: { params: { tagId: string } }) {
           </div>
           <div className="skeleton-block skeleton-footer" />
         </div>
+      </div>
+    )
+  }
+
+  if (routeItemId && !customizer) {
+    return (
+      <div className="order-page">
+        <div className="menu-lock-banner">Loading product…</div>
+      </div>
+    )
+  }
+
+  if (customizer) {
+    return (
+      <div className="order-page">
+        <ProductDetail
+          item={customizer.item}
+          quantity={customizer.quantity}
+          groups={customizerOptionGroups}
+          selections={customizer.selections}
+          requiredRemaining={requiredRemaining}
+          customizerError={customizerError}
+          totalPrice={customizerUnitPrice * customizer.quantity}
+          onClose={() => closeCustomizer(true)}
+          onToggleOption={updateCustomizerSelection}
+          onQuantityChange={nextQty =>
+            setCustomizer(current =>
+              current
+                ? {
+                    ...current,
+                    quantity: nextQty,
+                  }
+                : current
+            )
+          }
+          onAddToBasket={applyCustomizedItem}
+          addDisabled={
+            menuLocked ||
+            Boolean(customizerValidation && !customizerValidation.ok) ||
+            requiredRemaining > 0
+          }
+        />
       </div>
     )
   }
@@ -1242,7 +1593,7 @@ export default function TagPage({ params }: { params: { tagId: string } }) {
                 image={item.image}
                 price={item.basePrice}
                 allergens={item.allergens}
-                onClick={menuLocked ? undefined : () => openCustomizer(item)}
+                onClick={() => openCustomizer(item, false)}
               />
             )
           })}
@@ -1253,178 +1604,6 @@ export default function TagPage({ params }: { params: { tagId: string } }) {
         <div className="menu-empty-state">Menu unavailable</div>
       )}
 
-      {customizer && (
-        <div
-          className="modal-overlay customizer-overlay"
-          onClick={closeCustomizer}
-        >
-          <section
-            className="customizer-shell"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby={customizerTitleId}
-            aria-describedby={customizerDescriptionId}
-            onClick={event => event.stopPropagation()}
-            onTouchStart={handleCustomizerTouchStart}
-            onTouchMove={handleCustomizerTouchMove}
-            onTouchEnd={handleCustomizerTouchEnd}
-            style={
-              customizerDragOffset > 0
-                ? { transform: `translateY(${customizerDragOffset}px)` }
-                : undefined
-            }
-          >
-            <header className="customizer-top">
-              <button
-                type="button"
-                onClick={closeCustomizer}
-                className="customizer-close-btn"
-                aria-label="Close item details"
-              >
-                ×
-              </button>
-              <div className="customizer-top-body">
-                <div
-                  className={
-                    customizerImageSrc
-                      ? "customizer-top-image"
-                      : "customizer-top-image customizer-top-image--fallback"
-                  }
-                  aria-hidden="true"
-                >
-                  {customizerImageSrc ? (
-                    <img
-                      className="customizer-hero-image"
-                      src={customizerImageSrc}
-                      alt=""
-                    />
-                  ) : (
-                    <div className="customizer-hero-fallback" />
-                  )}
-                </div>
-                <div className="customizer-meta">
-                  <h2 id={customizerTitleId} className="customizer-title">
-                    {customizer.item.name}
-                  </h2>
-                  <p
-                    id={customizerDescriptionId}
-                    className="customizer-description customizer-description--compact"
-                  >
-                    {customizer.item.description ||
-                      "Customize ingredients and quantity before adding to your order."}
-                  </p>
-                </div>
-              </div>
-            </header>
-
-            <div className="customizer-stage customizer-stage--single">
-              <section className="customizer-pane customizer-pane--stack">
-                {customizer.item.customization && (
-                  <IngredientEditor
-                    customization={customizer.item.customization}
-                    selections={customizer.selections}
-                    onSelectionChange={updateCustomizerSelection}
-                  />
-                )}
-
-                {customizerAllergens.length > 0 && (
-                  <div className="customizer-allergen-section">
-                    <div className="customizer-allergen-label">
-                      Allergens
-                    </div>
-                    <div className="customizer-allergen-chip-wrap">
-                      {customizerAllergens.map(allergen => (
-                        <span
-                          key={allergen}
-                          className="customizer-allergen-chip"
-                        >
-                          {allergen}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {!customizer.item.customization && (
-                  <p className="customizer-pane-empty">
-                    No ingredients to customize for this item.
-                  </p>
-                )}
-
-                <div className="customizer-spacer" />
-              </section>
-            </div>
-
-            {customizerError && (
-              <div className="customizer-error" role="status" aria-live="polite">
-                {customizerError}
-              </div>
-            )}
-
-            {requiredRemaining > 0 && (
-              <div className="customizer-error" role="status" aria-live="polite">
-                Select required options in {requiredRemaining}{" "}
-                {requiredRemaining === 1 ? "group" : "groups"} before
-                adding.
-              </div>
-            )}
-
-            <footer className="customizer-footer">
-              <div className="customizer-footer-row">
-                <div className="customizer-qty-control">
-                  <button
-                    type="button"
-                    className="menu-qty-btn"
-                    onClick={() =>
-                      setCustomizer(current =>
-                        current
-                          ? {
-                              ...current,
-                              quantity: Math.max(1, current.quantity - 1),
-                            }
-                          : current
-                      )
-                    }
-                    disabled={customizer.quantity <= 1}
-                  >
-                    −
-                  </button>
-                  <div className="menu-qty-value">{customizer.quantity}</div>
-                  <button
-                    type="button"
-                    className="menu-qty-btn"
-                    onClick={() =>
-                      setCustomizer(current =>
-                        current
-                          ? {
-                              ...current,
-                              quantity: Math.min(20, current.quantity + 1),
-                            }
-                          : current
-                      )
-                    }
-                  >
-                    +
-                  </button>
-                </div>
-
-                <button
-                  type="button"
-                  onClick={applyCustomizedItem}
-                  disabled={
-                    Boolean(customizerValidation && !customizerValidation.ok) ||
-                    requiredRemaining > 0
-                  }
-                  className="customizer-footer-primary"
-                >
-                  Add to basket • £
-                  {(customizerUnitPrice * customizer.quantity).toFixed(2)}
-                </button>
-              </div>
-            </footer>
-          </section>
-        </div>
-      )}
     </div>
   )
 }

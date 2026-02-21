@@ -33,25 +33,27 @@ export async function POST(req: Request) {
   const groupTableIds = tableGroup.assignments.map(
     assignment => assignment.id
   )
+  const groupTagIds = tableGroup.assignments.map(
+    assignment => assignment.tagId
+  )
   const masterTableId = tableGroup.master.id
   const closedAt = new Date()
-
-  await prisma.tableAssignment.updateMany({
-    where: {
-      restaurantId: restaurant.id,
-      id: { in: groupTableIds },
-    },
-    data: {
-      closedAt,
-      closedPaid: false,
-      locked: true
-    }
-  })
 
   await prisma.session.updateMany({
     where: {
       restaurantId: restaurant.id,
       tableId: { in: groupTableIds },
+      status: 'ACTIVE'
+    },
+    data: {
+      status: 'CLOSED',
+      closedAt
+    }
+  })
+  await prisma.session.updateMany({
+    where: {
+      restaurantId: restaurant.id,
+      tagId: { in: groupTagIds },
       status: 'ACTIVE'
     },
     data: {
@@ -65,7 +67,9 @@ export async function POST(req: Request) {
     {
       tableId: masterTableId,
       paid: false,
-      groupedTableIds: groupTableIds
+      groupedTableIds: groupTableIds,
+      groupedTagIds: groupTagIds,
+      assignmentsPreserved: true
     },
     { req, restaurantId: restaurant.id, tableId: masterTableId }
   )

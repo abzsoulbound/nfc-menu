@@ -1,9 +1,10 @@
 import { redirect } from "next/navigation"
 
-export default function LegacyTagReviewRouteRedirect({
+export default async function LegacyTagReviewRouteRedirect({
   params,
 }: {
-  params: { tagId: string }
+  params: Promise<{ tagId: string }>
 }) {
-  redirect(`/order/t/${encodeURIComponent(params.tagId)}/review`)
+  const { tagId } = await params
+  redirect(`/order/t/${encodeURIComponent(tagId)}/review`)
 }

@@ -35,7 +35,7 @@ export async function appendSystemEvent(
         type,
         payload: toJson(payload),
         restaurantId: meta.restaurantId,
-        actor: meta.actor ?? (meta.req ? getActorType(meta.req) : "system"),
+        actor: meta.actor ?? (meta.req ? await getActorType(meta.req) : "system"),
         sessionId: meta.sessionId ?? null,
         tableId: meta.tableId ?? null,
         orderId: meta.orderId ?? null,

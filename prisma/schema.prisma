@@ -5,6 +5,7 @@ generator client {
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
+  directUrl = env("DATABASE_URL_UNPOOLED")
 }
 
 enum SessionStatus {
@@ -125,6 +126,8 @@ model Session {
 
   @@index([restaurantId])
   @@index([restaurantId, tagId, status])
+  @@index([restaurantId, tagId, status, lastActivityAt(sort: Desc)])
+  @@index([restaurantId, status, openedAt(sort: Desc)])
   @@index([nfcTagId, status])
   @@index([tableId, status])
 }
@@ -139,6 +142,7 @@ model SessionCart {
   updatedAt    DateTime   @updatedAt
 
   @@index([restaurantId])
+  @@index([restaurantId, sessionId])
 }
 
 model CartItem {
@@ -160,6 +164,8 @@ model CartItem {
   updatedAt    DateTime    @updatedAt
 
   @@index([restaurantId])
+  @@index([cartId])
+  @@index([restaurantId, cartId])
 }
 
 model TableDraft {
@@ -193,8 +199,8 @@ model KitchenTicket {
   restaurant   Restaurant      @relation(fields: [restaurantId], references: [id])
   orderId      String?
   order        Order?          @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  tableId      String
-  table        TableAssignment @relation(fields: [tableId], references: [id])
+  tableId      String?
+  table        TableAssignment? @relation(fields: [tableId], references: [id])
   station      String
   status       OrderStatus     @default(PENDING)
   createdAt    DateTime        @default(now())
@@ -275,8 +281,8 @@ model Order {
   restaurant     Restaurant      @relation(fields: [restaurantId], references: [id])
   sessionId      String
   session        Session         @relation(fields: [sessionId], references: [id])
-  tableId        String
-  table          TableAssignment @relation(fields: [tableId], references: [id])
+  tableId        String?
+  table          TableAssignment? @relation(fields: [tableId], references: [id])
   clientRequestId String?
   targetStation  Station
   status         OrderStatus     @default(PENDING)

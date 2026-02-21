@@ -1,13 +1,12 @@
 "use client"
 
-import { useEffect, useMemo, useRef, useState } from "react"
-import { usePathname, useRouter } from "next/navigation"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { useParams, usePathname, useRouter } from "next/navigation"
 import { Card } from "@/components/ui/Card"
 import { Divider } from "@/components/ui/Divider"
 import { Button } from "@/components/ui/Button"
 import { Toast } from "@/components/ui/Toast"
 import { Modal } from "@/components/ui/Modal"
-import { IngredientEditor } from "@/components/order/IngredientEditor"
 import { useCartStore } from "@/store/useCartStore"
 import { useSessionStore } from "@/store/useSessionStore"
 import { calculateCartTotals } from "@/lib/pricing"
@@ -85,6 +84,8 @@ type PendingCartSyncEntry = {
   revision: number
 }
 
+type CustomizerGroup = MenuCustomization["groups"][number]
+
 function toStation(value: unknown): "KITCHEN" | "BAR" {
   return String(value).toUpperCase() === "BAR" ? "BAR" : "KITCHEN"
 }
@@ -134,6 +135,26 @@ function getVisibleEditLines(edits: unknown): string[] {
   return ["modified"]
 }
 
+function isLikelySizeGroup(group: CustomizerGroup): boolean {
+  if (group.type !== "single" || group.options.length !== 2) return false
+
+  const groupName = `${group.id} ${group.name}`.toLowerCase()
+  const labels = group.options.map(option => option.label.toLowerCase())
+  const hasRegularLarge =
+    labels.some(label => label.includes("regular")) &&
+    labels.some(label => label.includes("large"))
+
+  return hasRegularLarge || groupName.includes("size")
+}
+
+function groupSelectionMax(group: CustomizerGroup): number {
+  if (typeof group.max === "number" && group.max > 0) {
+    return group.max
+  }
+  if (group.type === "single") return 1
+  return group.options.length
+}
+
 function ReviewSkeleton() {
   return (
     <div className="review-skeleton">
@@ -165,16 +186,17 @@ function ReviewSkeleton() {
   )
 }
 
-export default function PerUserReviewPage({
-  params,
-}: {
-  params: { tagId: string }
-}) {
+export default function PerUserReviewPage() {
   const router = useRouter()
   const pathname = usePathname()
-  const tagId = params.tagId
+  const params = useParams<{ tagId?: string }>()
+  const tagId =
+    typeof params?.tagId === "string"
+      ? params.tagId.trim()
+      : ""
   const sessionId = useSessionStore(s => s.sessionId)
   const setSession = useSessionStore(s => s.setSession)
+  const clearSession = useSessionStore(s => s.clearSession)
   const clientKey = useSessionStore(s => s.clientKey)
   const ensureClientKey = useSessionStore(s => s.ensureClientKey)
   const clearSubmittedItems = useCartStore(s => s.clearSubmittedItems)
@@ -197,19 +219,34 @@ export default function PerUserReviewPage({
   const [restaurantId, setRestaurantId] = useState("unknown")
   const [menuData, setMenuData] = useState<Map<string, MenuCustomization | null>>(new Map())
   const [editingSelections, setEditingSelections] = useState<ModifierSelections>({})
+  const [activeEditGroupId, setActiveEditGroupId] =
+    useState<string | null>(null)
   const cartItemsRef = useRef<ReviewItem[]>([])
   const syncTimersRef = useRef<Record<string, number>>({})
   const syncInFlightRef = useRef<Record<string, boolean>>({})
   const pendingSyncRef = useRef<Record<string, PendingCartSyncEntry>>({})
+  const refreshInFlightRef = useRef(false)
   const lastRequestIdRef = useRef("unknown")
   const reviewOpenedTrackedRef = useRef(false)
 
-  const notifyHeader = () => {
+  const notifyHeader = (items: ReviewItem[] = cartItemsRef.current) => {
     if (typeof window === "undefined") return
-    window.dispatchEvent(new Event("nfc-cart-updated"))
+    const count = items
+      .filter(item => item.isMine)
+      .reduce((sum, item) => sum + Number(item.quantity ?? 0), 0)
+    window.dispatchEvent(
+      new CustomEvent("nfc-cart-updated", {
+        detail: {
+          count,
+          available: true,
+        },
+      })
+    )
   }
 
-  const loadCartItems = async (): Promise<PendingCartResponse | null> => {
+  const loadCartItems = useCallback(async (
+    allowRetry = false
+  ): Promise<PendingCartResponse | null> => {
     if (!sessionId) {
       return {
         items: [],
@@ -220,7 +257,9 @@ export default function PerUserReviewPage({
       }
     }
 
-    for (let attempt = 0; attempt < 2; attempt += 1) {
+    const maxAttempts = allowRetry ? 2 : 1
+
+    for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
       try {
         const res = await fetch("/api/cart/get", {
           method: "POST",
@@ -236,8 +275,31 @@ export default function PerUserReviewPage({
         }
 
         if (!res.ok) {
-          if (attempt === 0) continue
           const errorInfo = await readApiErrorInfo(res)
+          const shouldRetry =
+            errorInfo.status >= 500 ||
+            errorInfo.code === null
+
+          if (
+            attempt + 1 < maxAttempts &&
+            shouldRetry
+          ) {
+            const delayMs = 750 * Math.pow(2, attempt)
+            await new Promise(resolve => setTimeout(resolve, delayMs))
+            continue
+          }
+
+          if (errorInfo.code === "SESSION_NOT_FOUND") {
+            clearSession()
+            setError(cartLoadErrorMessage(errorInfo))
+            return {
+              items: [],
+              members: [],
+              requesterConfirmed: true,
+              allMembersConfirmed: true,
+              unconfirmedMemberCount: 0,
+            }
+          }
           setError(cartLoadErrorMessage(errorInfo))
           if (errorInfo.status >= 500) {
             return null
@@ -341,14 +403,18 @@ export default function PerUserReviewPage({
               : fallbackUnconfirmedCount,
         }
       } catch {
-        if (attempt === 0) continue
+        if (attempt + 1 < maxAttempts) {
+          const delayMs = 750 * Math.pow(2, attempt)
+          await new Promise(resolve => setTimeout(resolve, delayMs))
+          continue
+        }
         setError(networkErrorMessage("open your basket"))
         return null
       }
     }
 
     return null
-  }
+  }, [sessionId, clientKey, clearSession])
 
   const loadMenuData = async () => {
     try {
@@ -452,22 +518,27 @@ export default function PerUserReviewPage({
     }
   }
 
-  const applyPendingState = (pendingCart: PendingCartResponse) => {
+  const applyPendingState = useCallback((pendingCart: PendingCartResponse) => {
     setCartItems(pendingCart.items)
     setPendingMembers(pendingCart.members)
     setRequesterConfirmed(pendingCart.requesterConfirmed)
     setAllMembersConfirmed(pendingCart.allMembersConfirmed)
     setUnconfirmedMemberCount(pendingCart.unconfirmedMemberCount)
-  }
+  }, [])
 
   const refreshAll = async (showSpinner: boolean) => {
+    if (refreshInFlightRef.current) {
+      return
+    }
+    refreshInFlightRef.current = true
+
     if (showSpinner) {
       setLoading(true)
     }
 
     try {
       const [pendingCart, submitted] = await Promise.all([
-        loadCartItems(),
+        loadCartItems(showSpinner),
         loadSubmittedItems(),
       ])
 
@@ -479,6 +550,7 @@ export default function PerUserReviewPage({
         setFirstSubmittedAt(submitted.firstSubmittedAt)
       }
     } finally {
+      refreshInFlightRef.current = false
       if (showSpinner) {
         setLoading(false)
       }
@@ -534,6 +606,11 @@ export default function PerUserReviewPage({
 
   useEffect(() => {
     if (sessionId) return
+    if (!tagId) {
+      setError("This table link looks invalid. Ask staff for help.")
+      setLoading(false)
+      return
+    }
 
     let cancelled = false
     const bootstrapSession = async () => {
@@ -581,7 +658,7 @@ export default function PerUserReviewPage({
   }, [cartItems])
 
   useEffect(() => {
-    notifyHeader()
+    notifyHeader(cartItems)
   }, [cartItems])
 
   useEffect(() => {
@@ -604,12 +681,60 @@ export default function PerUserReviewPage({
   useEffect(() => {
     if (!sessionId) return
 
-    const timer = window.setInterval(() => {
-      void refreshAll(false)
-    }, 3000)
+    let stream: EventSource | null = null
+    let reconnectAttempts = 0
+    let reconnectTimer: ReturnType<typeof setTimeout> | null = null
+    let lastRefreshAt = 0
+    const REFRESH_COOLDOWN_MS = 1000  // Max 1 refresh per second from SSE
 
-    return () => window.clearInterval(timer)
-  }, [sessionId, clientKey])
+    const connect = () => {
+      if (stream) return
+
+      stream = new EventSource(
+        `/api/cart/stream?sessionId=${encodeURIComponent(sessionId)}`
+      )
+
+      stream.onmessage = async () => {
+        reconnectAttempts = 0  // Reset backoff on successful message
+        
+        // Throttle refreshes triggered by SSE
+        const now = Date.now()
+        if (now - lastRefreshAt >= REFRESH_COOLDOWN_MS) {
+          lastRefreshAt = now
+          const pending = await loadCartItems(false)
+          if (pending) {
+            applyPendingState(pending)
+          }
+        }
+      }
+
+      stream.onerror = () => {
+        stream?.close()
+        stream = null
+
+        // Exponential backoff: 2s, 4s, 8s, 16s, max 30s
+        // Keep retrying silently - SSE critical for multi-guest orders
+        reconnectAttempts += 1
+        const backoffMs = Math.min(2000 * Math.pow(2, reconnectAttempts - 1), 30000)
+
+        reconnectTimer = setTimeout(() => {
+          reconnectTimer = null
+          connect()
+        }, backoffMs)
+      }
+    }
+
+    connect()
+
+    return () => {
+      if (reconnectTimer) {
+        clearTimeout(reconnectTimer)
+        reconnectTimer = null
+      }
+      stream?.close()
+      stream = null
+    }
+  }, [sessionId, loadCartItems, applyPendingState])
 
   const isSharedSession = Boolean(sessionId)
   const isItemLockedByRequesterConfirmation = (
@@ -879,7 +1004,7 @@ export default function PerUserReviewPage({
     setCartItems(current => {
       const next = updater(current)
       cartItemsRef.current = next
-      notifyHeader()
+      notifyHeader(next)
       return next
     })
   }
@@ -1067,6 +1192,64 @@ export default function PerUserReviewPage({
       setEditingSelections({})
     }
   }
+
+  function updateEditingSelection(
+    group: CustomizerGroup,
+    optionId: string,
+    selected: boolean
+  ) {
+    setEditingSelections(current => {
+      const existing = current[group.id] ?? []
+      if (group.type === "single") {
+        return {
+          ...current,
+          [group.id]: selected ? [optionId] : [],
+        }
+      }
+
+      if (selected) {
+        if (existing.includes(optionId)) return current
+        return {
+          ...current,
+          [group.id]: [...existing, optionId],
+        }
+      }
+
+      return {
+        ...current,
+        [group.id]: existing.filter(id => id !== optionId),
+      }
+    })
+  }
+
+  const editingCustomization = useMemo(() => {
+    if (!editingItem?.menuItemId) return null
+    return menuData.get(editingItem.menuItemId) ?? null
+  }, [editingItem?.menuItemId, menuData])
+
+  const editingValidation = useMemo(() => {
+    if (!editingItem) return null
+    return validateModifierSelections(
+      editingCustomization,
+      editingSelections
+    )
+  }, [editingItem, editingCustomization, editingSelections])
+
+  const editGroups = editingCustomization?.groups ?? []
+  const editSizeGroup = editGroups.find(isLikelySizeGroup)
+  const editConfigGroups = editGroups.filter(
+    group => group.id !== editSizeGroup?.id
+  )
+
+  useEffect(() => {
+    if (!editingItem) {
+      setActiveEditGroupId(null)
+      return
+    }
+
+    const firstConfigurable = editConfigGroups[0]
+    setActiveEditGroupId(firstConfigurable?.id ?? null)
+  }, [editingItem?.id, editConfigGroups])
 
   async function saveEdit() {
     if (!editingItem) return
@@ -1656,54 +1839,203 @@ export default function PerUserReviewPage({
       )}
 
       {editingItem && (
-        <Modal
-          title={`edit ${editingItem.name}`}
-          onCancel={() => {
+        <div
+          className="modal-overlay customizer-overlay"
+          onClick={() => {
             setEditingItem(null)
             setEditDraft("")
             setEditingSelections({})
           }}
-          onConfirm={saveEdit}
-          confirmDisabled={savingEdit}
         >
-          <div className="space-y-3">
-            {editingItem.menuItemId && menuData.has(editingItem.menuItemId) ? (
-              <IngredientEditor
-                customization={menuData.get(editingItem.menuItemId)}
-                selections={editingSelections}
-                onSelectionChange={(groupId, optionId, selected) => {
-                  setEditingSelections(current => {
-                    const existing = current[groupId] ?? []
-                    const next = selected
-                      ? [...existing, optionId]
-                      : existing.filter(id => id !== optionId)
-                    return {
-                      ...current,
-                      [groupId]: next,
-                    }
-                  })
+          <section
+            className="customizer-shell kfc-customizer-shell"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="review-edit-title"
+            onClick={event => event.stopPropagation()}
+          >
+            <header className="kfc-customizer-topbar">
+              <button
+                type="button"
+                onClick={() => {
+                  setEditingItem(null)
+                  setEditDraft("")
+                  setEditingSelections({})
                 }}
-              />
-            ) : null}
-            
-            <div>
-              <label
-                htmlFor="item-edit-note"
-                className="text-xs opacity-70"
+                className="kfc-customizer-back"
+                aria-label="Go back"
               >
-                Additional note (optional)
-              </label>
-              <textarea
-                id="item-edit-note"
-                className="w-full border rounded p-2 text-sm mt-1"
-                rows={3}
-                value={editDraft}
-                onChange={event => setEditDraft(event.target.value)}
-                placeholder="No onions, extra crispy, sauce on side..."
-              />
+                ←
+              </button>
+              <h2 className="kfc-customizer-topbar-title">MAKE IT YOURS</h2>
+              <span className="kfc-customizer-topbar-spacer" aria-hidden="true" />
+            </header>
+
+            <div className="kfc-customizer-content">
+              <div
+                className="kfc-customizer-image-wrap kfc-customizer-image-wrap--fallback"
+                aria-hidden="true"
+              >
+                <div className="kfc-customizer-hero-fallback" />
+              </div>
+
+              <div className="kfc-customizer-meta">
+                <h3 id="review-edit-title" className="kfc-customizer-title">
+                  {editingItem.name}
+                </h3>
+                <p className="kfc-customizer-description">
+                  Update item options and notes before saving changes.
+                </p>
+              </div>
+
+              {editSizeGroup && (
+                <div className="kfc-customizer-size-segment" role="tablist" aria-label="Select size">
+                  {editSizeGroup.options.map(option => {
+                    const selected =
+                      editingSelections[editSizeGroup.id]?.includes(option.id) ?? false
+
+                    return (
+                      <button
+                        key={option.id}
+                        type="button"
+                        role="tab"
+                        aria-selected={selected}
+                        className={`kfc-customizer-size-tab${selected ? " is-active" : ""}`}
+                        onClick={() =>
+                          updateEditingSelection(
+                            editSizeGroup,
+                            option.id,
+                            true
+                          )
+                        }
+                      >
+                        {option.label}
+                      </button>
+                    )
+                  })}
+                </div>
+              )}
+
+              <div className="kfc-customizer-config-list">
+                {editConfigGroups.map((group, idx) => {
+                  const selectedCount =
+                    editingSelections[group.id]?.length ?? 0
+                  const isOpen = activeEditGroupId === group.id
+                  const actionLabel = idx === 0 ? "Customise" : "Swap"
+                  const max = groupSelectionMax(group)
+
+                  return (
+                    <div key={group.id} className="kfc-customizer-config-block">
+                      <button
+                        type="button"
+                        className="kfc-customizer-config-row"
+                        onClick={() =>
+                          setActiveEditGroupId(current =>
+                            current === group.id ? null : group.id
+                          )
+                        }
+                        aria-expanded={isOpen}
+                        aria-controls={`review-edit-group-${group.id}`}
+                      >
+                        <div className="kfc-customizer-config-copy">
+                          <span className="kfc-customizer-config-name">
+                            {group.name}
+                          </span>
+                          <span className="kfc-customizer-config-kcal">
+                            {selectedCount > 0
+                              ? `${selectedCount} selected`
+                              : "No options selected"}
+                          </span>
+                        </div>
+                        <span className="kfc-customizer-config-pill">{actionLabel}</span>
+                      </button>
+
+                      {isOpen && (
+                        <div
+                          id={`review-edit-group-${group.id}`}
+                          className="kfc-customizer-options"
+                        >
+                          {group.options.map(option => {
+                            const selected =
+                              editingSelections[group.id]?.includes(option.id) ??
+                              false
+                            const selectedTotal =
+                              editingSelections[group.id]?.length ?? 0
+                            const disabled =
+                              !selected &&
+                              group.type === "multi" &&
+                              selectedTotal >= max
+
+                            return (
+                              <button
+                                key={option.id}
+                                type="button"
+                                className={`kfc-customizer-option${
+                                  selected ? " is-active" : ""
+                                }`}
+                                onClick={() =>
+                                  updateEditingSelection(
+                                    group,
+                                    option.id,
+                                    !selected
+                                  )
+                                }
+                                disabled={disabled}
+                                aria-pressed={selected}
+                              >
+                                <span>{option.label}</span>
+                                {option.priceDelta !== 0 && (
+                                  <span className="kfc-customizer-option-price">
+                                    {option.priceDelta > 0 ? "+" : ""}£
+                                    {option.priceDelta.toFixed(2)}
+                                  </span>
+                                )}
+                              </button>
+                            )
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+
+              <div>
+                <label htmlFor="item-edit-note" className="kfc-customizer-energy">
+                  Additional note (optional)
+                </label>
+                <textarea
+                  id="item-edit-note"
+                  className="w-full border rounded p-2 text-sm mt-1"
+                  rows={3}
+                  value={editDraft}
+                  onChange={event => setEditDraft(event.target.value)}
+                  placeholder="No onions, extra crispy, sauce on side..."
+                />
+              </div>
+
+              <section className="kfc-customizer-quantity" aria-label="Quantity">
+                <span className="kfc-customizer-quantity-label">Quantity</span>
+                <div className="kfc-customizer-qty-control" aria-hidden="true">
+                  <div className="menu-qty-value">{editingItem.quantity}</div>
+                </div>
+              </section>
+              <div className="customizer-spacer" />
             </div>
-          </div>
-        </Modal>
+
+            <footer className="kfc-customizer-footer">
+              <button
+                type="button"
+                onClick={saveEdit}
+                disabled={savingEdit || Boolean(editingValidation && !editingValidation.ok)}
+                className="kfc-customizer-add-btn"
+              >
+                <span>Save changes</span>
+                <span>£{(editingItem.unitPrice * editingItem.quantity).toFixed(2)}</span>
+              </button>
+            </footer>
+          </section>
+        </div>
       )}
     </div>
   )

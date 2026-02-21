@@ -1,16 +1,23 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { useParams } from 'next/navigation'
 
-export default function TablePage({
-  params,
-}: {
-  params: { tagId: string }
-}) {
+export default function TablePage() {
+  const params = useParams<{ tagId?: string }>()
+  const tagId =
+    typeof params?.tagId === 'string'
+      ? params.tagId.trim()
+      : ''
   const [drafts, setDrafts] = useState<any[]>([])
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
+    if (!tagId) {
+      setError('TABLE_TAG_INVALID')
+      return
+    }
+
     let cancelled = false
 
     const loadDrafts = async () => {
@@ -18,7 +25,7 @@ export default function TablePage({
         const sessionRes = await fetch('/api/session', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ tagId: params.tagId }),
+          body: JSON.stringify({ tagId }),
         })
 
         if (!sessionRes.ok) {
@@ -77,7 +84,7 @@ export default function TablePage({
     return () => {
       cancelled = true
     }
-  }, [params.tagId])
+  }, [tagId])
 
   return (
     <div style={{ padding: 20 }}>

@@ -3,7 +3,7 @@ import { OrderStatus, Prisma, Station } from "@prisma/client"
 import { prisma } from "@/lib/prisma"
 import { requireStaff } from "@/lib/auth"
 import { appendSystemEvent } from "@/lib/events"
-import { findTagByToken } from "@/lib/db/tags"
+import { ensureTagByToken, normalizeTagToken } from "@/lib/db/tags"
 import { logWithRequest } from "@/lib/logger"
 import {
   MEMBER_INACTIVE_MS,
@@ -20,8 +20,6 @@ import {
 import {
   getTableGroupByAssignmentId,
   getTableGroupForTag,
-  isTableGroupClosed,
-  isTableGroupLocked,
 } from "@/lib/tableGroups"
 import { resolveRestaurantFromRequest } from "@/lib/restaurants"
 
@@ -340,7 +338,7 @@ export async function GET(req: Request) {
       ticket.items.map(item => ({
         orderId: ticket.orderId ?? ticket.id,
         orderItemId: item.orderItemId ?? item.id,
-        tableNumber: ticket.table.tableNo,
+        tableNumber: ticket.table?.tableNo ?? 0,
         name: item.name,
         quantity: item.quantity,
         edits: null,
@@ -428,13 +426,20 @@ export async function POST(req: Request) {
       clientRequestIdFromBody ??
         req.headers.get("x-idempotency-key")
     )
-
-    const resolvedSessionId =
-      typeof sessionId === "string" && sessionId.length > 0
-        ? sessionId
+    const normalizedTagId =
+      typeof tagId === "string" && tagId.trim().length > 0
+        ? tagId.trim()
         : null
 
-    if (!resolvedSessionId && !tagId) {
+    const resolvedSessionId =
+      typeof sessionId === "string" && sessionId.trim().length > 0
+        ? sessionId.trim()
+        : null
+
+    if (!resolvedSessionId && !normalizedTagId) {
+      return NextResponse.json({ error: "BAD_REQUEST" }, { status: 400 })
+    }
+    if (normalizedTagId && !normalizeTagToken(normalizedTagId)) {
       return NextResponse.json({ error: "BAD_REQUEST" }, { status: 400 })
     }
 
@@ -455,21 +460,14 @@ export async function POST(req: Request) {
       session = null
     }
 
-    let tag = tagId
-      ? await findTagByToken({
+    let tag = normalizedTagId
+      ? await ensureTagByToken({
           restaurantId: restaurant.id,
-          tagId,
+          tagId: normalizedTagId,
         })
       : session?.tag ?? null
     if (tag && tag.restaurantId !== restaurant.id) {
       tag = null
-    }
-
-    if (!tag && tagId) {
-      return NextResponse.json(
-        { error: "TAG_NOT_REGISTERED" },
-        { status: 404 }
-      )
     }
 
     if (!session && resolvedSessionId) {
@@ -477,12 +475,32 @@ export async function POST(req: Request) {
     }
 
     if (!session && tag) {
+      const tagTableGroup = await getTableGroupForTag(
+        tag.tagId,
+        restaurant.id
+      )
+      const groupedTableIds =
+        tagTableGroup?.assignments.map(
+          assignment => assignment.id
+        ) ?? []
+      const masterTableId = tagTableGroup?.master.id ?? null
+      const reusedWhere: Prisma.SessionWhereInput =
+        groupedTableIds.length > 0
+          ? {
+              restaurantId: restaurant.id,
+              status: "ACTIVE",
+              tableId: {
+                in: groupedTableIds,
+              },
+            }
+          : {
+              restaurantId: restaurant.id,
+              tagId: tag.tagId,
+              status: "ACTIVE",
+            }
+
       const reused = await prisma.session.findFirst({
-        where: {
-          restaurantId: restaurant.id,
-          tagId: tag.tagId,
-          status: "ACTIVE",
-        },
+        where: reusedWhere,
         include: {
           tag: { include: { assignment: true } },
           cart: { include: { items: true } },
@@ -496,7 +514,27 @@ export async function POST(req: Request) {
           SESSION_IDLE_TIMEOUT_MS
 
       if (reused && reusedIsFresh) {
-        session = reused
+        if (reused.tableId !== masterTableId) {
+          await prisma.session.update({
+            where: { id: reused.id },
+            data: {
+              tableId: masterTableId,
+              lastActivityAt: new Date(),
+            },
+          })
+          session = await prisma.session.findUnique({
+            where: { id: reused.id },
+            include: {
+              tag: { include: { assignment: true } },
+              cart: { include: { items: true } },
+            },
+          })
+          if (session && session.restaurantId !== restaurant.id) {
+            session = null
+          }
+        } else {
+          session = reused
+        }
       } else {
         if (reused && !reusedIsFresh) {
           await prisma.session.update({
@@ -507,12 +545,6 @@ export async function POST(req: Request) {
             },
           })
         }
-
-        const tagTableGroup = await getTableGroupForTag(
-          tag.tagId,
-          restaurant.id
-        )
-        const masterTableId = tagTableGroup?.master.id ?? null
 
         session = await prisma.session.create({
           data: {
@@ -577,11 +609,7 @@ export async function POST(req: Request) {
     })
     const table = tableGroup?.master ?? null
 
-    if (!table) {
-      return NextResponse.json({ error: "TABLE_NOT_ASSIGNED" }, { status: 400 })
-    }
-
-    if (session.tableId !== table.id) {
+    if (table && session.tableId !== table.id) {
       await prisma.session.update({
         where: { id: session.id },
         data: { tableId: table.id },
@@ -592,11 +620,8 @@ export async function POST(req: Request) {
       }
     }
 
-    if (tableGroup && isTableGroupClosed(tableGroup)) {
-      return NextResponse.json({ error: "TABLE_CLOSED" }, { status: 409 })
-    }
-    if (tableGroup && isTableGroupLocked(tableGroup)) {
-      return NextResponse.json({ error: "TABLE_LOCKED" }, { status: 423 })
+    if (session.closedAt || session.status !== "ACTIVE") {
+      return NextResponse.json({ error: "SESSION_STALE" }, { status: 410 })
     }
 
     if (clientRequestId) {
@@ -622,8 +647,8 @@ export async function POST(req: Request) {
     const stale =
       Date.now() - session.lastActivityAt.getTime() >
       SESSION_IDLE_TIMEOUT_MS
-    if (stale || session.status !== "ACTIVE") {
-      if (stale && session.status === "ACTIVE") {
+    if (stale) {
+      if (session.status === "ACTIVE") {
         await prisma.session.update({
           where: { id: session.id },
           data: {
@@ -745,7 +770,7 @@ export async function POST(req: Request) {
             req,
             restaurantId: restaurant.id,
             sessionId: session.id,
-            tableId: table.id,
+            tableId: table?.id ?? session.tableId ?? null,
           }
         )
       }
@@ -876,7 +901,7 @@ export async function POST(req: Request) {
         data: {
           restaurantId: restaurant.id,
           sessionId: session.id,
-          tableId: table.id,
+          tableId: table?.id ?? null,
           clientRequestId,
           targetStation: primaryStation,
           status: "PENDING",
@@ -922,7 +947,7 @@ export async function POST(req: Request) {
           data: {
             restaurantId: restaurant.id,
             orderId: order.id,
-            tableId: table.id,
+            tableId: table?.id ?? null,
             station: stationKey,
             status: "PENDING",
             items: {
@@ -952,7 +977,7 @@ export async function POST(req: Request) {
         req,
         restaurantId: restaurant.id,
         sessionId: session.id,
-        tableId: table.id,
+        tableId: table?.id ?? session.tableId ?? null,
         orderId: createdOrder.id,
       }
     )

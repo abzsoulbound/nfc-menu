@@ -4,11 +4,13 @@ import { prisma } from "@/lib/prisma"
 import { requireStaff } from "@/lib/auth"
 import { SESSION_IDLE_TIMEOUT_MS } from "@/lib/constants"
 import { appendSystemEvent } from "@/lib/events"
-import { ensureTagByToken, findTagByToken } from "@/lib/db/tags"
+import { ensureTagByToken, normalizeTagToken } from "@/lib/db/tags"
 import {
   getTableGroupForTag,
   isTableGroupClosed,
 } from "@/lib/tableGroups"
+import { ensureOrderingTableAssignment } from "@/lib/orderingTableAssignments"
+import { ensureTakeawayTillAssignment } from "@/lib/tillTags"
 import { resolveRestaurantFromRequest } from "@/lib/restaurants"
 
 function inferOrigin(tagId: string) {
@@ -61,16 +63,16 @@ async function ensureTag(
   restaurantId: string
 ) {
   if (tagId) {
-    const existing = await findTagByToken({
-      restaurantId,
-      tagId,
-    })
-    if (!existing) {
-      throw new SessionRouteError(404, {
-        error: "TAG_NOT_REGISTERED",
+    const canonical = normalizeTagToken(tagId)
+    if (!canonical) {
+      throw new SessionRouteError(400, {
+        error: "BAD_REQUEST",
       })
     }
-    return existing
+    return ensureTagByToken({
+      restaurantId,
+      tagId: canonical,
+    })
   }
 
   if (origin === "STAFF") {
@@ -107,12 +109,26 @@ export async function GET(req: Request) {
       status: "ACTIVE",
     },
     orderBy: { openedAt: "desc" },
-    include: {
+    take: 100,  // Bound query: max 100 active sessions per restaurant
+    select: {
+      id: true,
+      tagId: true,
+      tableId: true,
+      openedAt: true,
+      lastActivityAt: true,
+      status: true,
       table: {
         select: { tableNo: true },
       },
       tag: {
-        include: { assignment: true },
+        select: {
+          assignment: {
+            select: {
+              id: true,
+              tableNo: true,
+            },
+          },
+        },
       },
     },
   })
@@ -122,19 +138,28 @@ export async function GET(req: Request) {
 
 export async function POST(req: Request) {
   const restaurant = await resolveRestaurantFromRequest(req)
-  const body = await req.json()
+  let body: unknown
+  try {
+    body = await req.json()
+  } catch {
+    return NextResponse.json({ error: "BAD_REQUEST" }, { status: 400 })
+  }
+  const payload =
+    body && typeof body === "object"
+      ? (body as Record<string, unknown>)
+      : {}
   const sessionId =
-    typeof body?.sessionId === "string"
-      ? body.sessionId.trim()
+    typeof payload.sessionId === "string"
+      ? payload.sessionId.trim()
       : undefined
   const originRaw =
-    typeof body?.origin === "string"
-      ? body.origin
+    typeof payload.origin === "string"
+      ? payload.origin
       : undefined
   const origin = originRaw?.toUpperCase()
   const tagId =
-    typeof body?.tagId === "string"
-      ? body.tagId.trim()
+    typeof payload.tagId === "string"
+      ? payload.tagId.trim()
       : undefined
 
   if (
@@ -223,6 +248,19 @@ export async function POST(req: Request) {
       })
     }
 
+    await ensureTakeawayTillAssignment({
+      restaurantId: restaurant.id,
+      nfcTagId: existing.tag.id,
+      tagId: existing.tagId,
+    })
+    if (!existing.tagId.startsWith("staff-")) {
+      await ensureOrderingTableAssignment({
+        restaurantId: restaurant.id,
+        nfcTagId: existing.nfcTagId,
+        tagId: existing.tagId,
+      })
+    }
+
     const existingTableGroup = await getTableGroupForTag(
       existing.tagId,
       restaurant.id
@@ -283,6 +321,19 @@ export async function POST(req: Request) {
       })
     }
     throw error
+  }
+
+  await ensureTakeawayTillAssignment({
+    restaurantId: restaurant.id,
+    nfcTagId: resolvedTag.id,
+    tagId: resolvedTag.tagId,
+  })
+  if (!resolvedTag.tagId.startsWith("staff-")) {
+    await ensureOrderingTableAssignment({
+      restaurantId: restaurant.id,
+      nfcTagId: resolvedTag.id,
+      tagId: resolvedTag.tagId,
+    })
   }
 
   const tagTableGroup = await getTableGroupForTag(

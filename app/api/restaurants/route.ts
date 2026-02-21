@@ -12,6 +12,7 @@ import {
 } from "@/lib/restaurants"
 import { ensureCanonicalMenu } from "@/lib/menuCatalog"
 import { hashPasscode } from "@/lib/staffSessions"
+import { parseTableNumbers } from "@/lib/tableCatalog"
 
 function normalizeSlug(value: unknown) {
   if (typeof value !== "string") return ""
@@ -133,14 +134,27 @@ export async function POST(req: Request) {
     },
   })
 
-  const tableCount = Math.max(
-    0,
-    Math.min(120, Math.floor(safeNumber(body?.tableCount, 0)))
-  )
+  const requestedTableNumbers =
+    typeof body?.tableNumbers === "string"
+      ? parseTableNumbers(body.tableNumbers)
+      : []
 
-  if (tableCount > 0) {
+  const tableNumbers =
+    requestedTableNumbers.length > 0
+      ? requestedTableNumbers.slice(0, 120)
+      : Array.from(
+          {
+            length: Math.max(
+              0,
+              Math.min(120, Math.floor(safeNumber(body?.tableCount, 0)))
+            ),
+          },
+          (_, index) => index + 1
+        )
+
+  if (tableNumbers.length > 0) {
     await prisma.$transaction(async tx => {
-      for (let tableNo = 1; tableNo <= tableCount; tableNo += 1) {
+      for (const tableNo of tableNumbers) {
         const externalTagId = `${slug}-t-${String(tableNo).padStart(2, "0")}`
         const tag = await tx.nfcTag.upsert({
           where: {

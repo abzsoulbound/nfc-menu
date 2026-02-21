@@ -10,7 +10,8 @@ jobs:
   validate:
     runs-on: ubuntu-latest
     env:
-      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/nfc_menu
+      POSTGRES_PRISMA_URL: postgresql://postgres:postgres@localhost:5432/nfc_menu
+      POSTGRES_URL_NON_POOLING: postgresql://postgres:postgres@localhost:5432/nfc_menu
 
     steps:
       - name: Checkout

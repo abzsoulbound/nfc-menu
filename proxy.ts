@@ -197,35 +197,20 @@ function isAuthDemoBypassEnabled() {
   )
 }
 
-function demoRoleForPath(
-  pathname: string,
-  roles: readonly string[]
-) {
-  if (
-    pathname === "/bar" ||
-    pathname.startsWith("/bar/")
-  ) {
+function demoRoleForPath(pathname: string, roles: readonly string[]) {
+  if (pathname === "/bar" || pathname.startsWith("/bar/")) {
     return "bar"
   }
 
-  if (
-    pathname === "/kitchen" ||
-    pathname.startsWith("/kitchen/")
-  ) {
+  if (pathname === "/kitchen" || pathname.startsWith("/kitchen/")) {
     return "kitchen"
   }
 
-  if (
-    pathname === "/admin" ||
-    pathname.startsWith("/admin/")
-  ) {
+  if (pathname === "/admin" || pathname.startsWith("/admin/")) {
     return "admin"
   }
 
-  if (
-    pathname === "/staff" ||
-    pathname.startsWith("/staff/")
-  ) {
+  if (pathname === "/staff" || pathname.startsWith("/staff/")) {
     return "waiter"
   }
 
@@ -234,37 +219,23 @@ function demoRoleForPath(
 }
 
 function requiredStaffRoles(pathname: string) {
-  if (
-    pathname === "/staff/login"
-  ) {
+  if (pathname === "/staff/login") {
     return null
   }
 
-  if (
-    pathname === "/admin" ||
-    pathname.startsWith("/admin/")
-  ) {
+  if (pathname === "/admin" || pathname.startsWith("/admin/")) {
     return ["admin"] as const
   }
 
-  if (
-    pathname === "/bar" ||
-    pathname.startsWith("/bar/")
-  ) {
+  if (pathname === "/bar" || pathname.startsWith("/bar/")) {
     return ["admin", "bar"] as const
   }
 
-  if (
-    pathname === "/kitchen" ||
-    pathname.startsWith("/kitchen/")
-  ) {
+  if (pathname === "/kitchen" || pathname.startsWith("/kitchen/")) {
     return ["admin", "kitchen"] as const
   }
 
-  if (
-    pathname === "/staff" ||
-    pathname.startsWith("/staff/")
-  ) {
+  if (pathname === "/staff" || pathname.startsWith("/staff/")) {
     return ["admin", "waiter"] as const
   }
 
@@ -312,7 +283,7 @@ async function resolveStaffAccess(input: {
   }
 }
 
-export async function middleware(req: NextRequest) {
+export async function proxy(req: NextRequest) {
   const pathname = req.nextUrl.pathname
   const requestId =
     req.headers.get(REQUEST_ID_HEADER) || crypto.randomUUID()
@@ -321,38 +292,22 @@ export async function middleware(req: NextRequest) {
       req.headers.get("host") ??
       req.nextUrl.hostname
   )
-  const isHighTrafficCustomerApi =
-    pathname.startsWith("/api/cart/") ||
-    pathname === "/api/session" ||
-    pathname === "/api/sessions"
-
-  const contextResult = isHighTrafficCustomerApi
-    ? {
-        context: fallbackContext(),
-        resolved: false,
-      }
-    : await resolveContextInMiddleware(
-        req,
-        hostname,
-        requestId
-      )
+  const contextResult = await resolveContextInMiddleware(
+    req,
+    hostname,
+    requestId
+  )
   const context = contextResult.context
 
   const requestHeaders = new Headers(req.headers)
   requestHeaders.set(REQUEST_ID_HEADER, requestId)
-  if (!isHighTrafficCustomerApi) {
-    requestHeaders.set("x-restaurant-id", context.id)
-    if (context.domain) {
-      requestHeaders.set("x-restaurant-domain", context.domain)
-    } else {
-      requestHeaders.delete("x-restaurant-domain")
-    }
-    requestHeaders.set(RESTAURANT_CONTEXT_HEADER, encodeContextHeader(context))
+  requestHeaders.set("x-restaurant-id", context.id)
+  if (context.domain) {
+    requestHeaders.set("x-restaurant-domain", context.domain)
   } else {
-    requestHeaders.delete("x-restaurant-id")
     requestHeaders.delete("x-restaurant-domain")
-    requestHeaders.delete(RESTAURANT_CONTEXT_HEADER)
   }
+  requestHeaders.set(RESTAURANT_CONTEXT_HEADER, encodeContextHeader(context))
 
   const roles = requiredStaffRoles(pathname)
   if (roles) {
@@ -363,24 +318,24 @@ export async function middleware(req: NextRequest) {
         demoRoleForPath(pathname, roles)
       )
     } else {
-    const staffAccess = await resolveStaffAccess({
-      req,
-      requestId,
-      restaurantId: context.id,
-      roles,
-    })
+      const staffAccess = await resolveStaffAccess({
+        req,
+        requestId,
+        restaurantId: context.id,
+        roles,
+      })
 
-    if (!staffAccess) {
-      const loginPath = staffLoginPath()
-      const loginUrl = new URL(loginPath, req.url)
-      loginUrl.searchParams.set("next", pathname)
-      const redirectRes = NextResponse.redirect(loginUrl, { status: 307 })
-      redirectRes.headers.set(REQUEST_ID_HEADER, requestId)
-      return redirectRes
-    }
+      if (!staffAccess) {
+        const loginPath = staffLoginPath()
+        const loginUrl = new URL(loginPath, req.url)
+        loginUrl.searchParams.set("next", pathname)
+        const redirectRes = NextResponse.redirect(loginUrl, { status: 307 })
+        redirectRes.headers.set(REQUEST_ID_HEADER, requestId)
+        return redirectRes
+      }
 
-    requestHeaders.set("x-staff-user-id", staffAccess.staffUserId)
-    requestHeaders.set("x-staff-role", staffAccess.role)
+      requestHeaders.set("x-staff-user-id", staffAccess.staffUserId)
+      requestHeaders.set("x-staff-role", staffAccess.role)
     }
   } else {
     requestHeaders.delete("x-staff-user-id")
@@ -396,6 +351,8 @@ export async function middleware(req: NextRequest) {
 
   return res
 }
+
+export default proxy
 
 export const config = {
   matcher: [

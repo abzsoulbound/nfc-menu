@@ -23,6 +23,25 @@ describe("tag tenant safety", () => {
             ) ?? null
           )
         }),
+        findFirst: vi.fn(async ({ where }: any) => {
+          const restaurantId =
+            typeof where?.restaurantId === "string"
+              ? where.restaurantId
+              : null
+          const candidates = Array.isArray(where?.tagId?.in)
+            ? where.tagId.in
+            : []
+          if (!restaurantId || candidates.length === 0) {
+            return null
+          }
+          return (
+            records.find(
+              record =>
+                record.restaurantId === restaurantId &&
+                candidates.includes(record.tagId)
+            ) ?? null
+          )
+        }),
         create: vi.fn(async ({ data }: any) => {
           const record: TagRecord = {
             id: data.id ?? crypto.randomUUID(),

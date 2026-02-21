@@ -86,18 +86,6 @@ export async function POST(req: Request) {
       assignment => assignment.tagId
     )
 
-    await prisma.tableAssignment.updateMany({
-      where: {
-        restaurantId: restaurant.id,
-        id: { in: groupTableIds },
-      },
-      data: {
-        closedAt,
-        closedPaid: paid,
-        locked: true,
-      },
-    })
-
     await prisma.session.updateMany({
       where: {
         restaurantId: restaurant.id,
@@ -121,13 +109,6 @@ export async function POST(req: Request) {
       },
     })
 
-    await prisma.tableAssignment.deleteMany({
-      where: {
-        restaurantId: restaurant.id,
-        id: { in: groupTableIds },
-      },
-    })
-
     await appendSystemEvent(
       "table_closed",
       {
@@ -135,7 +116,7 @@ export async function POST(req: Request) {
         paid,
         groupedTableIds: groupTableIds,
         groupedTagIds: groupTagIds,
-        unassignedOnClose: true,
+        assignmentsPreserved: true,
       },
       { req, restaurantId: restaurant.id, tableId: masterTableId }
     )
@@ -145,7 +126,7 @@ export async function POST(req: Request) {
       action,
       table: {
         id: masterTableId,
-        locked: true,
+        locked: false,
         closedAt,
         closedPaid: paid,
       },

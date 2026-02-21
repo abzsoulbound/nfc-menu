@@ -1,19 +1,19 @@
 "use client"
 
 import Link from "next/link"
-import { usePathname } from "next/navigation"
+import { useParams, usePathname } from "next/navigation"
 import { Card } from "@/components/ui/Card"
 import { Divider } from "@/components/ui/Divider"
 import { Button } from "@/components/ui/Button"
 import { tenantTagPath } from "@/lib/tenantPaths"
 
-export default function TableClosedPage({
-  params,
-}: {
-  params: { tagId: string }
-}) {
+export default function TableClosedPage() {
   const pathname = usePathname()
-  const tagId = params.tagId
+  const params = useParams<{ tagId?: string }>()
+  const tagId =
+    typeof params?.tagId === "string"
+      ? params.tagId.trim()
+      : ""
 
   return (
     <div className="p-4 space-y-4">

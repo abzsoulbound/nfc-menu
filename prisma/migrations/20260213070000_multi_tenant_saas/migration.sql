@@ -77,7 +77,7 @@ INSERT INTO "Restaurant" (
     'marlos',
     'marlos',
     'Marlo''s Kitchen',
-    '/images/marlos-wordmark-alpha.svg',
+    '/images/fable-stores-logo.png',
     '#12649a',
     '#d5e4ee',
     NULL,

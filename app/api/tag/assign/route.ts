@@ -4,7 +4,7 @@ import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { requireStaff } from '@/lib/auth'
 import { appendSystemEvent } from '@/lib/events'
-import { findTagByToken } from '@/lib/db/tags'
+import { ensureTagByToken, normalizeTagToken } from '@/lib/db/tags'
 import { getTableGroupByTableNo } from '@/lib/tableGroups'
 import { resolveRestaurantFromRequest } from '@/lib/restaurants'
 
@@ -31,21 +31,19 @@ export async function POST(req: Request) {
   ) {
     return NextResponse.json({ error: 'BAD_REQUEST' }, { status: 400 })
   }
+  if (!normalizeTagToken(tagId)) {
+    return NextResponse.json({ error: 'BAD_REQUEST' }, { status: 400 })
+  }
 
-  const tag = await findTagByToken({
+  const tag = await ensureTagByToken({
     restaurantId: restaurant.id,
     tagId,
   })
-  if (!tag) {
-    return NextResponse.json(
-      { error: 'TAG_NOT_REGISTERED' },
-      { status: 404 }
-    )
-  }
+  const canonicalTagId = tag.tagId
 
   const previousAssignment = await prisma.tableAssignment.findFirst({
     where: {
-      tagId,
+      tagId: canonicalTagId,
       restaurantId: restaurant.id,
     },
     select: { tableNo: true }
@@ -55,7 +53,7 @@ export async function POST(req: Request) {
     where: {
       restaurantId_tagId: {
         restaurantId: restaurant.id,
-        tagId,
+        tagId: canonicalTagId,
       },
     },
     update: {
@@ -65,7 +63,7 @@ export async function POST(req: Request) {
     create: {
       restaurantId: restaurant.id,
       nfcTagId: tag.id,
-      tagId,
+      tagId: canonicalTagId,
       tableNo,
     }
   })
@@ -78,7 +76,7 @@ export async function POST(req: Request) {
   await prisma.session.updateMany({
     where: {
       restaurantId: restaurant.id,
-      tagId,
+      tagId: canonicalTagId,
       status: 'ACTIVE'
     },
     data: {
@@ -115,6 +113,7 @@ export async function POST(req: Request) {
     'tag_assigned',
     {
       tagId,
+      canonicalTagId,
       tableNo,
       tableId: masterTableId
     },

@@ -1,18 +1,36 @@
 export const runtime = 'nodejs'
 
+import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { SESSION_IDLE_TIMEOUT_MS } from '@/lib/constants'
 import { appendSystemEvent } from '@/lib/events'
-import { findTagByToken } from '@/lib/db/tags'
+import { ensureTagByToken, normalizeTagToken } from '@/lib/db/tags'
+import { getTableGroupByTableNo } from '@/lib/tableGroups'
+import { ensureOrderingTableAssignment } from '@/lib/orderingTableAssignments'
 import {
-  getTableGroupForTag,
-  isTableGroupClosed,
-} from '@/lib/tableGroups'
+  isTakeawayTillTag,
+  TAKEAWAY_TILL_TABLE_NO,
+} from '@/lib/tillTags'
 import {
   apiErrorResponse,
   jsonWithTenantRequestId,
   withTenant,
 } from '@/lib/api/withTenant'
+
+function takeawayTillSessionWhere(
+  restaurantId: string
+): Prisma.SessionWhereInput {
+  return {
+    restaurantId,
+    status: 'ACTIVE',
+    OR: [
+      { tagId: 'TILL' },
+      { tagId: 'TAKEAWAY' },
+      { tagId: { startsWith: 'TILL-' } },
+      { tagId: { startsWith: 'TAKEAWAY-' } },
+    ],
+  }
+}
 
 export async function POST(req: Request) {
   return withTenant(req, async ({ requestId, restaurant }) => {
@@ -52,47 +70,64 @@ export async function POST(req: Request) {
           message: 'Tag ID is required.',
         })
       }
+      if (!normalizeTagToken(tagId)) {
+        return apiErrorResponse({
+          requestId,
+          error: 'BAD_REQUEST',
+          status: 400,
+          message: 'Tag ID is invalid.',
+        })
+      }
 
-      const tag = await findTagByToken({
+      const tag = await ensureTagByToken({
         restaurantId: restaurant.id,
         tagId,
       })
-      if (!tag) {
-        return apiErrorResponse({
-          requestId,
-          error: 'TAG_NOT_REGISTERED',
-          status: 404,
-        })
-      }
 
-      const resolvedTag = await prisma.nfcTag.findUnique({
-        where: { id: tag.id },
-        include: { assignment: true },
+      const isTakeawayOrTill = isTakeawayTillTag(tag.tagId)
+      const assignment = await ensureOrderingTableAssignment({
+        restaurantId: restaurant.id,
+        nfcTagId: tag.id,
+        tagId: tag.tagId,
       })
-      const resolvedTableGroup = await getTableGroupForTag(
-        tagId,
-        restaurant.id
-      )
-      const masterTableId = resolvedTableGroup?.master.id ?? null
-      const tableNumber = resolvedTableGroup?.tableNo ?? null
+      const resolvedTableGroup = assignment
+        ? await getTableGroupByTableNo(
+            assignment.tableNo,
+            restaurant.id
+          )
+        : null
+      const groupedTableIds = resolvedTableGroup
+        ? resolvedTableGroup.assignments.map(
+            groupAssignment => groupAssignment.id
+          )
+        : assignment
+        ? [assignment.id]
+        : []
+      const masterTableId = resolvedTableGroup?.master.id ?? assignment?.id ?? null
+      const tableNumber = resolvedTableGroup
+        ? resolvedTableGroup.tableNo
+        : isTakeawayOrTill
+        ? TAKEAWAY_TILL_TABLE_NO
+        : null
 
-      if (
-        resolvedTag?.assignment?.closedAt ||
-        (resolvedTableGroup && isTableGroupClosed(resolvedTableGroup))
-      ) {
-        return apiErrorResponse({
-          requestId,
-          error: 'TABLE_CLOSED',
-          status: 409,
-        })
-      }
+      const existingWhere: Prisma.SessionWhereInput = resolvedTableGroup
+        ? {
+            restaurantId: restaurant.id,
+            status: 'ACTIVE',
+            tableId: {
+              in: groupedTableIds,
+            },
+          }
+        : isTakeawayOrTill
+        ? takeawayTillSessionWhere(restaurant.id)
+        : {
+            tagId: tag.tagId,
+            restaurantId: restaurant.id,
+            status: 'ACTIVE',
+          }
 
       const existing = await prisma.session.findFirst({
-        where: {
-          tagId: tag.tagId,
-          restaurantId: restaurant.id,
-          status: 'ACTIVE',
-        },
+        where: existingWhere,
         orderBy: { lastActivityAt: 'desc' },
         include: { cart: true },
       })

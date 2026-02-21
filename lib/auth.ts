@@ -14,12 +14,13 @@ export type StaffIdentity = {
   restaurantId: string
 }
 
-function readHeader(req: Request | undefined, key: string) {
+async function readHeader(req: Request | undefined, key: string) {
   if (req) return req.headers.get(key)
-  return headers().get(key)
+  const requestHeaders = await headers()
+  return requestHeaders.get(key)
 }
 
-function readCookie(req: Request | undefined, key: string) {
+async function readCookie(req: Request | undefined, key: string) {
   if (req) {
     const raw = req.headers.get("cookie")
     if (!raw) return null
@@ -39,13 +40,14 @@ function readCookie(req: Request | undefined, key: string) {
     }
   }
 
-  return cookies().get(key)?.value ?? null
+  const requestCookies = await cookies()
+  return requestCookies.get(key)?.value ?? null
 }
 
-function hasValidSystemToken(req?: Request) {
+async function hasValidSystemToken(req?: Request) {
   const secret = process.env.SYSTEM_AUTH_SECRET
   if (!secret) return false
-  return readHeader(req, "x-system-auth") === secret
+  return (await readHeader(req, "x-system-auth")) === secret
 }
 
 function hasAuthDemoBypassEnabled() {
@@ -62,16 +64,16 @@ function hasAuthDemoBypassEnabled() {
   )
 }
 
-function hasStaffSessionCookie(req?: Request) {
-  return Boolean(readCookie(req, STAFF_SESSION_COOKIE))
+async function hasStaffSessionCookie(req?: Request) {
+  return Boolean(await readCookie(req, STAFF_SESSION_COOKIE))
 }
 
-export function getActorType(req?: Request): ActorType {
-  if (hasValidSystemToken(req)) return "system"
-  if (hasStaffSessionCookie(req)) return "staff"
+export async function getActorType(req?: Request): Promise<ActorType> {
+  if (await hasValidSystemToken(req)) return "system"
+  if (await hasStaffSessionCookie(req)) return "staff"
   if (
     hasAuthDemoBypassEnabled() &&
-    typeof readHeader(req, "x-staff-user-id") === "string"
+    typeof (await readHeader(req, "x-staff-user-id")) === "string"
   ) {
     return "staff"
   }
@@ -81,12 +83,13 @@ export function getActorType(req?: Request): ActorType {
 export async function requireStaffSession(
   req?: Request
 ): Promise<StaffIdentity> {
+  const headerSource = req ? req.headers : await headers()
   const context = requireRestaurantContext({
-    get: key => readHeader(req, key),
+    get: key => headerSource.get(key),
   })
 
   if (hasAuthDemoBypassEnabled()) {
-    const headerRole = readHeader(req, "x-staff-role")
+    const headerRole = await readHeader(req, "x-staff-role")
     const resolvedRole =
       typeof headerRole === "string" && headerRole.trim().length > 0
         ? headerRole.trim()
@@ -101,7 +104,7 @@ export async function requireStaffSession(
     }
   }
 
-  const rawToken = readCookie(req, STAFF_SESSION_COOKIE)
+  const rawToken = await readCookie(req, STAFF_SESSION_COOKIE)
   if (!rawToken) {
     throw new Error("Unauthorized: missing staff session")
   }
@@ -168,8 +171,8 @@ export async function requireStaff(req?: Request): Promise<StaffIdentity> {
   return requireStaffSession(req)
 }
 
-export function requireSystem(req?: Request) {
-  const authToken = readHeader(req, "x-system-auth")
+export async function requireSystem(req?: Request) {
+  const authToken = await readHeader(req, "x-system-auth")
   const secret = process.env.SYSTEM_AUTH_SECRET
   if (!authToken || !secret || authToken !== secret) {
     throw new Error("Unauthorized: system only")
@@ -182,10 +185,10 @@ export function getStaffIdentity(staff: StaffIdentity) {
   }
 }
 
-export function getActorMetadata(req?: Request) {
+export async function getActorMetadata(req?: Request) {
   return {
-    actor: getActorType(req),
-    staffSession: hasStaffSessionCookie(req),
+    actor: await getActorType(req),
+    staffSession: await hasStaffSessionCookie(req),
     timestamp: new Date().toISOString(),
   }
 }

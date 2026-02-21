@@ -90,6 +90,35 @@ function hostFromHeaders(headers: HeaderLike) {
   return normalized || null
 }
 
+function isDefaultTenantHost(hostname: string | null | undefined) {
+  const normalized = normalizeDomain(hostname)
+  if (!normalized) return false
+
+  return (
+    normalized === "localhost" ||
+    normalized === "127.0.0.1" ||
+    normalized.endsWith(".localhost") ||
+    normalized.endsWith(".vercel.app")
+  )
+}
+
+async function resolveDefaultRestaurantContext() {
+  const restaurant = await ensureDefaultRestaurant()
+  return toRestaurantContext(restaurant)
+}
+
+async function resolvePreferredDefaultRestaurantContext() {
+  const preferred = await prisma.restaurant.findUnique({
+    where: { slug: "fable-stores" },
+  })
+
+  if (preferred) {
+    return toRestaurantContext(preferred)
+  }
+
+  return resolveDefaultRestaurantContext()
+}
+
 export async function ensureDefaultRestaurant() {
   return prisma.restaurant.upsert({
     where: { slug: DEFAULT_RESTAURANT_SLUG },
@@ -216,6 +245,10 @@ export async function resolveRestaurantContext(input: {
   if (normalizedHostname) {
     const byDomain = await resolveRestaurantByDomain(normalizedHostname)
     if (byDomain) return toRestaurantContext(byDomain)
+
+    if (isDefaultTenantHost(normalizedHostname)) {
+      return resolvePreferredDefaultRestaurantContext()
+    }
   }
 
   throw new Error("TENANT_CONTEXT_INVALID")
@@ -237,6 +270,10 @@ export async function resolveRestaurantFromRequest(req: Request) {
     if (byId) {
       return toRestaurantContext(byId)
     }
+
+    if (byHeaderId === DEFAULT_RESTAURANT_ID) {
+      return resolveDefaultRestaurantContext()
+    }
   }
 
   const hostname = hostFromHeaders(req.headers)
@@ -247,6 +284,10 @@ export async function resolveRestaurantFromRequest(req: Request) {
   const byDomain = await resolveRestaurantByDomain(hostname)
   if (byDomain) {
     return toRestaurantContext(byDomain)
+  }
+
+  if (isDefaultTenantHost(hostname)) {
+    return resolvePreferredDefaultRestaurantContext()
   }
 
   throw new Error("TENANT_CONTEXT_INVALID")

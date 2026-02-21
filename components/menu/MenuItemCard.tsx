@@ -40,8 +40,19 @@ export function MenuItemCard({
   mode = "pill",
   editSummary = [],
 }: Props) {
-  const fallbackImage = "/images/replace.png"
-  const imageSrc = image || fallbackImage
+  const imagePlaceholder = "/images/replace.png"
+  const replacementLogo = "/images/fable-stores-logo.png"
+  const normalizedImage = typeof image === "string" ? image.trim() : ""
+  const imageSrc = normalizedImage.endsWith("/images/marlos-logo.png")
+    ? replacementLogo
+    : normalizedImage
+  const isPlaceholderImage =
+    imageSrc.length === 0 ||
+    imageSrc.endsWith(imagePlaceholder) ||
+    imageSrc.endsWith("/images/marlos-wordmark.png") ||
+    imageSrc.endsWith("/images/marlos-wordmark-alpha.svg") ||
+    imageSrc.endsWith("/images/marlos-wordmark-alpha-tight.png")
+  const resolvedImageSrc = isPlaceholderImage ? imagePlaceholder : imageSrc
   const resolvedQuantity = typeof quantity === "number" ? quantity : 0
 
   const minusDisabled =
@@ -53,8 +64,8 @@ export function MenuItemCard({
   const hasEdits = resolvedEditSummary.length > 0
   const allergenCopy =
     allergens.length > 0
-      ? `Allergens: ${allergens.join(", ")}`
-      : "Allergens: none"
+      ? `Allergen info: ${allergens.join(", ")}`
+      : "Allergen info: none declared"
 
   const stepper = (
     <div className="menu-qty">
@@ -155,30 +166,31 @@ export function MenuItemCard({
           : undefined
       }
     >
-      <div className="menu-item-main">
-        <div className="menu-item-image-wrap">
-          <img
-            className="menu-item-image"
-            src={imageSrc}
-            alt={name}
-            onError={event => {
-              const el = event.currentTarget
-              if (el.dataset.fallbackApplied === "1") return
-              el.dataset.fallbackApplied = "1"
-              el.src = fallbackImage
-            }}
-          />
-        </div>
+        <div className="menu-item-main">
+          <div
+            className={`menu-item-image-wrap${
+              resolvedImageSrc ? "" : " menu-item-image-wrap--placeholder"
+            }`}
+            aria-hidden={!resolvedImageSrc}
+          >
+            <img
+              className={`menu-item-image${
+                isPlaceholderImage ? " menu-item-image--placeholder" : ""
+              }`}
+              src={resolvedImageSrc}
+              alt={name}
+              onError={event => {
+                if (!event.currentTarget.src.includes(imagePlaceholder)) {
+                  event.currentTarget.src = imagePlaceholder
+                }
+              }}
+            />
+          </div>
 
         <div className="menu-item-copy">
           <h3 className="menu-item-name" title={name}>
             {name}
           </h3>
-          {description && (
-            <p className="menu-item-desc menu-item-desc--clamp">
-              {description}
-            </p>
-          )}
         </div>
       </div>
 
@@ -188,6 +200,9 @@ export function MenuItemCard({
           <div className="menu-item-controls">{resolvedControls}</div>
         ) : null}
       </div>
+      <p className="menu-item-allergens menu-item-allergens--full">
+        {allergenCopy}
+      </p>
     </div>
   )
 }

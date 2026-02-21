@@ -1,25 +1,25 @@
 :root {
-  --bg-primary: #f8f4ef;
-  --bg-secondary: #ffffff;
-  --bg-accent: #efe7dd;
+  --bg-primary: #eaf4ff;
+  --bg-secondary: #f7fbff;
+  --bg-accent: #d7eafd;
 
-  --text-primary: #2b231b;
-  --text-secondary: #6a5d51;
+  --text-primary: #0e2f50;
+  --text-secondary: #3f6991;
 
-  --chip-inactive: #efe4d7;
-  --chip-active: #e2d1bf;
+  --chip-inactive: #d8eaff;
+  --chip-active: #bdd9fa;
 
-  --accent-action: #8a6a3c;
-  --accent-action-text: #fff8f0;
-  --border: #d8c9b8;
+  --accent-action: #1f5ea8;
+  --accent-action-text: #f1f7ff;
+  --border: #aac9e8;
   --danger: #b45252;
 
-  --lux-ink: #2b231b;
-  --lux-muted: #6a5d51;
-  --lux-cream: #faf6f1;
-  --lux-card: #ffffff;
-  --lux-stone: #efe7dd;
-  --lux-brass: #8a6a3c;
-  --lux-shadow: rgba(38, 30, 22, 0.12);
-  --lux-shadow-strong: rgba(38, 30, 22, 0.18);
+  --lux-ink: #0e2f50;
+  --lux-muted: #3f6991;
+  --lux-cream: #f1f8ff;
+  --lux-card: #fdfefe;
+  --lux-stone: #d7eafd;
+  --lux-brass: #1f5ea8;
+  --lux-shadow: rgba(20, 70, 118, 0.14);
+  --lux-shadow-strong: rgba(16, 57, 97, 0.22);
 }

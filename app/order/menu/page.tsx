@@ -1,1 +1,2 @@
-export { default, dynamic } from "@/components/menu/PublicMenuPage"
+export { default } from "@/components/menu/PublicMenuPage"
+export const dynamic = "force-dynamic"

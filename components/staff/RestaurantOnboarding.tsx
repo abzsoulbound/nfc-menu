@@ -27,6 +27,7 @@ type FormState = {
   domain: string
   vatRate: string
   serviceCharge: string
+  tableNumbers: string
   tableCount: string
   seedMenu: boolean
 }
@@ -40,6 +41,7 @@ const defaultForm: FormState = {
   domain: "",
   vatRate: "0.2",
   serviceCharge: "0",
+  tableNumbers: "",
   tableCount: "20",
   seedMenu: true,
 }
@@ -92,6 +94,7 @@ export function RestaurantOnboarding() {
           domain: form.domain || null,
           vatRate: Number(form.vatRate),
           serviceCharge: Number(form.serviceCharge),
+          tableNumbers: form.tableNumbers || null,
           tableCount: Number(form.tableCount),
           seedMenu: form.seedMenu,
         }),
@@ -203,6 +206,14 @@ export function RestaurantOnboarding() {
                 ...current,
                 serviceCharge: event.target.value,
               }))
+            }
+          />
+          <input
+            className="input"
+            placeholder="Exact tables (e.g. 1-12,14,16)"
+            value={form.tableNumbers}
+            onChange={event =>
+              setForm(current => ({ ...current, tableNumbers: event.target.value }))
             }
           />
           <input

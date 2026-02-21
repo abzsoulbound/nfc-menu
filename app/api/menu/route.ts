@@ -4,9 +4,46 @@ import { NextResponse } from "next/server"
 import { isMenuLocked } from "@/lib/menu"
 import { menu as fallbackMenu } from "@/lib/menu-data"
 import { resolveRestaurantFromRequest } from "@/lib/restaurants"
+import {
+  DEFAULT_RESTAURANT_ID,
+  DEFAULT_RESTAURANT_NAME,
+  DEFAULT_RESTAURANT_SLUG,
+} from "@/lib/restaurantConstants"
 
 export async function GET(req: Request) {
-  const restaurant = await resolveRestaurantFromRequest(req)
+  let restaurant: {
+    id: string
+    slug: string
+    name: string
+  }
+
+  try {
+    const resolved = await resolveRestaurantFromRequest(req)
+    restaurant = {
+      id: resolved.id,
+      slug: resolved.slug,
+      name: resolved.name,
+    }
+  } catch (error) {
+    console.error("menu_tenant_resolution_failed_using_fallback", error)
+    return NextResponse.json(
+      {
+        menu: fallbackMenu,
+        locked: isMenuLocked(),
+        source: "fallback",
+        restaurant: {
+          id: DEFAULT_RESTAURANT_ID,
+          slug: DEFAULT_RESTAURANT_SLUG,
+          name: DEFAULT_RESTAURANT_NAME,
+        },
+      },
+      {
+        headers: {
+          "Cache-Control": "public, s-maxage=60, stale-while-revalidate=300",
+        },
+      }
+    )
+  }
 
   try {
     const { getCanonicalMenu } = await import("@/lib/menuCatalog")

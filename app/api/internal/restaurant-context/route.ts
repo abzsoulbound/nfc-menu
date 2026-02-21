@@ -10,7 +10,12 @@ export const dynamic = "force-dynamic"
 
 export async function GET(req: Request) {
   if (req.headers.get("x-internal-restaurant-resolver") !== "1") {
-    return NextResponse.json({ error: "FORBIDDEN" }, { status: 403 })
+    return new NextResponse(null, {
+      status: 204,
+      headers: {
+        "cache-control": "no-store",
+      },
+    })
   }
 
   const { searchParams } = new URL(req.url)
@@ -48,7 +53,7 @@ export async function GET(req: Request) {
       message: error instanceof Error ? error.message : "Unknown error",
     })
     return NextResponse.json(
-      { error: "TENANT_RESOLUTION_FAILED", details: String(error) },
+      { error: "TENANT_RESOLUTION_FAILED" },
       { status: 500 }
     )
   }
