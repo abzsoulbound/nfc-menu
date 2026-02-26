@@ -28,9 +28,18 @@ import { useSessionStore } from "@/store/useSessionStore"
 
 type TableState = {
   tableId: string | null
+  tableNumber: number | null
   locked: boolean
   stale: boolean
   closed: boolean
+}
+
+type CustomerNotification = {
+  id: string
+  channel: "SMS" | "EMAIL" | "IN_APP"
+  recipient: string
+  message: string
+  createdAt: string
 }
 
 function isTakeaway(tagId: string) {
@@ -63,6 +72,9 @@ export default function TagOrderingPage({
   const [orderProgress, setOrderProgress] = useState<
     SessionOrderProgressDTO[]
   >([])
+  const [customerNotifications, setCustomerNotifications] = useState<
+    CustomerNotification[]
+  >([])
   const [loading, setLoading] = useState(true)
   const [editorItem, setEditorItem] = useState<MenuItem | null>(null)
   const [reviewOpen, setReviewOpen] = useState(false)
@@ -89,8 +101,21 @@ export default function TagOrderingPage({
       .then(progress => setOrderProgress(progress))
       .catch(() => {})
 
+    const notificationPromise = fetchJson<CustomerNotification[]>(
+      `/api/customer/engagement?view=notifications&recipient=${encodeURIComponent(
+        `session:${sessionReady}`
+      )}&limit=8`,
+      {
+        cache: "no-store",
+      }
+    )
+      .then(notifications =>
+        setCustomerNotifications(notifications)
+      )
+      .catch(() => {})
+
     if (takeaway) {
-      await progressPromise
+      await Promise.all([progressPromise, notificationPromise])
       return
     }
 
@@ -107,11 +132,12 @@ export default function TagOrderingPage({
       if (!tagPayload.tableId) {
         setTableState({
           tableId: null,
+          tableNumber: null,
           locked: false,
           stale: false,
           closed: false,
         })
-        await progressPromise
+        await Promise.all([progressPromise, notificationPromise])
         return
       }
 
@@ -123,19 +149,21 @@ export default function TagOrderingPage({
       )
       setTableState({
         tableId: table.id,
+        tableNumber: table.number,
         locked: table.locked,
         stale: table.stale,
         closed: table.closed,
       })
-      await progressPromise
+      await Promise.all([progressPromise, notificationPromise])
     } catch {
       setTableState({
         tableId: null,
+        tableNumber: null,
         locked: false,
         stale: false,
         closed: false,
       })
-      await progressPromise
+      await Promise.all([progressPromise, notificationPromise])
     }
   }, [sessionReady, takeaway, tagId])
 
@@ -163,6 +191,7 @@ export default function TagOrderingPage({
         if (takeaway) {
           setTableState({
             tableId: null,
+            tableNumber: null,
             locked: false,
             stale: false,
             closed: false,
@@ -189,6 +218,7 @@ export default function TagOrderingPage({
           if (cancelled) return
           setTableState({
             tableId: table.id,
+            tableNumber: table.number,
             locked: table.locked,
             stale: table.stale,
             closed: table.closed,
@@ -196,6 +226,7 @@ export default function TagOrderingPage({
         } else {
           setTableState({
             tableId: null,
+            tableNumber: null,
             locked: false,
             stale: false,
             closed: false,
@@ -206,6 +237,7 @@ export default function TagOrderingPage({
           setMenuSections([])
           setTableState({
             tableId: null,
+            tableNumber: null,
             locked: false,
             stale: false,
             closed: false,
@@ -321,6 +353,16 @@ export default function TagOrderingPage({
               >
                 Back
               </Link>
+              {!takeaway &&
+                tableState?.tableNumber &&
+                tableState.tableNumber > 0 && (
+                  <Link
+                    href={`/pay/${tableState.tableNumber}`}
+                    className="focus-ring inline-flex min-h-[36px] items-center justify-center rounded-[var(--radius-control)] border border-[var(--border)] bg-[var(--accent-quiet)] px-3 text-sm font-semibold"
+                  >
+                    Pay bill
+                  </Link>
+                )}
               <span className="status-chip status-chip-neutral">
                 {customerContextLabel(takeaway)}
               </span>
@@ -416,6 +458,24 @@ export default function TagOrderingPage({
                   </div>
                 ))}
               </div>
+            </div>
+          </Card>
+        )}
+
+        {!customerMinimalMode && customerNotifications.length > 0 && (
+          <Card variant="accent">
+            <div className="space-y-2">
+              <h3 className="text-base font-semibold tracking-tight">
+                Updates
+              </h3>
+              {customerNotifications.map(notification => (
+                <div
+                  key={notification.id}
+                  className="rounded-[var(--radius-control)] border border-[var(--border)] surface-secondary px-3 py-2 text-sm text-secondary"
+                >
+                  {notification.message}
+                </div>
+              ))}
             </div>
           </Card>
         )}

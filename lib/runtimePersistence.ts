@@ -32,6 +32,16 @@ type RuntimeSnapshot = {
   printJobs?: Array<Record<string, unknown>>
   auditTrail?: Array<Record<string, unknown>>
   idempotencyRecords?: Record<string, Record<string, unknown>>
+  customerProfiles?: Array<Record<string, unknown>>
+  loyaltyAccounts?: Array<Record<string, unknown>>
+  promos?: Array<Record<string, unknown>>
+  reservations?: Array<Record<string, unknown>>
+  waitlist?: Array<Record<string, unknown>>
+  notifications?: Array<Record<string, unknown>>
+  feedback?: Array<Record<string, unknown>>
+  deliveryOrders?: Array<Record<string, unknown>>
+  menuDayparts?: Array<Record<string, unknown>>
+  checkoutReceipts?: Array<Record<string, unknown>>
 }
 
 function canAttemptPersistence() {
@@ -60,6 +70,13 @@ function toRecord(value: unknown) {
   return value && typeof value === "object"
     ? (value as Record<string, unknown>)
     : {}
+}
+
+function toRuntimeSnapshot(value: unknown): RuntimeSnapshot {
+  if (!value || typeof value !== "object") {
+    return {}
+  }
+  return value as RuntimeSnapshot
 }
 
 function toRelationalRuntimeSnapshot(input: RuntimeSnapshot) {
@@ -104,7 +121,10 @@ export async function hydrateRuntimeStateFromDb(options?: {
 
   hydrating = (async () => {
     try {
-      const [meta, tables] = await Promise.all([
+      const [historyRecord, meta, tables] = await Promise.all([
+        prisma.history.findUnique({
+          where: { id: RUNTIME_HISTORY_ID },
+        }),
         prisma.runtimeMeta.findUnique({
           where: { id: RUNTIME_META_ID },
         }),
@@ -114,6 +134,7 @@ export async function hydrateRuntimeStateFromDb(options?: {
       ])
 
       if (meta && tables.length > 0) {
+        const historicalSnapshot = toRuntimeSnapshot(historyRecord?.data)
         const [
           tags,
           sessions,
@@ -140,7 +161,7 @@ export async function hydrateRuntimeStateFromDb(options?: {
           prisma.runtimeIdempotencyState.findMany(),
         ])
 
-        const snapshot: RuntimeSnapshot = {
+        const relationalSnapshot: RuntimeSnapshot = {
           history: {
             "menu:current": {
               id: "menu:current",
@@ -266,16 +287,21 @@ export async function hydrateRuntimeStateFromDb(options?: {
           ),
         }
 
-        importRuntimeStateSnapshot(snapshot)
+        const mergedSnapshot: RuntimeSnapshot = {
+          ...historicalSnapshot,
+          ...relationalSnapshot,
+          history: {
+            ...(historicalSnapshot.history ?? {}),
+            ...(relationalSnapshot.history ?? {}),
+          },
+        }
+        importRuntimeStateSnapshot(mergedSnapshot)
         hydratedAt = Date.now()
         return
       }
 
-      const record = await prisma.history.findUnique({
-        where: { id: RUNTIME_HISTORY_ID },
-      })
-      if (record?.data) {
-        importRuntimeStateSnapshot(record.data)
+      if (historyRecord?.data) {
+        importRuntimeStateSnapshot(historyRecord.data)
       }
       hydratedAt = Date.now()
     } catch {

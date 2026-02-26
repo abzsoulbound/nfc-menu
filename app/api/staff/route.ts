@@ -3,26 +3,51 @@ import { badRequest, ok, readJson } from "@/lib/http"
 import {
   addStaffMessage,
   addTablePayment,
+  addWaitlistEntry,
   appendAuditEvent,
+  createDeliveryChannelOrder,
+  createReservation,
   exportAuditCsv,
   exportMenuCsv,
   exportOrdersCsv,
+  getFeatureSummary,
+  getInventoryLowStockThreshold,
   getTableBill,
   getShiftReport,
   getSystemFlags,
   listAuditEvents,
+  listCheckoutReceipts,
+  listCustomerAccounts,
+  listCustomerNotifications,
+  listDeliveryChannelOrders,
+  listFeedback,
+  listInventoryAlerts,
+  listLoyaltyAccounts,
+  listMenuDayparts,
   listPrintJobs,
+  listPromoCodes,
+  listReservations,
+  listWaitlist,
   markTableBillStatus,
   openTableBill,
+  queueCustomerNotification,
   reopenTable,
+  removeMenuDaypart,
   resetRuntimeState,
   resetTableContributionWindow,
   retryPrintJob,
   runTableAction,
+  setInventoryLowStockThreshold,
+  setPromoCodeActive,
   setServiceActive,
   splitTableBill,
   transferTableData,
+  updateDeliveryOrderStatus,
   updatePrintJobStatus,
+  updateReservationStatus,
+  updateWaitlistStatus,
+  upsertMenuDaypart,
+  upsertPromoCode,
 } from "@/lib/runtimeStore"
 import {
   hydrateRuntimeStateFromDb,
@@ -30,9 +55,14 @@ import {
 } from "@/lib/runtimePersistence"
 import { publishRuntimeEvent } from "@/lib/realtime"
 import {
+  DeliveryChannel,
+  DeliveryOrderStatus,
   PrintJobStatus,
+  PromoCodeKind,
+  ReservationStatus,
   Station,
   TableBillStatus,
+  WaitlistStatus,
 } from "@/lib/types"
 
 export const dynamic = "force-dynamic"
@@ -56,6 +86,18 @@ type StaffAction =
   | "MARK_BILL_STATUS"
   | "PRINT_RETRY"
   | "PRINT_STATUS"
+  | "UPSERT_PROMO"
+  | "SET_PROMO_ACTIVE"
+  | "UPDATE_RESERVATION_STATUS"
+  | "UPDATE_WAITLIST_STATUS"
+  | "SEND_NOTIFICATION"
+  | "CREATE_DELIVERY_ORDER"
+  | "UPDATE_DELIVERY_ORDER_STATUS"
+  | "UPSERT_DAYPART"
+  | "REMOVE_DAYPART"
+  | "SET_LOW_STOCK_THRESHOLD"
+  | "CREATE_RESERVATION"
+  | "CREATE_WAITLIST_ENTRY"
 
 type ActionBody = {
   action?: StaffAction
@@ -66,9 +108,41 @@ type ActionBody = {
   amount?: number
   method?: string
   note?: string
+  message?: string
   billStatus?: TableBillStatus
   printJobId?: string
   printStatus?: PrintJobStatus
+  code?: string
+  description?: string
+  kind?: PromoCodeKind
+  value?: number
+  minSpend?: number
+  active?: boolean
+  startsAt?: string | null
+  endsAt?: string | null
+  maxUses?: number | null
+  reservationId?: string
+  reservationStatus?: ReservationStatus
+  waitlistId?: string
+  waitlistStatus?: WaitlistStatus
+  channel?: DeliveryChannel | "SMS" | "EMAIL" | "IN_APP"
+  recipient?: string
+  relatedType?: string
+  relatedId?: string
+  deliveryOrderId?: string
+  deliveryStatus?: DeliveryOrderStatus
+  externalRef?: string
+  daypartId?: string
+  days?: number[]
+  startTime?: string
+  endTime?: string
+  sectionIds?: string[]
+  itemIds?: string[]
+  lowStockThreshold?: number
+  name?: string
+  phone?: string
+  partySize?: number
+  requestedFor?: string
 }
 
 type MessageBody = {
@@ -102,7 +176,19 @@ function isStaffAction(action: string | undefined): action is StaffAction {
     action === "ADD_PAYMENT" ||
     action === "MARK_BILL_STATUS" ||
     action === "PRINT_RETRY" ||
-    action === "PRINT_STATUS"
+    action === "PRINT_STATUS" ||
+    action === "UPSERT_PROMO" ||
+    action === "SET_PROMO_ACTIVE" ||
+    action === "UPDATE_RESERVATION_STATUS" ||
+    action === "UPDATE_WAITLIST_STATUS" ||
+    action === "SEND_NOTIFICATION" ||
+    action === "CREATE_DELIVERY_ORDER" ||
+    action === "UPDATE_DELIVERY_ORDER_STATUS" ||
+    action === "UPSERT_DAYPART" ||
+    action === "REMOVE_DAYPART" ||
+    action === "SET_LOW_STOCK_THRESHOLD" ||
+    action === "CREATE_RESERVATION" ||
+    action === "CREATE_WAITLIST_ENTRY"
   )
 }
 
@@ -189,6 +275,86 @@ export async function GET(req: Request) {
               : undefined,
         })
       )
+    }
+
+    if (view === "feature-summary") {
+      requireRole(["MANAGER", "ADMIN"], req)
+      return ok(getFeatureSummary())
+    }
+
+    if (view === "promos") {
+      requireRole(["MANAGER", "ADMIN"], req)
+      return ok(listPromoCodes())
+    }
+
+    if (view === "reservations") {
+      requireRole(["WAITER", "MANAGER", "ADMIN"], req)
+      const limitRaw = Number(url.searchParams.get("limit") ?? "200")
+      const limit = Number.isFinite(limitRaw) ? limitRaw : 200
+      return ok(listReservations(limit))
+    }
+
+    if (view === "waitlist") {
+      requireRole(["WAITER", "MANAGER", "ADMIN"], req)
+      const limitRaw = Number(url.searchParams.get("limit") ?? "200")
+      const limit = Number.isFinite(limitRaw) ? limitRaw : 200
+      return ok(listWaitlist(limit))
+    }
+
+    if (view === "notifications") {
+      requireRole(["MANAGER", "ADMIN"], req)
+      const recipient = url.searchParams.get("recipient") ?? undefined
+      const limitRaw = Number(url.searchParams.get("limit") ?? "200")
+      const limit = Number.isFinite(limitRaw) ? limitRaw : 200
+      return ok(listCustomerNotifications({ recipient, limit }))
+    }
+
+    if (view === "feedback") {
+      requireRole(["MANAGER", "ADMIN"], req)
+      const limitRaw = Number(url.searchParams.get("limit") ?? "200")
+      const limit = Number.isFinite(limitRaw) ? limitRaw : 200
+      return ok(listFeedback(limit))
+    }
+
+    if (view === "loyalty") {
+      requireRole(["MANAGER", "ADMIN"], req)
+      const limitRaw = Number(url.searchParams.get("limit") ?? "200")
+      const limit = Number.isFinite(limitRaw) ? limitRaw : 200
+      return ok(listLoyaltyAccounts(limit))
+    }
+
+    if (view === "customers") {
+      requireRole(["MANAGER", "ADMIN"], req)
+      const limitRaw = Number(url.searchParams.get("limit") ?? "200")
+      const limit = Number.isFinite(limitRaw) ? limitRaw : 200
+      return ok(listCustomerAccounts(limit))
+    }
+
+    if (view === "delivery") {
+      requireRole(["MANAGER", "ADMIN"], req)
+      const limitRaw = Number(url.searchParams.get("limit") ?? "200")
+      const limit = Number.isFinite(limitRaw) ? limitRaw : 200
+      return ok(listDeliveryChannelOrders(limit))
+    }
+
+    if (view === "dayparts") {
+      requireRole(["MANAGER", "ADMIN"], req)
+      return ok(listMenuDayparts())
+    }
+
+    if (view === "inventory-alerts") {
+      requireRole(["MANAGER", "ADMIN"], req)
+      return ok({
+        threshold: getInventoryLowStockThreshold(),
+        alerts: listInventoryAlerts(),
+      })
+    }
+
+    if (view === "receipts") {
+      requireRole(["MANAGER", "ADMIN"], req)
+      const limitRaw = Number(url.searchParams.get("limit") ?? "100")
+      const limit = Number.isFinite(limitRaw) ? limitRaw : 100
+      return ok(listCheckoutReceipts(limit))
     }
 
     if (view === "export") {
@@ -518,6 +684,319 @@ export async function POST(req: Request) {
       })
       return ok(result)
     }
+
+    if (body.action === "UPSERT_PROMO") {
+      const staff = requireRole(["MANAGER", "ADMIN"], req)
+      if (
+        !body.code ||
+        !body.description ||
+        !body.kind ||
+        typeof body.value !== "number"
+      ) {
+        return badRequest("code, description, kind, and value are required")
+      }
+      const promo = upsertPromoCode({
+        code: body.code,
+        description: body.description,
+        kind: body.kind,
+        value: body.value,
+        minSpend: body.minSpend,
+        active: body.active,
+        startsAt: body.startsAt,
+        endsAt: body.endsAt,
+        maxUses: body.maxUses,
+      })
+      appendAuditEvent({
+        actorRole: staff.role,
+        actorId: staff.id,
+        action: "UPSERT_PROMO",
+        targetType: "PROMO_CODE",
+        targetId: promo.code,
+        after: promo,
+      })
+      await persistRuntimeStateToDb()
+      publishRuntimeEvent("promos.updated", { code: promo.code })
+      return ok(promo)
+    }
+
+    if (body.action === "SET_PROMO_ACTIVE") {
+      const staff = requireRole(["MANAGER", "ADMIN"], req)
+      if (!body.code || typeof body.active !== "boolean") {
+        return badRequest("code and active are required")
+      }
+      const promo = setPromoCodeActive(body.code, body.active)
+      appendAuditEvent({
+        actorRole: staff.role,
+        actorId: staff.id,
+        action: "SET_PROMO_ACTIVE",
+        targetType: "PROMO_CODE",
+        targetId: promo.code,
+        after: { active: promo.active },
+      })
+      await persistRuntimeStateToDb()
+      publishRuntimeEvent("promos.updated", { code: promo.code, active: promo.active })
+      return ok(promo)
+    }
+
+    if (body.action === "CREATE_RESERVATION") {
+      const staff = requireRole(["WAITER", "MANAGER", "ADMIN"], req)
+      if (
+        !body.name ||
+        !body.phone ||
+        typeof body.partySize !== "number" ||
+        !body.requestedFor
+      ) {
+        return badRequest("name, phone, partySize, and requestedFor are required")
+      }
+      const reservation = createReservation({
+        name: body.name,
+        phone: body.phone,
+        partySize: body.partySize,
+        requestedFor: body.requestedFor,
+        note: body.note,
+      })
+      appendAuditEvent({
+        actorRole: staff.role,
+        actorId: staff.id,
+        action: "CREATE_RESERVATION",
+        targetType: "RESERVATION",
+        targetId: reservation.id,
+        after: reservation,
+      })
+      await persistRuntimeStateToDb()
+      publishRuntimeEvent("reservations.updated", { reservationId: reservation.id })
+      return ok(reservation)
+    }
+
+    if (body.action === "UPDATE_RESERVATION_STATUS") {
+      const staff = requireRole(["WAITER", "MANAGER", "ADMIN"], req)
+      if (!body.reservationId || !body.reservationStatus) {
+        return badRequest("reservationId and reservationStatus are required")
+      }
+      const reservation = updateReservationStatus(
+        body.reservationId,
+        body.reservationStatus
+      )
+      appendAuditEvent({
+        actorRole: staff.role,
+        actorId: staff.id,
+        action: "UPDATE_RESERVATION_STATUS",
+        targetType: "RESERVATION",
+        targetId: reservation.id,
+        after: { status: reservation.status },
+      })
+      await persistRuntimeStateToDb()
+      publishRuntimeEvent("reservations.updated", { reservationId: reservation.id })
+      return ok(reservation)
+    }
+
+    if (body.action === "CREATE_WAITLIST_ENTRY") {
+      const staff = requireRole(["WAITER", "MANAGER", "ADMIN"], req)
+      if (!body.name || !body.phone || typeof body.partySize !== "number") {
+        return badRequest("name, phone, and partySize are required")
+      }
+      const entry = addWaitlistEntry({
+        name: body.name,
+        phone: body.phone,
+        partySize: body.partySize,
+      })
+      appendAuditEvent({
+        actorRole: staff.role,
+        actorId: staff.id,
+        action: "CREATE_WAITLIST_ENTRY",
+        targetType: "WAITLIST",
+        targetId: entry.id,
+        after: entry,
+      })
+      await persistRuntimeStateToDb()
+      publishRuntimeEvent("waitlist.updated", { waitlistId: entry.id })
+      return ok(entry)
+    }
+
+    if (body.action === "UPDATE_WAITLIST_STATUS") {
+      const staff = requireRole(["WAITER", "MANAGER", "ADMIN"], req)
+      if (!body.waitlistId || !body.waitlistStatus) {
+        return badRequest("waitlistId and waitlistStatus are required")
+      }
+      const entry = updateWaitlistStatus(body.waitlistId, body.waitlistStatus)
+      appendAuditEvent({
+        actorRole: staff.role,
+        actorId: staff.id,
+        action: "UPDATE_WAITLIST_STATUS",
+        targetType: "WAITLIST",
+        targetId: entry.id,
+        after: { status: entry.status },
+      })
+      await persistRuntimeStateToDb()
+      publishRuntimeEvent("waitlist.updated", { waitlistId: entry.id })
+      return ok(entry)
+    }
+
+    if (body.action === "SEND_NOTIFICATION") {
+      const staff = requireRole(["MANAGER", "ADMIN"], req)
+      if (
+        !body.channel ||
+        !body.recipient ||
+        !body.message ||
+        !body.relatedType ||
+        !body.relatedId
+      ) {
+        return badRequest("channel, recipient, message, relatedType, and relatedId are required")
+      }
+      if (
+        body.channel !== "SMS" &&
+        body.channel !== "EMAIL" &&
+        body.channel !== "IN_APP"
+      ) {
+        return badRequest("channel must be SMS, EMAIL, or IN_APP")
+      }
+      const notification = queueCustomerNotification({
+        channel: body.channel,
+        recipient: body.recipient,
+        message: body.message,
+        relatedType: body.relatedType,
+        relatedId: body.relatedId,
+      })
+      appendAuditEvent({
+        actorRole: staff.role,
+        actorId: staff.id,
+        action: "SEND_NOTIFICATION",
+        targetType: "CUSTOMER_NOTIFICATION",
+        targetId: notification.id,
+        after: notification,
+      })
+      await persistRuntimeStateToDb()
+      publishRuntimeEvent("notifications.updated", { notificationId: notification.id })
+      return ok(notification)
+    }
+
+    if (body.action === "CREATE_DELIVERY_ORDER") {
+      const staff = requireRole(["MANAGER", "ADMIN"], req)
+      if (!body.channel || !body.externalRef || typeof body.amount !== "number") {
+        return badRequest("channel, externalRef, and amount are required")
+      }
+      if (
+        body.channel !== "UBER_EATS" &&
+        body.channel !== "DELIVEROO" &&
+        body.channel !== "JUST_EAT" &&
+        body.channel !== "DIRECT"
+      ) {
+        return badRequest("Invalid delivery channel")
+      }
+      const order = createDeliveryChannelOrder({
+        channel: body.channel,
+        externalRef: body.externalRef,
+        total: body.amount,
+      })
+      appendAuditEvent({
+        actorRole: staff.role,
+        actorId: staff.id,
+        action: "CREATE_DELIVERY_ORDER",
+        targetType: "DELIVERY_ORDER",
+        targetId: order.id,
+        after: order,
+      })
+      await persistRuntimeStateToDb()
+      publishRuntimeEvent("delivery.updated", { orderId: order.id })
+      return ok(order)
+    }
+
+    if (body.action === "UPDATE_DELIVERY_ORDER_STATUS") {
+      const staff = requireRole(["MANAGER", "ADMIN"], req)
+      if (!body.deliveryOrderId || !body.deliveryStatus) {
+        return badRequest("deliveryOrderId and deliveryStatus are required")
+      }
+      const order = updateDeliveryOrderStatus(
+        body.deliveryOrderId,
+        body.deliveryStatus
+      )
+      appendAuditEvent({
+        actorRole: staff.role,
+        actorId: staff.id,
+        action: "UPDATE_DELIVERY_ORDER_STATUS",
+        targetType: "DELIVERY_ORDER",
+        targetId: order.id,
+        after: { status: order.status },
+      })
+      await persistRuntimeStateToDb()
+      publishRuntimeEvent("delivery.updated", { orderId: order.id })
+      return ok(order)
+    }
+
+    if (body.action === "UPSERT_DAYPART") {
+      const staff = requireRole(["MANAGER", "ADMIN"], req)
+      if (
+        !body.name ||
+        !Array.isArray(body.days) ||
+        !body.startTime ||
+        !body.endTime
+      ) {
+        return badRequest("name, days, startTime, and endTime are required")
+      }
+      const daypart = upsertMenuDaypart({
+        id: body.daypartId,
+        name: body.name,
+        enabled: body.active,
+        days: body.days,
+        startTime: body.startTime,
+        endTime: body.endTime,
+        sectionIds: body.sectionIds,
+        itemIds: body.itemIds,
+      })
+      appendAuditEvent({
+        actorRole: staff.role,
+        actorId: staff.id,
+        action: "UPSERT_DAYPART",
+        targetType: "MENU_DAYPART",
+        targetId: daypart.id,
+        after: daypart,
+      })
+      await persistRuntimeStateToDb()
+      publishRuntimeEvent("menu.updated", { action: "DAYPART_UPSERT", daypartId: daypart.id })
+      return ok(daypart)
+    }
+
+    if (body.action === "REMOVE_DAYPART") {
+      const staff = requireRole(["MANAGER", "ADMIN"], req)
+      if (!body.daypartId) {
+        return badRequest("daypartId is required")
+      }
+      const result = removeMenuDaypart(body.daypartId)
+      appendAuditEvent({
+        actorRole: staff.role,
+        actorId: staff.id,
+        action: "REMOVE_DAYPART",
+        targetType: "MENU_DAYPART",
+        targetId: body.daypartId,
+        after: result,
+      })
+      await persistRuntimeStateToDb()
+      publishRuntimeEvent("menu.updated", { action: "DAYPART_REMOVE", daypartId: body.daypartId })
+      return ok(result)
+    }
+
+    if (body.action === "SET_LOW_STOCK_THRESHOLD") {
+      const staff = requireRole(["MANAGER", "ADMIN"], req)
+      if (typeof body.lowStockThreshold !== "number") {
+        return badRequest("lowStockThreshold is required")
+      }
+      const threshold = setInventoryLowStockThreshold(body.lowStockThreshold)
+      appendAuditEvent({
+        actorRole: staff.role,
+        actorId: staff.id,
+        action: "SET_LOW_STOCK_THRESHOLD",
+        targetType: "SYSTEM",
+        targetId: "low-stock-threshold",
+        after: { threshold },
+      })
+      await persistRuntimeStateToDb()
+      publishRuntimeEvent("menu.stock", { threshold })
+      return ok({
+        threshold,
+        alerts: listInventoryAlerts(),
+      })
+    }
+
     return badRequest("Unsupported action")
   } catch (error) {
     const message = (error as Error).message

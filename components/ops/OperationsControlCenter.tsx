@@ -899,6 +899,12 @@ export function OperationsControlCenter({
               >
                 Bar
               </Link>
+              <Link
+                href="/manager/features"
+                className="focus-ring inline-flex min-h-[44px] items-center justify-center rounded-[var(--radius-control)] border border-[var(--border)] bg-[var(--accent-quiet)] px-3 text-sm font-semibold"
+              >
+                Growth
+              </Link>
             </div>
           </Card>
 

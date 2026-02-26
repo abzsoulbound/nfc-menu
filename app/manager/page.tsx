@@ -1,4 +1,5 @@
 import { OperationsControlCenter } from "@/components/ops/OperationsControlCenter"
+import Link from "next/link"
 import { Card } from "@/components/ui/Card"
 
 export default function ManagerPage() {
@@ -13,6 +14,14 @@ export default function ManagerPage() {
             <p className="text-sm text-secondary">
               Live operational controls for service state, tables, queues, and interventions.
             </p>
+            <div className="pt-1">
+              <Link
+                href="/manager/features"
+                className="focus-ring inline-flex min-h-[42px] items-center justify-center rounded-[var(--radius-control)] border border-[var(--border)] bg-[var(--accent-quiet)] px-3 text-sm font-semibold"
+              >
+                Open Growth & Experience
+              </Link>
+            </div>
           </div>
         </Card>
 
@@ -21,4 +30,3 @@ export default function ManagerPage() {
     </div>
   )
 }
-

@@ -26,6 +26,8 @@ export function contextLabelForPath(pathname: string) {
   if (pathname.startsWith("/bar")) return "Bar"
   if (pathname.startsWith("/manager")) return "Manager"
   if (pathname.startsWith("/admin")) return "Admin"
+  if (pathname.startsWith("/pay/")) return "Pay"
+  if (pathname.startsWith("/guest-tools")) return "Guest"
   if (pathname.startsWith("/order/") || pathname.startsWith("/t/")) {
     return "Order"
   }

@@ -1,4 +1,5 @@
 import { MinimalMenuBrowser } from "@/components/menu/MinimalMenuBrowser"
+import Link from "next/link"
 import { BRAND_ASSETS, BRAND_LOCATION } from "@/lib/brand"
 import { isCustomerMinimalModeEnabled } from "@/lib/customerMode"
 import { AI_PLACEHOLDER_HERO_URL } from "@/lib/placeholders"
@@ -77,6 +78,21 @@ export default async function PublicMenuPage() {
                 >
                   {locked ? "Unavailable" : "Available"}
                 </span>
+              </div>
+
+              <div className="flex flex-wrap gap-2">
+                <Link
+                  href="/guest-tools"
+                  className="focus-ring inline-flex min-h-[38px] items-center justify-center rounded-[var(--radius-control)] border border-[var(--border)] bg-[var(--accent-quiet)] px-3 text-xs font-semibold"
+                >
+                  Guest tools
+                </Link>
+                <Link
+                  href="/pay/1"
+                  className="focus-ring inline-flex min-h-[38px] items-center justify-center rounded-[var(--radius-control)] border border-[var(--border)] bg-[var(--accent-quiet)] px-3 text-xs font-semibold"
+                >
+                  Pay table
+                </Link>
               </div>
             </div>
 

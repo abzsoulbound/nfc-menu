@@ -264,3 +264,161 @@ export type ShiftReportDTO = {
     delayedActiveLines: number
   }
 }
+
+export type WalletMethod = "APPLE_PAY" | "GOOGLE_PAY" | "CARD"
+
+export type CustomerAccountDTO = {
+  id: string
+  name: string | null
+  email: string | null
+  phone: string | null
+  marketingOptIn: boolean
+  favoriteItemIds: string[]
+  createdAt: string
+  lastSeenAt: string
+}
+
+export type LoyaltyTier = "BRONZE" | "SILVER" | "GOLD"
+
+export type LoyaltyAccountDTO = {
+  customerId: string
+  points: number
+  lifetimeSpend: number
+  tier: LoyaltyTier
+  lastUpdatedAt: string
+}
+
+export type PromoCodeKind = "PERCENT" | "FIXED"
+
+export type PromoCodeDTO = {
+  code: string
+  description: string
+  kind: PromoCodeKind
+  value: number
+  minSpend: number
+  active: boolean
+  startsAt: string | null
+  endsAt: string | null
+  maxUses: number | null
+  usedCount: number
+}
+
+export type ReservationStatus =
+  | "REQUESTED"
+  | "CONFIRMED"
+  | "SEATED"
+  | "CANCELLED"
+
+export type ReservationDTO = {
+  id: string
+  name: string
+  phone: string
+  partySize: number
+  requestedFor: string
+  note?: string
+  status: ReservationStatus
+  createdAt: string
+}
+
+export type WaitlistStatus =
+  | "WAITING"
+  | "NOTIFIED"
+  | "SEATED"
+  | "CANCELLED"
+
+export type WaitlistEntryDTO = {
+  id: string
+  name: string
+  phone: string
+  partySize: number
+  createdAt: string
+  notifiedAt: string | null
+  status: WaitlistStatus
+}
+
+export type CustomerNotificationChannel =
+  | "SMS"
+  | "EMAIL"
+  | "IN_APP"
+
+export type CustomerNotificationDTO = {
+  id: string
+  channel: CustomerNotificationChannel
+  recipient: string
+  message: string
+  relatedType: string
+  relatedId: string
+  createdAt: string
+}
+
+export type FeedbackDTO = {
+  id: string
+  tableNumber: number | null
+  orderId: string | null
+  customerId: string | null
+  rating: number
+  comment: string
+  createdAt: string
+}
+
+export type DeliveryChannel = "UBER_EATS" | "DELIVEROO" | "JUST_EAT" | "DIRECT"
+export type DeliveryOrderStatus =
+  | "NEW"
+  | "ACKNOWLEDGED"
+  | "PREPARING"
+  | "READY"
+  | "DISPATCHED"
+  | "CANCELLED"
+
+export type DeliveryChannelOrderDTO = {
+  id: string
+  channel: DeliveryChannel
+  externalRef: string
+  status: DeliveryOrderStatus
+  total: number
+  createdAt: string
+}
+
+export type MenuDaypartDTO = {
+  id: string
+  name: string
+  enabled: boolean
+  days: number[]
+  startTime: string
+  endTime: string
+  sectionIds: string[]
+  itemIds: string[]
+}
+
+export type CustomerCheckoutQuoteDTO = {
+  tableId: string
+  tableNumber: number
+  dueTotal: number
+  splitCount: number
+  suggestedShareAmount: number
+}
+
+export type CustomerCheckoutReceiptDTO = {
+  receiptId: string
+  tableId: string
+  tableNumber: number
+  amount: number
+  tipAmount: number
+  totalCharged: number
+  method: WalletMethod
+  email: string | null
+  promoCode: string | null
+  loyaltyRedeemedPoints: number
+  loyaltyEarnedPoints: number
+  createdAt: string
+}
+
+export type FeatureSummaryDTO = {
+  reservations: number
+  waitlist: number
+  promos: number
+  feedback: number
+  notifications: number
+  loyaltyMembers: number
+  deliveryOrders: number
+}

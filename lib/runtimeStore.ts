@@ -6,11 +6,27 @@ import {
 } from "@/lib/pricing"
 import {
   AuditEventDTO,
+  CustomerAccountDTO,
+  CustomerCheckoutQuoteDTO,
+  CustomerCheckoutReceiptDTO,
+  CustomerNotificationDTO,
+  DeliveryChannel,
+  DeliveryChannelOrderDTO,
+  DeliveryOrderStatus,
+  FeedbackDTO,
+  FeatureSummaryDTO,
+  LoyaltyAccountDTO,
+  LoyaltyTier,
   MenuItem,
+  MenuDaypartDTO,
   MenuSection,
   OrderPrepState,
   OrderQueueItemDTO,
+  PromoCodeDTO,
+  PromoCodeKind,
   ReadyQueueItemDTO,
+  ReservationDTO,
+  ReservationStatus,
   SessionOrderProgressDTO,
   ShiftReportDTO,
   OrderSubmissionItemDTO,
@@ -26,6 +42,9 @@ import {
   TableDTO,
   TableReviewDTO,
   TagDTO,
+  WaitlistEntryDTO,
+  WaitlistStatus,
+  WalletMethod,
 } from "@/lib/types"
 
 type RuntimeHistoryRow = {
@@ -140,6 +159,17 @@ type RuntimeIdempotencyRecord = {
   }
 }
 
+type RuntimeCustomerProfile = CustomerAccountDTO
+type RuntimeLoyaltyAccount = LoyaltyAccountDTO
+type RuntimePromoCode = PromoCodeDTO
+type RuntimeReservation = ReservationDTO
+type RuntimeWaitlistEntry = WaitlistEntryDTO
+type RuntimeNotification = CustomerNotificationDTO
+type RuntimeFeedback = FeedbackDTO
+type RuntimeDeliveryOrder = DeliveryChannelOrderDTO
+type RuntimeMenuDaypart = MenuDaypartDTO
+type RuntimeCheckoutReceipt = CustomerCheckoutReceiptDTO
+
 type RuntimeState = {
   history: Record<string, RuntimeHistoryRow>
   tables: RuntimeTable[]
@@ -152,6 +182,16 @@ type RuntimeState = {
   printJobs: RuntimePrintJob[]
   auditTrail: RuntimeAuditEvent[]
   idempotencyRecords: Record<string, RuntimeIdempotencyRecord>
+  customerProfiles: RuntimeCustomerProfile[]
+  loyaltyAccounts: RuntimeLoyaltyAccount[]
+  promos: RuntimePromoCode[]
+  reservations: RuntimeReservation[]
+  waitlist: RuntimeWaitlistEntry[]
+  notifications: RuntimeNotification[]
+  feedback: RuntimeFeedback[]
+  deliveryOrders: RuntimeDeliveryOrder[]
+  menuDayparts: RuntimeMenuDaypart[]
+  checkoutReceipts: RuntimeCheckoutReceipt[]
 }
 
 const STALE_MS = 30 * 60 * 1000
@@ -252,6 +292,23 @@ function filterActiveMenu(menu: MenuSection[]) {
     .filter(section => section.items.length > 0)
 }
 
+function defaultPromos(now: string): RuntimePromoCode[] {
+  return [
+    {
+      code: "WELCOME10",
+      description: "10% off orders above £25",
+      kind: "PERCENT",
+      value: 10,
+      minSpend: 25,
+      active: true,
+      startsAt: now,
+      endsAt: null,
+      maxUses: null,
+      usedCount: 0,
+    },
+  ]
+}
+
 function createInitialState(): RuntimeState {
   const now = nowIso()
   return {
@@ -277,6 +334,16 @@ function createInitialState(): RuntimeState {
     printJobs: [],
     auditTrail: [],
     idempotencyRecords: {},
+    customerProfiles: [],
+    loyaltyAccounts: [],
+    promos: defaultPromos(now),
+    reservations: [],
+    waitlist: [],
+    notifications: [],
+    feedback: [],
+    deliveryOrders: [],
+    menuDayparts: [],
+    checkoutReceipts: [],
   }
 }
 
@@ -346,6 +413,36 @@ function normalizeRuntimeState(input: unknown): RuntimeState {
   const idempotencyRecords = isPlainObject(state.idempotencyRecords)
     ? (state.idempotencyRecords as Record<string, RuntimeIdempotencyRecord>)
     : {}
+  const customerProfiles = Array.isArray(state.customerProfiles)
+    ? (state.customerProfiles as RuntimeCustomerProfile[])
+    : fallback.customerProfiles
+  const loyaltyAccounts = Array.isArray(state.loyaltyAccounts)
+    ? (state.loyaltyAccounts as RuntimeLoyaltyAccount[])
+    : fallback.loyaltyAccounts
+  const promos = Array.isArray(state.promos)
+    ? (state.promos as RuntimePromoCode[])
+    : fallback.promos
+  const reservations = Array.isArray(state.reservations)
+    ? (state.reservations as RuntimeReservation[])
+    : fallback.reservations
+  const waitlist = Array.isArray(state.waitlist)
+    ? (state.waitlist as RuntimeWaitlistEntry[])
+    : fallback.waitlist
+  const notifications = Array.isArray(state.notifications)
+    ? (state.notifications as RuntimeNotification[])
+    : fallback.notifications
+  const feedback = Array.isArray(state.feedback)
+    ? (state.feedback as RuntimeFeedback[])
+    : fallback.feedback
+  const deliveryOrders = Array.isArray(state.deliveryOrders)
+    ? (state.deliveryOrders as RuntimeDeliveryOrder[])
+    : fallback.deliveryOrders
+  const menuDayparts = Array.isArray(state.menuDayparts)
+    ? (state.menuDayparts as RuntimeMenuDaypart[])
+    : fallback.menuDayparts
+  const checkoutReceipts = Array.isArray(state.checkoutReceipts)
+    ? (state.checkoutReceipts as RuntimeCheckoutReceipt[])
+    : fallback.checkoutReceipts
 
   return {
     history,
@@ -359,6 +456,16 @@ function normalizeRuntimeState(input: unknown): RuntimeState {
     printJobs,
     auditTrail,
     idempotencyRecords,
+    customerProfiles,
+    loyaltyAccounts,
+    promos,
+    reservations,
+    waitlist,
+    notifications,
+    feedback,
+    deliveryOrders,
+    menuDayparts,
+    checkoutReceipts,
   }
 }
 
@@ -502,6 +609,176 @@ function touchSession(session: RuntimeSession, tagId?: string) {
   }
 }
 
+function findTableByNumber(tableNumber: number) {
+  return getState().tables.find(table => table.number === tableNumber) ?? null
+}
+
+function normalizeEmail(value: string | null | undefined) {
+  if (!value) return null
+  const normalized = value.trim().toLowerCase()
+  return normalized === "" ? null : normalized
+}
+
+function normalizePhone(value: string | null | undefined) {
+  if (!value) return null
+  const normalized = value.replace(/\s+/g, "").trim()
+  return normalized === "" ? null : normalized
+}
+
+function normalizeCustomerReference(input: {
+  customerId?: string | null
+  email?: string | null
+  phone?: string | null
+}) {
+  if (input.customerId && input.customerId.trim() !== "") {
+    return input.customerId.trim()
+  }
+
+  const email = normalizeEmail(input.email)
+  if (email) return `email:${email}`
+
+  const phone = normalizePhone(input.phone)
+  if (phone) return `phone:${phone}`
+
+  return null
+}
+
+function resolveLoyaltyTier(points: number): LoyaltyTier {
+  if (points >= 500) return "GOLD"
+  if (points >= 200) return "SILVER"
+  return "BRONZE"
+}
+
+function getOrCreateCustomerProfile(input: {
+  customerId?: string | null
+  email?: string | null
+  phone?: string | null
+  name?: string | null
+  marketingOptIn?: boolean
+}) {
+  const state = getState()
+  const customerId = normalizeCustomerReference(input)
+  if (!customerId) return null
+
+  const now = nowIso()
+  const email = normalizeEmail(input.email)
+  const phone = normalizePhone(input.phone)
+  const name = input.name?.trim() || null
+
+  let profile = state.customerProfiles.find(p => p.id === customerId) ?? null
+  if (!profile) {
+    profile = {
+      id: customerId,
+      name,
+      email,
+      phone,
+      marketingOptIn: input.marketingOptIn === true,
+      favoriteItemIds: [],
+      createdAt: now,
+      lastSeenAt: now,
+    }
+    state.customerProfiles.push(profile)
+    return profile
+  }
+
+  profile.lastSeenAt = now
+  if (name) profile.name = name
+  if (email) profile.email = email
+  if (phone) profile.phone = phone
+  if (typeof input.marketingOptIn === "boolean") {
+    profile.marketingOptIn = input.marketingOptIn
+  }
+
+  return profile
+}
+
+function getOrCreateLoyaltyAccount(customerId: string) {
+  const state = getState()
+  const now = nowIso()
+
+  let account =
+    state.loyaltyAccounts.find(entry => entry.customerId === customerId) ??
+    null
+  if (!account) {
+    account = {
+      customerId,
+      points: 0,
+      lifetimeSpend: 0,
+      tier: "BRONZE",
+      lastUpdatedAt: now,
+    }
+    state.loyaltyAccounts.push(account)
+  }
+  return account
+}
+
+function touchLoyaltyAccount(account: RuntimeLoyaltyAccount) {
+  account.tier = resolveLoyaltyTier(account.points)
+  account.lastUpdatedAt = nowIso()
+}
+
+function isPromoWindowActive(
+  promo: RuntimePromoCode,
+  at: Date = new Date()
+) {
+  const startsAt = promo.startsAt ? new Date(promo.startsAt).getTime() : null
+  const endsAt = promo.endsAt ? new Date(promo.endsAt).getTime() : null
+  const atMs = at.getTime()
+
+  if (startsAt && atMs < startsAt) return false
+  if (endsAt && atMs > endsAt) return false
+  return true
+}
+
+function calculatePromoDiscount(input: {
+  promo: RuntimePromoCode
+  subtotal: number
+}) {
+  if (input.subtotal < input.promo.minSpend) return 0
+
+  if (input.promo.kind === "PERCENT") {
+    const ratio = input.promo.value / 100
+    return Number((input.subtotal * ratio).toFixed(2))
+  }
+  return Number(Math.min(input.promo.value, input.subtotal).toFixed(2))
+}
+
+function validateTimeString(value: string, label: string) {
+  if (!/^\d{2}:\d{2}$/.test(value)) {
+    throw new Error(`${label} must be HH:MM`)
+  }
+  const [hoursRaw, minutesRaw] = value.split(":")
+  const hours = Number(hoursRaw)
+  const minutes = Number(minutesRaw)
+  if (hours < 0 || hours > 23 || minutes < 0 || minutes > 59) {
+    throw new Error(`${label} must be HH:MM`)
+  }
+}
+
+function toMinutesFromTimeString(value: string) {
+  const [hoursRaw, minutesRaw] = value.split(":")
+  const hours = Number(hoursRaw)
+  const minutes = Number(minutesRaw)
+  return hours * 60 + minutes
+}
+
+function isDaypartActive(daypart: RuntimeMenuDaypart, at: Date = new Date()) {
+  if (!daypart.enabled) return false
+  const day = at.getDay()
+  if (!daypart.days.includes(day)) return false
+
+  const minutes = at.getHours() * 60 + at.getMinutes()
+  const start = toMinutesFromTimeString(daypart.startTime)
+  const end = toMinutesFromTimeString(daypart.endTime)
+
+  if (start <= end) {
+    return minutes >= start && minutes <= end
+  }
+
+  // Overnight window.
+  return minutes >= start || minutes <= end
+}
+
 export function getMenuSnapshot(): {
   menu: MenuSection[]
   locked: boolean
@@ -523,7 +800,44 @@ export function getMenuSnapshot(options?: {
   const menuRaw = Array.isArray(state.history["menu:current"]?.data?.menu)
     ? (state.history["menu:current"].data.menu as MenuSection[])
     : []
-  const menu = includeInactive ? menuRaw : filterActiveMenu(menuRaw)
+  let menu = includeInactive ? menuRaw : filterActiveMenu(menuRaw)
+
+  if (!includeInactive) {
+    const activeDayparts = state.menuDayparts.filter(entry =>
+      isDaypartActive(entry)
+    )
+
+    if (activeDayparts.length > 0) {
+      const allowedSectionIds = new Set<string>()
+      const allowedItemIds = new Set<string>()
+
+      for (const daypart of activeDayparts) {
+        for (const sectionId of daypart.sectionIds) {
+          allowedSectionIds.add(sectionId)
+        }
+        for (const itemId of daypart.itemIds) {
+          allowedItemIds.add(itemId)
+        }
+      }
+
+      if (allowedSectionIds.size > 0 || allowedItemIds.size > 0) {
+        menu = menu
+          .map(section => {
+            if (allowedSectionIds.has(section.id)) {
+              return section
+            }
+            return {
+              ...section,
+              items: section.items.filter(item =>
+                allowedItemIds.has(item.id)
+              ),
+            }
+          })
+          .filter(section => section.items.length > 0)
+      }
+    }
+  }
+
   const locked = state.history["system:flags"]?.data?.serviceActive === true
   return { menu, locked }
 }
@@ -537,9 +851,15 @@ export function getSystemFlags() {
 
 export function setServiceActive(serviceActive: boolean) {
   const state = getState()
+  const currentFlags = isPlainObject(state.history["system:flags"]?.data)
+    ? state.history["system:flags"].data
+    : {}
   state.history["system:flags"] = {
     id: "system:flags",
-    data: { serviceActive },
+    data: {
+      ...currentFlags,
+      serviceActive,
+    },
     updatedAt: nowIso(),
   }
 }
@@ -1097,6 +1417,703 @@ export function markTableBillStatus(
   return getTableBill(tableId)
 }
 
+export function getCustomerCheckoutQuoteByTableNumber(
+  tableNumber: number
+): CustomerCheckoutQuoteDTO {
+  if (!Number.isFinite(tableNumber) || tableNumber < 0) {
+    throw new Error("tableNumber must be a non-negative number")
+  }
+
+  const table = findTableByNumber(Math.floor(tableNumber))
+  if (!table) {
+    throw new Error("Unknown table number")
+  }
+
+  const bill = getTableBill(table.id)
+  const suggestedShareAmount =
+    bill.dueTotal > 0
+      ? Number((bill.dueTotal / Math.max(1, table.splitCount)).toFixed(2))
+      : 0
+
+  return {
+    tableId: table.id,
+    tableNumber: table.number,
+    dueTotal: bill.dueTotal,
+    splitCount: table.splitCount,
+    suggestedShareAmount,
+  }
+}
+
+export function processCustomerCheckout(input: {
+  tableNumber: number
+  shareCount?: number
+  amount?: number
+  tipPercent?: number
+  method: WalletMethod
+  email?: string | null
+  promoCode?: string | null
+  customerId?: string | null
+  customerName?: string | null
+  phone?: string | null
+  marketingOptIn?: boolean
+  redeemPoints?: number
+}) {
+  const table = findTableByNumber(Math.floor(input.tableNumber))
+  if (!table) {
+    throw new Error("Unknown table number")
+  }
+
+  const bill = getTableBill(table.id)
+  if (bill.dueTotal <= 0) {
+    throw new Error("No outstanding amount due")
+  }
+
+  const shareCount =
+    Number.isFinite(input.shareCount) && (input.shareCount ?? 1) > 0
+      ? Math.floor(input.shareCount as number)
+      : 1
+
+  const requestedAmount =
+    typeof input.amount === "number" && Number.isFinite(input.amount)
+      ? Number(input.amount.toFixed(2))
+      : Number((bill.dueTotal / shareCount).toFixed(2))
+
+  if (requestedAmount <= 0) {
+    throw new Error("Payment amount must be greater than zero")
+  }
+
+  let amount = Number(Math.min(requestedAmount, bill.dueTotal).toFixed(2))
+
+  let promo: RuntimePromoCode | null = null
+  let promoDiscount = 0
+  const promoCode = input.promoCode?.trim().toUpperCase() || null
+  if (promoCode) {
+    promo = getState().promos.find(entry => entry.code === promoCode) ?? null
+    if (!promo || !promo.active || !isPromoWindowActive(promo)) {
+      throw new Error("Promo code is not active")
+    }
+    if (promo.maxUses !== null && promo.usedCount >= promo.maxUses) {
+      throw new Error("Promo code usage limit reached")
+    }
+    promoDiscount = calculatePromoDiscount({
+      promo,
+      subtotal: amount,
+    })
+    amount = Number(Math.max(amount - promoDiscount, 0).toFixed(2))
+  }
+
+  const profile = getOrCreateCustomerProfile({
+    customerId: input.customerId,
+    email: input.email,
+    phone: input.phone,
+    name: input.customerName,
+    marketingOptIn: input.marketingOptIn,
+  })
+
+  let redeemedPoints = 0
+  let loyaltyEarnedPoints = 0
+  if (profile) {
+    const loyalty = getOrCreateLoyaltyAccount(profile.id)
+    const requestedRedeemPoints =
+      Number.isFinite(input.redeemPoints) && (input.redeemPoints ?? 0) > 0
+        ? Math.floor(input.redeemPoints as number)
+        : 0
+    if (requestedRedeemPoints > 0) {
+      redeemedPoints = Math.min(loyalty.points, requestedRedeemPoints)
+      const redeemValue = Number((redeemedPoints * 0.05).toFixed(2))
+      amount = Number(Math.max(amount - redeemValue, 0).toFixed(2))
+      loyalty.points -= redeemedPoints
+      touchLoyaltyAccount(loyalty)
+    }
+  }
+
+  const tipPercent =
+    Number.isFinite(input.tipPercent) && (input.tipPercent ?? 0) >= 0
+      ? Math.min(Number(input.tipPercent), 40)
+      : 0
+  const tipAmount = Number((amount * (tipPercent / 100)).toFixed(2))
+  const totalCharged = Number((amount + tipAmount).toFixed(2))
+
+  if (totalCharged <= 0) {
+    throw new Error("Total charge cannot be zero")
+  }
+
+  const billAfterPayment = addTablePayment({
+    tableId: table.id,
+    amount: totalCharged,
+    method: input.method,
+    note:
+      tipAmount > 0
+        ? `Customer checkout tip ${tipPercent}%`
+        : "Customer checkout",
+  })
+
+  if (promo) {
+    promo.usedCount += 1
+  }
+
+  if (profile) {
+    const loyalty = getOrCreateLoyaltyAccount(profile.id)
+    loyaltyEarnedPoints = Math.max(0, Math.floor(amount))
+    loyalty.points += loyaltyEarnedPoints
+    loyalty.lifetimeSpend = Number((loyalty.lifetimeSpend + amount).toFixed(2))
+    touchLoyaltyAccount(loyalty)
+  }
+
+  const receipt: RuntimeCheckoutReceipt = {
+    receiptId: crypto.randomUUID(),
+    tableId: table.id,
+    tableNumber: table.number,
+    amount,
+    tipAmount,
+    totalCharged,
+    method: input.method,
+    email: normalizeEmail(input.email),
+    promoCode: promoCode,
+    loyaltyRedeemedPoints: redeemedPoints,
+    loyaltyEarnedPoints,
+    createdAt: nowIso(),
+  }
+  getState().checkoutReceipts.unshift(receipt)
+  if (getState().checkoutReceipts.length > 1000) {
+    getState().checkoutReceipts = getState().checkoutReceipts.slice(0, 1000)
+  }
+
+  if (receipt.email) {
+    queueCustomerNotification({
+      channel: "EMAIL",
+      recipient: receipt.email,
+      message: `Receipt ${receipt.receiptId.slice(0, 8)} for £${receipt.totalCharged.toFixed(2)}`,
+      relatedType: "CHECKOUT_RECEIPT",
+      relatedId: receipt.receiptId,
+    })
+  }
+
+  return {
+    quote: getCustomerCheckoutQuoteByTableNumber(table.number),
+    bill: billAfterPayment,
+    receipt,
+    promoDiscount,
+  }
+}
+
+export function listCheckoutReceipts(limit = 100) {
+  const safeLimit = Number.isFinite(limit) ? Math.max(1, Math.min(limit, 500)) : 100
+  return getState().checkoutReceipts.slice(0, safeLimit)
+}
+
+export function upsertCustomerAccount(input: {
+  customerId?: string | null
+  name?: string | null
+  email?: string | null
+  phone?: string | null
+  marketingOptIn?: boolean
+}) {
+  const profile = getOrCreateCustomerProfile(input)
+  if (!profile) {
+    throw new Error("customerId, email, or phone is required")
+  }
+  return profile
+}
+
+export function listCustomerAccounts(limit = 200) {
+  const safeLimit = Number.isFinite(limit) ? Math.max(1, Math.min(limit, 1000)) : 200
+  return getState().customerProfiles
+    .slice()
+    .sort((a, b) => b.lastSeenAt.localeCompare(a.lastSeenAt))
+    .slice(0, safeLimit)
+}
+
+export function getCustomerAccount(customerId: string) {
+  return (
+    getState().customerProfiles.find(entry => entry.id === customerId) ?? null
+  )
+}
+
+export function getLoyaltyAccount(customerId: string) {
+  return (
+    getState().loyaltyAccounts.find(entry => entry.customerId === customerId) ??
+    null
+  )
+}
+
+export function listLoyaltyAccounts(limit = 200) {
+  const safeLimit = Number.isFinite(limit) ? Math.max(1, Math.min(limit, 1000)) : 200
+  return getState().loyaltyAccounts
+    .slice()
+    .sort((a, b) => b.points - a.points)
+    .slice(0, safeLimit)
+}
+
+export function listPromoCodes() {
+  return getState().promos
+    .slice()
+    .sort((a, b) => a.code.localeCompare(b.code))
+}
+
+export function upsertPromoCode(input: {
+  code: string
+  description: string
+  kind: PromoCodeKind
+  value: number
+  minSpend?: number
+  active?: boolean
+  startsAt?: string | null
+  endsAt?: string | null
+  maxUses?: number | null
+}) {
+  const code = input.code.trim().toUpperCase()
+  if (!/^[A-Z0-9_-]{3,24}$/.test(code)) {
+    throw new Error("Promo code must be 3-24 chars (A-Z, 0-9, _, -)")
+  }
+  if (!input.description || input.description.trim() === "") {
+    throw new Error("Promo description is required")
+  }
+  if (input.kind !== "PERCENT" && input.kind !== "FIXED") {
+    throw new Error("Promo kind must be PERCENT or FIXED")
+  }
+  if (!Number.isFinite(input.value) || input.value <= 0) {
+    throw new Error("Promo value must be greater than zero")
+  }
+
+  const minSpend =
+    Number.isFinite(input.minSpend) && (input.minSpend ?? 0) > 0
+      ? Number((input.minSpend as number).toFixed(2))
+      : 0
+  const maxUses =
+    input.maxUses === null
+      ? null
+      : Number.isFinite(input.maxUses) && (input.maxUses as number) > 0
+      ? Math.floor(input.maxUses as number)
+      : null
+
+  const state = getState()
+  const existing = state.promos.find(entry => entry.code === code)
+
+  if (existing) {
+    existing.description = input.description.trim()
+    existing.kind = input.kind
+    existing.value = Number(input.value.toFixed(2))
+    existing.minSpend = minSpend
+    existing.active = input.active ?? existing.active
+    existing.startsAt = input.startsAt ?? existing.startsAt
+    existing.endsAt = input.endsAt ?? existing.endsAt
+    existing.maxUses = maxUses
+    return existing
+  }
+
+  const created: RuntimePromoCode = {
+    code,
+    description: input.description.trim(),
+    kind: input.kind,
+    value: Number(input.value.toFixed(2)),
+    minSpend,
+    active: input.active ?? true,
+    startsAt: input.startsAt ?? null,
+    endsAt: input.endsAt ?? null,
+    maxUses,
+    usedCount: 0,
+  }
+  state.promos.push(created)
+  return created
+}
+
+export function setPromoCodeActive(code: string, active: boolean) {
+  const promo = getState().promos.find(
+    entry => entry.code === code.trim().toUpperCase()
+  )
+  if (!promo) {
+    throw new Error("Promo code not found")
+  }
+  promo.active = active
+  return promo
+}
+
+export function createReservation(input: {
+  name: string
+  phone: string
+  partySize: number
+  requestedFor: string
+  note?: string
+}) {
+  const name = input.name.trim()
+  const phone = input.phone.trim()
+  if (!name) throw new Error("name is required")
+  if (!phone) throw new Error("phone is required")
+  if (!Number.isFinite(input.partySize) || input.partySize < 1) {
+    throw new Error("partySize must be >= 1")
+  }
+  if (!input.requestedFor || Number.isNaN(new Date(input.requestedFor).getTime())) {
+    throw new Error("requestedFor must be a valid ISO date-time")
+  }
+
+  const reservation: RuntimeReservation = {
+    id: crypto.randomUUID(),
+    name,
+    phone,
+    partySize: Math.floor(input.partySize),
+    requestedFor: new Date(input.requestedFor).toISOString(),
+    note: input.note?.trim() || undefined,
+    status: "REQUESTED",
+    createdAt: nowIso(),
+  }
+  getState().reservations.unshift(reservation)
+  return reservation
+}
+
+export function listReservations(limit = 200) {
+  const safeLimit = Number.isFinite(limit) ? Math.max(1, Math.min(limit, 1000)) : 200
+  return getState().reservations
+    .slice()
+    .sort((a, b) => b.requestedFor.localeCompare(a.requestedFor))
+    .slice(0, safeLimit)
+}
+
+export function updateReservationStatus(
+  reservationId: string,
+  status: ReservationStatus
+) {
+  const reservation =
+    getState().reservations.find(entry => entry.id === reservationId) ?? null
+  if (!reservation) {
+    throw new Error("Reservation not found")
+  }
+  reservation.status = status
+
+  if (status === "CONFIRMED" || status === "SEATED") {
+    queueCustomerNotification({
+      channel: "SMS",
+      recipient: reservation.phone,
+      message:
+        status === "CONFIRMED"
+          ? `Reservation confirmed for ${reservation.partySize} guest(s).`
+          : "Your table is now ready.",
+      relatedType: "RESERVATION",
+      relatedId: reservation.id,
+    })
+  }
+
+  return reservation
+}
+
+export function addWaitlistEntry(input: {
+  name: string
+  phone: string
+  partySize: number
+}) {
+  const name = input.name.trim()
+  const phone = input.phone.trim()
+  if (!name) throw new Error("name is required")
+  if (!phone) throw new Error("phone is required")
+  if (!Number.isFinite(input.partySize) || input.partySize < 1) {
+    throw new Error("partySize must be >= 1")
+  }
+
+  const entry: RuntimeWaitlistEntry = {
+    id: crypto.randomUUID(),
+    name,
+    phone,
+    partySize: Math.floor(input.partySize),
+    createdAt: nowIso(),
+    notifiedAt: null,
+    status: "WAITING",
+  }
+  getState().waitlist.unshift(entry)
+  return entry
+}
+
+export function listWaitlist(limit = 200) {
+  const safeLimit = Number.isFinite(limit) ? Math.max(1, Math.min(limit, 1000)) : 200
+  return getState().waitlist
+    .slice()
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+    .slice(0, safeLimit)
+}
+
+export function updateWaitlistStatus(
+  waitlistId: string,
+  status: WaitlistStatus
+) {
+  const entry = getState().waitlist.find(item => item.id === waitlistId) ?? null
+  if (!entry) {
+    throw new Error("Waitlist entry not found")
+  }
+  entry.status = status
+  if (status === "NOTIFIED") {
+    entry.notifiedAt = nowIso()
+    queueCustomerNotification({
+      channel: "SMS",
+      recipient: entry.phone,
+      message: "Your table is now available. Please check in with staff.",
+      relatedType: "WAITLIST",
+      relatedId: entry.id,
+    })
+  }
+  return entry
+}
+
+export function queueCustomerNotification(input: {
+  channel: CustomerNotificationDTO["channel"]
+  recipient: string
+  message: string
+  relatedType: string
+  relatedId: string
+}) {
+  const notification: RuntimeNotification = {
+    id: crypto.randomUUID(),
+    channel: input.channel,
+    recipient: input.recipient.trim(),
+    message: input.message.trim(),
+    relatedType: input.relatedType,
+    relatedId: input.relatedId,
+    createdAt: nowIso(),
+  }
+  getState().notifications.unshift(notification)
+  if (getState().notifications.length > 2000) {
+    getState().notifications = getState().notifications.slice(0, 2000)
+  }
+  return notification
+}
+
+export function listCustomerNotifications(options?: {
+  limit?: number
+  recipient?: string
+}) {
+  const safeLimit = Number.isFinite(options?.limit)
+    ? Math.max(1, Math.min(options?.limit as number, 1000))
+    : 200
+  const recipient = options?.recipient?.trim()
+  return getState().notifications
+    .filter(entry => {
+      if (!recipient) return true
+      return entry.recipient === recipient
+    })
+    .slice(0, safeLimit)
+}
+
+export function createFeedback(input: {
+  tableNumber?: number | null
+  orderId?: string | null
+  customerId?: string | null
+  rating: number
+  comment: string
+}) {
+  if (!Number.isFinite(input.rating) || input.rating < 1 || input.rating > 5) {
+    throw new Error("rating must be between 1 and 5")
+  }
+  const comment = input.comment.trim()
+  if (!comment) {
+    throw new Error("comment is required")
+  }
+
+  const feedback: RuntimeFeedback = {
+    id: crypto.randomUUID(),
+    tableNumber:
+      typeof input.tableNumber === "number" && Number.isFinite(input.tableNumber)
+        ? Math.floor(input.tableNumber)
+        : null,
+    orderId: input.orderId?.trim() || null,
+    customerId: input.customerId?.trim() || null,
+    rating: Math.round(input.rating),
+    comment,
+    createdAt: nowIso(),
+  }
+  getState().feedback.unshift(feedback)
+  if (getState().feedback.length > 3000) {
+    getState().feedback = getState().feedback.slice(0, 3000)
+  }
+  return feedback
+}
+
+export function listFeedback(limit = 200) {
+  const safeLimit = Number.isFinite(limit) ? Math.max(1, Math.min(limit, 1000)) : 200
+  return getState().feedback.slice(0, safeLimit)
+}
+
+export function createDeliveryChannelOrder(input: {
+  channel: DeliveryChannel
+  externalRef: string
+  total: number
+}) {
+  if (
+    input.channel !== "UBER_EATS" &&
+    input.channel !== "DELIVEROO" &&
+    input.channel !== "JUST_EAT" &&
+    input.channel !== "DIRECT"
+  ) {
+    throw new Error("channel must be UBER_EATS, DELIVEROO, JUST_EAT, or DIRECT")
+  }
+  if (!input.externalRef || input.externalRef.trim() === "") {
+    throw new Error("externalRef is required")
+  }
+  if (!Number.isFinite(input.total) || input.total < 0) {
+    throw new Error("total must be non-negative")
+  }
+
+  const order: RuntimeDeliveryOrder = {
+    id: crypto.randomUUID(),
+    channel: input.channel,
+    externalRef: input.externalRef.trim(),
+    status: "NEW",
+    total: Number(input.total.toFixed(2)),
+    createdAt: nowIso(),
+  }
+  getState().deliveryOrders.unshift(order)
+  return order
+}
+
+export function listDeliveryChannelOrders(limit = 200) {
+  const safeLimit = Number.isFinite(limit) ? Math.max(1, Math.min(limit, 1000)) : 200
+  return getState().deliveryOrders.slice(0, safeLimit)
+}
+
+export function updateDeliveryOrderStatus(
+  orderId: string,
+  status: DeliveryOrderStatus
+) {
+  const order =
+    getState().deliveryOrders.find(entry => entry.id === orderId) ?? null
+  if (!order) {
+    throw new Error("Delivery order not found")
+  }
+  order.status = status
+  return order
+}
+
+export function listMenuDayparts() {
+  return getState().menuDayparts
+    .slice()
+    .sort((a, b) => a.name.localeCompare(b.name))
+}
+
+export function upsertMenuDaypart(input: {
+  id?: string
+  name: string
+  enabled?: boolean
+  days: number[]
+  startTime: string
+  endTime: string
+  sectionIds?: string[]
+  itemIds?: string[]
+}) {
+  const name = input.name.trim()
+  if (!name) {
+    throw new Error("name is required")
+  }
+  if (!Array.isArray(input.days) || input.days.length === 0) {
+    throw new Error("days must contain at least one day number")
+  }
+  const normalizedDays = Array.from(
+    new Set(
+      input.days
+        .filter(day => Number.isFinite(day))
+        .map(day => Math.floor(day))
+        .filter(day => day >= 0 && day <= 6)
+    )
+  )
+  if (normalizedDays.length === 0) {
+    throw new Error("days must contain values from 0 to 6")
+  }
+  validateTimeString(input.startTime, "startTime")
+  validateTimeString(input.endTime, "endTime")
+
+  const id = input.id?.trim() || crypto.randomUUID()
+  const state = getState()
+  const existing = state.menuDayparts.find(entry => entry.id === id)
+
+  if (existing) {
+    existing.name = name
+    existing.enabled = input.enabled ?? existing.enabled
+    existing.days = normalizedDays
+    existing.startTime = input.startTime
+    existing.endTime = input.endTime
+    existing.sectionIds = Array.from(new Set(input.sectionIds ?? []))
+    existing.itemIds = Array.from(new Set(input.itemIds ?? []))
+    return existing
+  }
+
+  const created: RuntimeMenuDaypart = {
+    id,
+    name,
+    enabled: input.enabled ?? true,
+    days: normalizedDays,
+    startTime: input.startTime,
+    endTime: input.endTime,
+    sectionIds: Array.from(new Set(input.sectionIds ?? [])),
+    itemIds: Array.from(new Set(input.itemIds ?? [])),
+  }
+  state.menuDayparts.push(created)
+  return created
+}
+
+export function removeMenuDaypart(id: string) {
+  const state = getState()
+  const before = state.menuDayparts.length
+  state.menuDayparts = state.menuDayparts.filter(entry => entry.id !== id)
+  return { removed: before !== state.menuDayparts.length }
+}
+
+export function getInventoryLowStockThreshold() {
+  const state = getState()
+  const flags = state.history["system:flags"]?.data
+  if (isPlainObject(flags) && Number.isFinite(flags.lowStockThreshold)) {
+    return Math.max(0, Math.floor(flags.lowStockThreshold as number))
+  }
+  return 5
+}
+
+export function setInventoryLowStockThreshold(value: number) {
+  if (!Number.isFinite(value) || value < 0) {
+    throw new Error("lowStockThreshold must be >= 0")
+  }
+  const state = getState()
+  const flags = isPlainObject(state.history["system:flags"]?.data)
+    ? state.history["system:flags"].data
+    : {}
+  state.history["system:flags"] = {
+    id: "system:flags",
+    data: {
+      ...flags,
+      lowStockThreshold: Math.floor(value),
+    },
+    updatedAt: nowIso(),
+  }
+  return getInventoryLowStockThreshold()
+}
+
+export function listInventoryAlerts() {
+  const threshold = getInventoryLowStockThreshold()
+  return getMenuSnapshot({ includeInactive: true }).menu.flatMap(section =>
+    section.items
+      .filter(
+        item =>
+          typeof item.stockCount === "number" &&
+          item.stockCount <= threshold
+      )
+      .map(item => ({
+        sectionId: section.id,
+        sectionName: section.name,
+        itemId: item.id,
+        itemName: item.name,
+        stockCount: item.stockCount as number,
+        threshold,
+      }))
+  )
+}
+
+export function getFeatureSummary(): FeatureSummaryDTO {
+  const state = getState()
+  return {
+    reservations: state.reservations.length,
+    waitlist: state.waitlist.length,
+    promos: state.promos.length,
+    feedback: state.feedback.length,
+    notifications: state.notifications.length,
+    loyaltyMembers: state.loyaltyAccounts.length,
+    deliveryOrders: state.deliveryOrders.length,
+  }
+}
+
 export function listTags(): TagDTO[] {
   const state = getState()
   return state.tags
@@ -1330,6 +2347,13 @@ export function submitOrder(input: {
 
   state.orders.push(order)
   touchSession(session, isTakeawayTag(input.tagId) ? undefined : input.tagId)
+  queueCustomerNotification({
+    channel: "IN_APP",
+    recipient: `session:${session.id}`,
+    message: `Order accepted for ${order.tableNumber === 0 ? "takeaway" : `table ${order.tableNumber}`}.`,
+    relatedType: "ORDER",
+    relatedId: order.id,
+  })
 
   const totals = calculateCartTotals(
     normalizedItems.map(i => ({
@@ -1511,6 +2535,7 @@ export function markStationSent(input: {
       ? new Set(input.lineIds)
       : null
   let updated = 0
+  const touchedSessions = new Set<string>()
 
   for (const order of state.orders) {
     if (order.tableNumber !== input.tableNumber) continue
@@ -1522,12 +2547,26 @@ export function markStationSent(input: {
         if (!item.kitchenStartedAt) item.kitchenStartedAt = now
         item.kitchenSentAt = now
         updated += 1
+        touchedSessions.add(order.sessionId)
       }
       if (input.station === "BAR" && !item.barSentAt) {
         if (!item.barStartedAt) item.barStartedAt = now
         item.barSentAt = now
         updated += 1
+        touchedSessions.add(order.sessionId)
       }
+    }
+  }
+
+  if (updated > 0) {
+    for (const sessionId of touchedSessions) {
+      queueCustomerNotification({
+        channel: "IN_APP",
+        recipient: `session:${sessionId}`,
+        message: `${input.station === "KITCHEN" ? "Kitchen" : "Bar"} has marked items ready.`,
+        relatedType: "ORDER_STATUS",
+        relatedId: `${input.tableNumber}:${input.station}:ready`,
+      })
     }
   }
 
@@ -1546,6 +2585,7 @@ export function markStationPreparing(input: {
       ? new Set(input.lineIds)
       : null
   let updated = 0
+  const touchedSessions = new Set<string>()
 
   for (const order of state.orders) {
     if (order.tableNumber !== input.tableNumber) continue
@@ -1556,11 +2596,25 @@ export function markStationPreparing(input: {
       if (input.station === "KITCHEN" && !item.kitchenSentAt && !item.kitchenStartedAt) {
         item.kitchenStartedAt = now
         updated += 1
+        touchedSessions.add(order.sessionId)
       }
       if (input.station === "BAR" && !item.barSentAt && !item.barStartedAt) {
         item.barStartedAt = now
         updated += 1
+        touchedSessions.add(order.sessionId)
       }
+    }
+  }
+
+  if (updated > 0) {
+    for (const sessionId of touchedSessions) {
+      queueCustomerNotification({
+        channel: "IN_APP",
+        recipient: `session:${sessionId}`,
+        message: `${input.station === "KITCHEN" ? "Kitchen" : "Bar"} has started preparing your items.`,
+        relatedType: "ORDER_STATUS",
+        relatedId: `${input.tableNumber}:${input.station}:prepping`,
+      })
     }
   }
 
@@ -1576,6 +2630,7 @@ export function markTableDelivered(
   const lineIdSet =
     lineIds && lineIds.length > 0 ? new Set(lineIds) : null
   let updated = 0
+  const touchedSessions = new Set<string>()
 
   for (const order of state.orders) {
     if (order.tableNumber !== tableNumber) continue
@@ -1590,6 +2645,19 @@ export function markTableDelivered(
 
       item.deliveredAt = now
       updated += 1
+      touchedSessions.add(order.sessionId)
+    }
+  }
+
+  if (updated > 0) {
+    for (const sessionId of touchedSessions) {
+      queueCustomerNotification({
+        channel: "IN_APP",
+        recipient: `session:${sessionId}`,
+        message: "Order delivered. Enjoy!",
+        relatedType: "ORDER_STATUS",
+        relatedId: `${tableNumber}:delivered`,
+      })
     }
   }
 

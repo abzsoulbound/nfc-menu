@@ -14,9 +14,13 @@ Architecture:
 Primary routes:
 - `/menu` public menu
 - `/t/[tagId]` customer ordering
+- `/pay/[tableNumber]` customer pay-at-table checkout (split/tip/promo/receipt)
+- `/guest-tools` customer loyalty/reservation/waitlist/feedback tools
 - `/staff` staff dashboard
 - `/kitchen` kitchen station
 - `/bar` bar station
+- `/manager` manager operations
+- `/manager/features` manager growth/engagement controls
 
 API routes:
 - `GET /api/menu`
@@ -25,6 +29,8 @@ API routes:
 - `GET|POST /api/sessions`
 - `GET|POST|PATCH|PUT /api/orders`
 - `POST|PUT /api/staff`
+- `GET|POST /api/customer/checkout`
+- `GET|POST /api/customer/engagement`
 
 Development:
 1. `npm install`
