@@ -1,20 +1,49 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" role="img" aria-labelledby="title desc">
   <title id="title">Fable Stores logo</title>
-  <desc id="desc">Circular emblem with Fable Stores lettering.</desc>
+  <desc id="desc">Fable Stores circular foodcourt emblem with crossed cutlery, leaf, and wave lines.</desc>
   <defs>
-    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#f3d9ab" />
-      <stop offset="100%" stop-color="#cf8b4b" />
-    </linearGradient>
-    <linearGradient id="mark" x1="0%" y1="0%" x2="0%" y2="100%">
-      <stop offset="0%" stop-color="#3e2a19" />
-      <stop offset="100%" stop-color="#1f140c" />
-    </linearGradient>
+    <path id="arc-top" d="M198 378A318 318 0 0 1 826 378" />
+    <path id="arc-left" d="M186 390A332 332 0 0 0 186 664" />
+    <path id="arc-right" d="M838 390A332 332 0 0 1 838 664" />
+    <path id="arc-bottom" d="M252 742A268 268 0 0 0 772 742" />
   </defs>
-  <circle cx="256" cy="256" r="248" fill="url(#bg)" />
-  <circle cx="256" cy="256" r="226" fill="#fff5e8" opacity="0.82" />
-  <circle cx="256" cy="256" r="194" fill="#fef7ee" stroke="#3d2a1a" stroke-width="10" />
-  <path d="M160 168h192v26H189v55h146v26H189v89h-29z" fill="url(#mark)" />
-  <path d="M286 252c0-44 30-73 75-73 29 0 48 11 61 28l-24 15c-8-10-20-17-37-17-26 0-44 18-44 47s18 47 44 47c17 0 29-7 37-17l24 15c-13 17-32 28-61 28-45 0-75-29-75-73z" fill="url(#mark)" />
-  <text x="256" y="374" text-anchor="middle" font-family="Georgia, Times, serif" font-size="34" letter-spacing="7" fill="#2b1d12">FABLE STORES</text>
+
+  <g fill="none" stroke="currentColor" stroke-width="16" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M298 566L520 786" />
+    <path d="M714 566L494 786" />
+
+    <path d="M334 472L438 576" />
+    <path d="M306 444L410 548" />
+    <path d="M278 416L382 520" />
+
+    <path d="M610 442C652 398 702 376 728 402C752 426 732 476 688 520" />
+
+    <path d="M514 286L542 312L570 300L586 334L622 340L622 378L652 400L632 432L644 466L612 482L598 516L562 510L542 540L512 522L482 540L462 510L426 516L412 482L380 466L392 432L372 400L402 378L402 340L438 334L454 300L482 312Z" />
+    <path d="M512 336V690" />
+    <path d="M512 420L460 368" />
+    <path d="M512 420L560 372" />
+    <path d="M512 494L448 430" />
+    <path d="M512 494L576 430" />
+    <path d="M512 580L432 500" />
+    <path d="M512 580L592 500" />
+
+    <path d="M286 662C322 694 358 630 394 662C430 694 466 630 502 662C538 694 574 630 610 662C646 694 682 630 718 662C736 678 754 678 770 662" />
+    <path d="M320 726C352 752 384 700 416 726C448 752 480 700 512 726C544 752 576 700 608 726C640 752 672 700 704 726" />
+    <path d="M370 784C394 804 418 766 442 784C466 804 490 766 514 784C538 804 562 766 586 784C610 804 634 766 658 784" />
+  </g>
+
+  <g fill="currentColor" font-family="Arial, Helvetica, sans-serif" font-weight="700" letter-spacing="6">
+    <text font-size="72">
+      <textPath href="#arc-top" startOffset="50%" text-anchor="middle">FABLE STORES</textPath>
+    </text>
+    <text font-size="64">
+      <textPath href="#arc-left" startOffset="50%" text-anchor="middle">FOODCOURT</textPath>
+    </text>
+    <text font-size="64">
+      <textPath href="#arc-right" startOffset="50%" text-anchor="middle">FOODCOURT</textPath>
+    </text>
+    <text font-size="68">
+      <textPath href="#arc-bottom" startOffset="50%" text-anchor="middle">EAT * MEET * SHOP</textPath>
+    </text>
+  </g>
 </svg>

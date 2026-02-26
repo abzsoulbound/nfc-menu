@@ -5,15 +5,25 @@ import { usePathname } from "next/navigation"
 import { BRAND_ASSETS, BRAND_LOCATION, BRAND_MONOGRAM } from "@/lib/brand"
 import { contextLabelForPath, resolveUiMode } from "@/lib/ui"
 
-function HeaderLogo() {
+function HeaderLogo({ uiMode }: { uiMode: "customer" | "staff" }) {
+  const logoUrl = BRAND_ASSETS.logoUrl
+  const usingDefaultLogo = logoUrl === "/brand/fable-stores-logo.svg"
+  const shellClass = uiMode === "staff"
+    ? "bg-[rgba(255,255,255,0.08)]"
+    : "bg-[rgba(0,0,0,0.04)]"
+
   if (BRAND_ASSETS.logoUrl) {
     return (
-      // eslint-disable-next-line @next/next/no-img-element
-      <img
-        src={BRAND_ASSETS.logoUrl}
-        alt="Fable Stores logo"
-        className="h-9 w-9 rounded-full border border-[var(--border)] object-cover"
-      />
+      <div className={`flex h-10 w-10 items-center justify-center overflow-hidden rounded-full border border-[var(--border)] ${shellClass}`}>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={BRAND_ASSETS.logoUrl}
+          alt="Fable Stores logo"
+          className={`h-8 w-8 object-contain ${
+            usingDefaultLogo && uiMode === "staff" ? "invert" : ""
+          }`}
+        />
+      </div>
     )
   }
 
@@ -38,7 +48,7 @@ export function Header() {
     <header className="sticky top-0 z-40 border-b border-[var(--border)] surface-primary backdrop-blur">
       <div className="mx-auto flex w-full max-w-[var(--shell-max-width)] items-center justify-between gap-3 px-4 py-3 md:px-6">
         <div className="flex items-center gap-3">
-          <HeaderLogo />
+          <HeaderLogo uiMode={uiMode} />
           <div>
             <div className="font-semibold tracking-tight">Fable Stores</div>
             <div className="text-xs text-muted">{contextHint}</div>
