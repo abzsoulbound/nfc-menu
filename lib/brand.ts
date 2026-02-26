@@ -4,7 +4,7 @@ const brandLogoUrl = process.env.NEXT_PUBLIC_BRAND_LOGO_URL?.trim()
 const brandHeroUrl = process.env.NEXT_PUBLIC_BRAND_HERO_URL?.trim()
 
 export const BRAND_ASSETS: BrandAssetSlots = {
-  logoUrl: brandLogoUrl || "/brand/fable-stores-logo.svg",
+  logoUrl: brandLogoUrl || "/brand/fable-stores-logo.png",
   heroUrl: brandHeroUrl || undefined,
 }
 

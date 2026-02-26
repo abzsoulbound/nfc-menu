@@ -7,19 +7,21 @@ import { contextLabelForPath, resolveUiMode } from "@/lib/ui"
 
 function HeaderLogo({ uiMode }: { uiMode: "customer" | "staff" }) {
   const logoUrl = BRAND_ASSETS.logoUrl
-  const usingDefaultLogo = logoUrl === "/brand/fable-stores-logo.svg"
+  const usingDefaultLogo =
+    logoUrl === "/brand/fable-stores-logo.png" ||
+    logoUrl === "/brand/fable-stores-logo.svg"
   const shellClass = uiMode === "staff"
     ? "bg-[rgba(255,255,255,0.08)]"
-    : "bg-[rgba(0,0,0,0.04)]"
+    : "bg-[rgba(255,255,255,0.72)]"
 
   if (BRAND_ASSETS.logoUrl) {
     return (
-      <div className={`flex h-10 w-10 items-center justify-center overflow-hidden rounded-full border border-[var(--border)] ${shellClass}`}>
+      <div className={`flex h-11 w-11 items-center justify-center overflow-hidden rounded-full border border-[var(--border)] ${shellClass}`}>
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
           src={BRAND_ASSETS.logoUrl}
           alt="Fable Stores logo"
-          className={`h-8 w-8 object-contain ${
+          className={`h-full w-full object-contain object-center p-[3px] ${
             usingDefaultLogo && uiMode === "staff" ? "invert" : ""
           }`}
         />
