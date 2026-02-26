@@ -21,6 +21,7 @@ import {
   persistRuntimeStateToDb,
 } from "@/lib/runtimePersistence"
 import { publishRuntimeEvent } from "@/lib/realtime"
+import { runDemoSimulatorTick } from "@/lib/demoSimulator"
 import {
   OrderSubmissionItemDTO,
   PrintJobStatus,
@@ -76,6 +77,18 @@ function hasSessionReadAccess(req: Request, sessionId: string) {
 
 export async function GET(req: Request) {
   await hydrateRuntimeStateFromDb()
+  const simulator = runDemoSimulatorTick()
+  if (simulator.changed) {
+    await persistRuntimeStateToDb()
+    publishRuntimeEvent("demo.simulator", {
+      enabled: simulator.status.enabled,
+      lastTickAt: simulator.status.lastTickAt,
+      kitchenQueue: simulator.status.queue.kitchen,
+      barQueue: simulator.status.queue.bar,
+      readyQueue: simulator.status.queue.ready,
+      activeDemoSessions: simulator.status.activeDemoSessions,
+    })
+  }
   const url = new URL(req.url)
   const station = parseStation(url.searchParams.get("station"))
   const view = url.searchParams.get("view")

@@ -323,6 +323,11 @@ function createInitialState(): RuntimeState {
         data: { serviceActive: false },
         updatedAt: now,
       },
+      "demo:simulator": {
+        id: "demo:simulator",
+        data: { enabled: false, lastTickAt: null },
+        updatedAt: now,
+      },
     },
     tables: createDefaultTables(),
     tags: [],
@@ -846,6 +851,73 @@ export function getSystemFlags() {
   return {
     serviceLocked:
       getState().history["system:flags"]?.data?.serviceActive === true,
+  }
+}
+
+export type DemoSimulatorConfig = {
+  enabled: boolean
+  lastTickAt: string | null
+}
+
+function demoSimulatorConfigFromState(state: RuntimeState): DemoSimulatorConfig {
+  const raw = state.history["demo:simulator"]?.data
+  if (!isPlainObject(raw)) {
+    return {
+      enabled: false,
+      lastTickAt: null,
+    }
+  }
+
+  return {
+    enabled: raw.enabled === true,
+    lastTickAt:
+      typeof raw.lastTickAt === "string" ? raw.lastTickAt : null,
+  }
+}
+
+export function getDemoSimulatorConfig(): DemoSimulatorConfig {
+  return demoSimulatorConfigFromState(getState())
+}
+
+export function setDemoSimulatorEnabled(enabled: boolean) {
+  const state = getState()
+  const current = demoSimulatorConfigFromState(state)
+
+  if (current.enabled === enabled) {
+    return current
+  }
+
+  state.history["demo:simulator"] = {
+    id: "demo:simulator",
+    data: {
+      enabled,
+      lastTickAt: current.lastTickAt,
+    },
+    updatedAt: nowIso(),
+  }
+
+  return {
+    enabled,
+    lastTickAt: current.lastTickAt,
+  }
+}
+
+export function setDemoSimulatorLastTick(lastTickAt: string) {
+  const state = getState()
+  const current = demoSimulatorConfigFromState(state)
+
+  state.history["demo:simulator"] = {
+    id: "demo:simulator",
+    data: {
+      enabled: current.enabled,
+      lastTickAt,
+    },
+    updatedAt: nowIso(),
+  }
+
+  return {
+    enabled: current.enabled,
+    lastTickAt,
   }
 }
 
