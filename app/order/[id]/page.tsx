@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { useRouter } from "next/navigation"
-import { EditPanel } from "@/components/order/EditPanel"
 import { QuantitySelector } from "@/components/order/QuantitySelector"
 import { BottomSheet } from "@/components/ui/BottomSheet"
 import { Button } from "@/components/ui/Button"
@@ -14,9 +13,13 @@ import {
   showCustomerDebugLabels,
 } from "@/lib/customerMode"
 import { fetchJson } from "@/lib/fetchJson"
+import { buildCartLineId, getMenuItemIdFromCartLineId } from "@/lib/cartLine"
 import { calculateCartTotals, calculateItemPrice } from "@/lib/pricing"
 import { useRealtimeSync } from "@/lib/useRealtimeSync"
 import {
+  EditSwap,
+  EditAddOn,
+  ItemEdits,
   MenuSection,
   MenuItem,
   SessionOrderProgressDTO,
@@ -41,6 +44,35 @@ type CustomerNotification = {
   createdAt: string
 }
 
+type RequiredChoiceGroup = {
+  from: string
+  options: string[]
+}
+
+function buildRequiredChoiceGroups(item: MenuItem): RequiredChoiceGroup[] {
+  const grouped = new Map<string, string[]>()
+  for (const swap of item.editableOptions?.swaps ?? []) {
+    const options = grouped.get(swap.from) ?? [swap.from]
+    if (!options.includes(swap.to)) {
+      options.push(swap.to)
+    }
+    grouped.set(swap.from, options)
+  }
+
+  return Array.from(grouped.entries()).map(([from, options]) => ({
+    from,
+    options,
+  }))
+}
+
+function hasAnyEdits(edits: ItemEdits | null) {
+  if (!edits) return false
+  if ((edits.removals ?? []).length > 0) return true
+  if ((edits.swaps ?? []).length > 0) return true
+  if ((edits.addOns ?? []).length > 0) return true
+  return false
+}
+
 function isTakeaway(tagId: string) {
   return tagId.trim().toLowerCase() === "takeaway"
 }
@@ -57,7 +89,7 @@ export default function TagOrderingPage({
   const ensureCustomerSession = useSessionStore(
     s => s.ensureCustomerSession
   )
-  const { items, setScope, addItem, updateItem, removeItem } =
+  const { items, setScope, addItem, updateItem } =
     useCartStore()
 
   const [menuSections, setMenuSections] = useState<MenuSection[]>([])
@@ -71,7 +103,13 @@ export default function TagOrderingPage({
     CustomerNotification[]
   >([])
   const [loading, setLoading] = useState(true)
-  const [editorItem, setEditorItem] = useState<MenuItem | null>(null)
+  const [configItem, setConfigItem] = useState<MenuItem | null>(null)
+  const [configQuantity, setConfigQuantity] = useState(1)
+  const [configSwapSelections, setConfigSwapSelections] = useState<
+    Record<string, string>
+  >({})
+  const [configRemovals, setConfigRemovals] = useState<string[]>([])
+  const [configAddOns, setConfigAddOns] = useState<EditAddOn[]>([])
   const [reviewOpen, setReviewOpen] = useState(false)
   const [selectedSectionId, setSelectedSectionId] = useState<
     string | null
@@ -328,6 +366,108 @@ export default function TagOrderingPage({
     )
   }, [menuSections, selectedSectionId])
 
+  const quantityByMenuItemId = useMemo(() => {
+    const map = new Map<string, number>()
+    for (const line of items) {
+      const menuItemId = getMenuItemIdFromCartLineId(line.id)
+      map.set(menuItemId, (map.get(menuItemId) ?? 0) + line.quantity)
+    }
+    return map
+  }, [items])
+
+  const requiredChoiceGroups = useMemo(
+    () => (configItem ? buildRequiredChoiceGroups(configItem) : []),
+    [configItem]
+  )
+
+  const missingRequiredCount = useMemo(() => {
+    return requiredChoiceGroups.filter(group => {
+      const selected = configSwapSelections[group.from]
+      return !selected
+    }).length
+  }, [requiredChoiceGroups, configSwapSelections])
+
+  const configEdits = useMemo<ItemEdits | null>(() => {
+    if (!configItem) return null
+
+    const swaps: EditSwap[] = []
+    for (const group of requiredChoiceGroups) {
+      const selected = configSwapSelections[group.from]
+      if (!selected || selected === group.from) continue
+      swaps.push({
+        from: group.from,
+        to: selected,
+      })
+    }
+
+    const edits: ItemEdits = {
+      removals: configRemovals.length > 0 ? [...configRemovals] : undefined,
+      swaps: swaps.length > 0 ? swaps : undefined,
+      addOns: configAddOns.length > 0 ? [...configAddOns] : undefined,
+    }
+
+    return hasAnyEdits(edits) ? edits : null
+  }, [
+    configItem,
+    requiredChoiceGroups,
+    configSwapSelections,
+    configRemovals,
+    configAddOns,
+  ])
+
+  const configUnitPrice = useMemo(() => {
+    if (!configItem) return 0
+    return calculateItemPrice(configItem.basePrice, configEdits)
+  }, [configItem, configEdits])
+
+  function openConfigurator(item: MenuItem) {
+    const groups = buildRequiredChoiceGroups(item)
+    const initialSelections: Record<string, string> = {}
+    for (const group of groups) {
+      initialSelections[group.from] = ""
+    }
+
+    setConfigItem(item)
+    setConfigQuantity(1)
+    setConfigSwapSelections(initialSelections)
+    setConfigRemovals([])
+    setConfigAddOns([])
+  }
+
+  function addConfiguredItemToBasket() {
+    if (!configItem || viewOnly) return
+    if (missingRequiredCount > 0) return
+
+    const lineId = buildCartLineId(configItem.id, configEdits)
+    const existingLine = items.find(line => line.id === lineId)
+    const unitPrice = calculateItemPrice(configItem.basePrice, configEdits)
+
+    if (existingLine) {
+      updateItem(lineId, {
+        quantity: existingLine.quantity + configQuantity,
+        unitPrice,
+        edits: configEdits,
+      })
+    } else {
+      addItem({
+        id: lineId,
+        name: configItem.name,
+        quantity: configQuantity,
+        edits: configEdits,
+        allergens: configItem.allergens,
+        unitPrice,
+        vatRate: configItem.vatRate,
+        station: configItem.station,
+      })
+    }
+
+    setConfigItem(null)
+    setConfigQuantity(1)
+    setConfigSwapSelections({})
+    setConfigRemovals([])
+    setConfigAddOns([])
+  }
+
   if (loading) {
     return (
       <div className="p-4 text-center text-sm text-secondary">
@@ -449,8 +589,7 @@ export default function TagOrderingPage({
 
             <div className="space-y-3">
               {selectedSection.items.map(item => {
-                const cartItem = items.find(i => i.id === item.id)
-                const quantity = cartItem?.quantity ?? 0
+                const quantity = quantityByMenuItemId.get(item.id) ?? 0
                 const itemUnavailable =
                   item.active === false ||
                   (typeof item.stockCount === "number" &&
@@ -462,10 +601,7 @@ export default function TagOrderingPage({
                     name={item.name}
                     description={item.description}
                     image={item.image}
-                    price={calculateItemPrice(
-                      item.basePrice,
-                      cartItem?.edits
-                    )}
+                    price={item.basePrice}
                     vatRate={item.vatRate}
                     allergens={item.allergens}
                     station={item.station}
@@ -479,46 +615,18 @@ export default function TagOrderingPage({
                       </div>
                     ) : (
                       <div className="flex flex-wrap items-center justify-between gap-2">
-                        <QuantitySelector
-                          value={quantity}
-                          onChange={nextQuantity => {
-                            if (nextQuantity === 0) {
-                              removeItem(item.id)
-                              return
-                            }
+                        <Button
+                          variant="primary"
+                          className="min-h-[40px]"
+                          onClick={() => openConfigurator(item)}
+                        >
+                          {item.editableOptions ? "Select options" : "Add item"}
+                        </Button>
 
-                            if (cartItem) {
-                              updateItem(item.id, {
-                                quantity: nextQuantity,
-                                unitPrice: calculateItemPrice(
-                                  item.basePrice,
-                                  cartItem.edits
-                                ),
-                              })
-                              return
-                            }
-
-                            addItem({
-                              id: item.id,
-                              name: item.name,
-                              quantity: nextQuantity,
-                              edits: null,
-                              allergens: item.allergens,
-                              unitPrice: item.basePrice,
-                              vatRate: item.vatRate,
-                              station: item.station,
-                            })
-                          }}
-                        />
-
-                        {item.editableOptions && quantity > 0 && (
-                          <Button
-                            variant="quiet"
-                            onClick={() => setEditorItem(item)}
-                            className="min-h-[40px]"
-                          >
-                            Customize
-                          </Button>
+                        {quantity > 0 && (
+                          <span className="status-chip status-chip-neutral">
+                            In basket: {quantity}
+                          </span>
                         )}
                       </div>
                     )}
@@ -555,24 +663,138 @@ export default function TagOrderingPage({
         </button>
       )}
 
-      {editorItem && (
+      {configItem && (
         <BottomSheet
-          title={`Customize ${editorItem.name}`}
-          onClose={() => setEditorItem(null)}
+          title={`Configure ${configItem.name}`}
+          onClose={() => setConfigItem(null)}
+          primaryAction={{
+            label: "Add to basket",
+            onClick: addConfiguredItemToBasket,
+            disabled: missingRequiredCount > 0 || configQuantity < 1,
+          }}
         >
-          <EditPanel
-            item={editorItem}
-            value={items.find(i => i.id === editorItem.id)?.edits}
-            onChange={edits => {
-              updateItem(editorItem.id, {
-                edits,
-                unitPrice: calculateItemPrice(
-                  editorItem.basePrice,
-                  edits
-                ),
-              })
-            }}
-          />
+          <div className="space-y-3">
+            {requiredChoiceGroups.length > 0 && (
+              <Card variant="accent">
+                <div className="space-y-2">
+                  <div className="text-xs font-semibold uppercase tracking-[0.12em] text-muted">
+                    Required picks
+                  </div>
+                  {requiredChoiceGroups.map(group => (
+                    <label
+                      key={group.from}
+                      className="flex items-center gap-2"
+                    >
+                      <span className="min-w-[120px] text-sm text-secondary">
+                        Choose {group.from}
+                      </span>
+                      <select
+                        className="w-full rounded-[var(--radius-control)] border border-[var(--border)] bg-transparent px-2 py-1.5 text-sm"
+                        value={configSwapSelections[group.from] ?? ""}
+                        onChange={event =>
+                          setConfigSwapSelections(prev => ({
+                            ...prev,
+                            [group.from]: event.target.value,
+                          }))
+                        }
+                      >
+                        <option value="">Select...</option>
+                        {group.options.map(option => (
+                          <option key={`${group.from}-${option}`} value={option}>
+                            {option}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  ))}
+                </div>
+              </Card>
+            )}
+
+            {(configItem.editableOptions?.removals ?? []).length > 0 && (
+              <Card variant="accent">
+                <div className="space-y-2">
+                  <div className="text-xs font-semibold uppercase tracking-[0.12em] text-muted">
+                    Optional removals
+                  </div>
+                  {(configItem.editableOptions?.removals ?? []).map(removal => (
+                    <label
+                      key={removal}
+                      className="flex items-center gap-2 text-sm"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={configRemovals.includes(removal)}
+                        onChange={event => {
+                          setConfigRemovals(prev =>
+                            event.target.checked
+                              ? [...prev, removal]
+                              : prev.filter(value => value !== removal)
+                          )
+                        }}
+                      />
+                      Remove {removal}
+                    </label>
+                  ))}
+                </div>
+              </Card>
+            )}
+
+            {(configItem.editableOptions?.addOns ?? []).length > 0 && (
+              <Card variant="accent">
+                <div className="space-y-2">
+                  <div className="text-xs font-semibold uppercase tracking-[0.12em] text-muted">
+                    Optional add-ons
+                  </div>
+                  {(configItem.editableOptions?.addOns ?? []).map(addOn => {
+                    const checked = configAddOns.some(
+                      selected => selected.name === addOn.name
+                    )
+                    return (
+                      <label
+                        key={addOn.name}
+                        className="flex items-center gap-2 text-sm"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={event => {
+                            setConfigAddOns(prev =>
+                              event.target.checked
+                                ? [...prev, addOn]
+                                : prev.filter(item => item.name !== addOn.name)
+                            )
+                          }}
+                        />
+                        {addOn.name} (+£{addOn.priceDelta.toFixed(2)})
+                      </label>
+                    )
+                  })}
+                </div>
+              </Card>
+            )}
+
+            <Card variant="accent">
+              <div className="space-y-3">
+                <div className="text-xs font-semibold uppercase tracking-[0.12em] text-muted">
+                  Quantity
+                </div>
+                <QuantitySelector
+                  min={1}
+                  value={configQuantity}
+                  onChange={setConfigQuantity}
+                />
+                <div className="text-sm text-secondary">
+                  Line total: £{(configUnitPrice * configQuantity).toFixed(2)}
+                </div>
+                {missingRequiredCount > 0 && (
+                  <div className="status-chip status-chip-warning inline-flex">
+                    Choose all required picks to continue
+                  </div>
+                )}
+              </div>
+            </Card>
+          </div>
         </BottomSheet>
       )}
 

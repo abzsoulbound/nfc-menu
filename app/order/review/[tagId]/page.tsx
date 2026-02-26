@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/Button"
 import { Card } from "@/components/ui/Card"
 import { Modal } from "@/components/ui/Modal"
 import { Toast } from "@/components/ui/Toast"
+import { getMenuItemIdFromCartLineId } from "@/lib/cartLine"
 import { toCustomerErrorMessage } from "@/lib/customerCopy"
 import { fetchJson } from "@/lib/fetchJson"
 import { calculateCartTotals } from "@/lib/pricing"
@@ -78,7 +79,7 @@ export default function PerUserReviewPage({
 
     try {
       const payload: OrderSubmissionItemDTO[] = items.map(i => ({
-        itemId: i.id,
+        itemId: getMenuItemIdFromCartLineId(i.id),
         name: i.name,
         quantity: i.quantity,
         edits: i.edits,
