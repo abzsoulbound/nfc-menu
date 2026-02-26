@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
+  <title id="title">Fable Stores logo</title>
+  <desc id="desc">Circular emblem with Fable Stores lettering.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#f3d9ab" />
+      <stop offset="100%" stop-color="#cf8b4b" />
+    </linearGradient>
+    <linearGradient id="mark" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#3e2a19" />
+      <stop offset="100%" stop-color="#1f140c" />
+    </linearGradient>
+  </defs>
+  <circle cx="256" cy="256" r="248" fill="url(#bg)" />
+  <circle cx="256" cy="256" r="226" fill="#fff5e8" opacity="0.82" />
+  <circle cx="256" cy="256" r="194" fill="#fef7ee" stroke="#3d2a1a" stroke-width="10" />
+  <path d="M160 168h192v26H189v55h146v26H189v89h-29z" fill="url(#mark)" />
+  <path d="M286 252c0-44 30-73 75-73 29 0 48 11 61 28l-24 15c-8-10-20-17-37-17-26 0-44 18-44 47s18 47 44 47c17 0 29-7 37-17l24 15c-13 17-32 28-61 28-45 0-75-29-75-73z" fill="url(#mark)" />
+  <text x="256" y="374" text-anchor="middle" font-family="Georgia, Times, serif" font-size="34" letter-spacing="7" fill="#2b1d12">FABLE STORES</text>
+</svg>
