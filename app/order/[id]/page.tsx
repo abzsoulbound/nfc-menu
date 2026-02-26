@@ -1,7 +1,6 @@
 "use client"
 
 import { useCallback, useEffect, useMemo, useState } from "react"
-import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { EditPanel } from "@/components/order/EditPanel"
 import { QuantitySelector } from "@/components/order/QuantitySelector"
@@ -44,10 +43,6 @@ type CustomerNotification = {
 
 function isTakeaway(tagId: string) {
   return tagId.trim().toLowerCase() === "takeaway"
-}
-
-function customerContextLabel(takeaway: boolean) {
-  return takeaway ? "Takeaway" : "Table menu"
 }
 
 export default function TagOrderingPage({
@@ -344,52 +339,6 @@ export default function TagOrderingPage({
   return (
     <div className="relative px-4 py-4 md:px-6 md:py-6">
       <div className="mx-auto max-w-[1120px] space-y-4">
-        <section
-          className={`rounded-2xl border border-[var(--border)] surface-secondary p-3 ${
-            showCustomerDebug ? "sticky top-[70px] z-30 shadow-[var(--shadow-soft)]" : ""
-          }`}
-        >
-          <div className="flex flex-wrap items-center gap-2">
-            <Link
-              href="/menu"
-              className="focus-ring inline-flex min-h-[36px] items-center justify-center rounded-[var(--radius-control)] border border-[var(--border)] bg-[var(--accent-quiet)] px-3 text-sm font-semibold"
-            >
-              Back
-            </Link>
-            {!takeaway &&
-              tableState?.tableNumber &&
-              tableState.tableNumber > 0 && (
-                <Link
-                  href={`/pay/${tableState.tableNumber}`}
-                  className="focus-ring inline-flex min-h-[36px] items-center justify-center rounded-[var(--radius-control)] border border-[var(--border)] bg-[var(--accent-quiet)] px-3 text-sm font-semibold"
-                >
-                  Pay bill
-                </Link>
-              )}
-            {showCustomerDebug && (
-              <>
-                <span className="status-chip status-chip-neutral">
-                  {customerContextLabel(takeaway)}
-                </span>
-                {sessionReady && (
-                  <span className="status-chip status-chip-neutral mono-font">
-                    {sessionReady.slice(0, 8)}
-                  </span>
-                )}
-                {viewOnly ? (
-                  <span className="status-chip status-chip-danger">
-                    Unavailable
-                  </span>
-                ) : (
-                  <span className="status-chip status-chip-success">
-                    Available
-                  </span>
-                )}
-              </>
-            )}
-          </div>
-        </section>
-
         {menuSections.length > 0 && (
           <div className="rounded-2xl border border-[var(--border)] surface-secondary p-3">
             <div className="flex flex-wrap gap-2">
