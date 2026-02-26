@@ -472,7 +472,7 @@ export default function TagOrderingPage({
       <div className="mx-auto max-w-[1120px] space-y-4">
         {menuSections.length > 0 && (
           <div className="rounded-2xl border border-[var(--border)] surface-secondary p-3">
-            <div className="flex flex-wrap gap-2">
+            <div className="flex gap-2 overflow-x-auto pb-1">
               {menuSections.map(section => {
                 const active = section.id === selectedSection?.id
                 return (
@@ -480,7 +480,7 @@ export default function TagOrderingPage({
                     key={section.id}
                     type="button"
                     onClick={() => setSelectedSectionId(section.id)}
-                    className={`focus-ring rounded-full border px-3 py-1.5 text-xs font-semibold transition-all duration-150 ${
+                    className={`focus-ring shrink-0 whitespace-nowrap rounded-full border px-3 py-1.5 text-xs font-semibold transition-all duration-150 ${
                       active
                         ? "border-transparent bg-[var(--accent-action)] text-white"
                         : "border-[var(--border)] bg-transparent text-[var(--text-primary)]"
