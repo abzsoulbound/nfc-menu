@@ -1,14 +1,38 @@
 :root {
-  --bg-primary: #070E1A;
-  --bg-secondary: #0B1626;
-  --bg-accent: #101F36;
+  --bg-primary: #efe7d6;
+  --bg-secondary: #f7efde;
+  --bg-accent: #eadcbf;
 
-  --text-primary: #E6ECF3;
-  --text-secondary: #A9B4C6;
+  --surface-primary: #f7efde;
+  --surface-secondary: #fbf4e7;
+  --surface-accent: #f1e3c9;
+  --surface-elevated: #fffaf0;
 
-  --chip-inactive: #141F33;
-  --chip-active: #1E4BFF;
+  --text-primary: #2c2418;
+  --text-secondary: #5f4f3a;
+  --text-muted: #807058;
 
-  --accent-action: #3B82F6;
-  --border: #1A2740;
+  --accent-action: #7d5a2a;
+  --accent-action-strong: #66461e;
+  --accent-quiet: #f2e6cf;
+
+  --success-bg: #e4f3e8;
+  --success-fg: #2d6a4a;
+  --warning-bg: #fff1d7;
+  --warning-fg: #8a6115;
+  --danger-bg: #ffe3df;
+  --danger-fg: #8f2e2e;
+  --neutral-bg: #efe2c9;
+  --neutral-fg: #554734;
+
+  --border: #d7c3a2;
+  --focus: #8f6a3a;
+
+  --shadow-soft: 0 24px 60px -36px rgba(66, 44, 20, 0.45);
+  --shadow-hard: 0 18px 36px -26px rgba(8, 18, 34, 0.9);
+
+  --radius-card: 20px;
+  --radius-control: 12px;
+
+  --shell-max-width: 1120px;
 }

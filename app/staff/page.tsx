@@ -1,130 +1,295 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import Link from "next/link"
-import { Card } from "@/components/ui/Card"
 import { Badge } from "@/components/ui/Badge"
-import { Divider } from "@/components/ui/Divider"
+import { Button } from "@/components/ui/Button"
+import { Card } from "@/components/ui/Card"
+import { fetchJson } from "@/lib/fetchJson"
+import { queueUrgencyFromMinutes, queueUrgencyLabel } from "@/lib/ui"
+import { useRealtimeSync } from "@/lib/useRealtimeSync"
+import {
+  ReadyQueueItemDTO,
+  SessionDTO,
+  TableDTO,
+  TagDTO,
+} from "@/lib/types"
 
-type Tag = {
-  id: string
-  tableNumber: number | null
-  activeSessionCount: number
-  lastSeenAt: string
+type ReadyGroup = {
+  tableNumber: number
+  quantity: number
+  oldestSubmittedAt: string
 }
 
-type Table = {
-  id: string
-  number: number
-  locked: boolean
-  stale: boolean
-  closed: boolean
-}
-
-type Session = {
-  id: string
-  origin: "CUSTOMER" | "STAFF"
-  tagId: string | null
-  tableId: string | null
-  lastActivityAt: string
+function minutesSince(ts: string) {
+  return Math.floor(
+    (Date.now() - new Date(ts).getTime()) / 60000
+  )
 }
 
 export default function StaffDashboard() {
-  const [tags, setTags] = useState<Tag[]>([])
-  const [tables, setTables] = useState<Table[]>([])
-  const [sessions, setSessions] = useState<Session[]>([])
+  const [tags, setTags] = useState<TagDTO[]>([])
+  const [tables, setTables] = useState<TableDTO[]>([])
+  const [sessions, setSessions] = useState<SessionDTO[]>([])
+  const [readyItems, setReadyItems] = useState<
+    ReadyQueueItemDTO[]
+  >([])
 
-  async function fetchAll() {
-    const [tagsRes, tablesRes, sessionsRes] = await Promise.all([
-      fetch("/api/tags", { cache: "no-store" }),
-      fetch("/api/tables", { cache: "no-store" }),
-      fetch("/api/sessions", { cache: "no-store" }),
-    ])
+  const fetchAll = useCallback(async () => {
+    const [
+      tagsResult,
+      tablesResult,
+      sessionsResult,
+      readyResult,
+    ] =
+      await Promise.allSettled([
+        fetchJson<TagDTO[]>("/api/tags", {
+          cache: "no-store",
+        }),
+        fetchJson<TableDTO[]>("/api/tables", {
+          cache: "no-store",
+        }),
+        fetchJson<SessionDTO[]>("/api/sessions", {
+          cache: "no-store",
+        }),
+        fetchJson<ReadyQueueItemDTO[]>(
+          "/api/orders?view=ready",
+          {
+            cache: "no-store",
+          }
+        ),
+      ])
 
-    setTags(await tagsRes.json())
-    setTables(await tablesRes.json())
-    setSessions(await sessionsRes.json())
-  }
-
-  useEffect(() => {
-    fetchAll()
-    const interval = setInterval(fetchAll, 5000)
-    return () => clearInterval(interval)
+    if (tagsResult.status === "fulfilled") {
+      setTags(tagsResult.value)
+    }
+    if (tablesResult.status === "fulfilled") {
+      setTables(tablesResult.value)
+    }
+    if (sessionsResult.status === "fulfilled") {
+      setSessions(sessionsResult.value)
+    }
+    if (readyResult.status === "fulfilled") {
+      setReadyItems(readyResult.value)
+    }
   }, [])
 
-  function minutesSince(ts: string) {
-    return Math.floor(
-      (Date.now() - new Date(ts).getTime()) / 60000
+  useEffect(() => {
+    fetchAll().catch(() => {})
+    const interval = setInterval(() => {
+      fetchAll().catch(() => {})
+    }, 5000)
+    return () => clearInterval(interval)
+  }, [fetchAll])
+
+  useRealtimeSync(() => {
+    fetchAll().catch(() => {})
+  })
+
+  const activeTables = tables.filter(t => !t.closed)
+  const unassignedTags = tags.filter(t => t.tableNumber === null)
+
+  const readyByTable = useMemo(() => {
+    const grouped: Record<number, ReadyGroup> = {}
+    for (const item of readyItems) {
+      if (!grouped[item.tableNumber]) {
+        grouped[item.tableNumber] = {
+          tableNumber: item.tableNumber,
+          quantity: 0,
+          oldestSubmittedAt: item.submittedAt,
+        }
+      }
+      grouped[item.tableNumber].quantity += item.quantity
+      if (
+        new Date(item.submittedAt).getTime() <
+        new Date(grouped[item.tableNumber].oldestSubmittedAt).getTime()
+      ) {
+        grouped[item.tableNumber].oldestSubmittedAt = item.submittedAt
+      }
+    }
+    return Object.values(grouped).sort(
+      (a, b) =>
+        new Date(a.oldestSubmittedAt).getTime() -
+        new Date(b.oldestSubmittedAt).getTime()
     )
+  }, [readyItems])
+
+  async function markDelivered(tableNumber: number) {
+    await fetchJson("/api/orders", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action: "DELIVER",
+        tableNumber,
+      }),
+    })
+    await fetchAll()
   }
 
-  const unassignedTags = tags.filter(t => t.tableNumber === null)
-  const activeTables = tables.filter(t => !t.closed)
-
   return (
-    <div className="p-4 space-y-6">
-      <div className="grid grid-cols-3 gap-4">
-        <Link href="/staff/tables">
-          <Card className="cursor-pointer">
-            <div className="text-lg font-semibold">Tables</div>
-            <div className="text-sm opacity-70">
-              {activeTables.length} active
+    <div className="px-4 py-5 md:px-6 md:py-6">
+      <div className="mx-auto max-w-[1440px] space-y-4">
+        <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
+          <Card variant="elevated">
+            <div className="text-xs uppercase tracking-[0.14em] text-muted">
+              Active tables
+            </div>
+            <div className="mt-1 text-3xl font-semibold">
+              {activeTables.length}
             </div>
           </Card>
-        </Link>
-
-        <Link href="/staff/tags">
-          <Card className="cursor-pointer">
-            <div className="text-lg font-semibold">NFC Tags</div>
-            <div className="text-sm opacity-70">
-              {tags.length} detected
+          <Card variant="elevated">
+            <div className="text-xs uppercase tracking-[0.14em] text-muted">
+              Ready items
+            </div>
+            <div className="mt-1 text-3xl font-semibold">
+              {readyItems.length}
             </div>
           </Card>
-        </Link>
-
-        <Link href="/staff/sessions">
-          <Card className="cursor-pointer">
-            <div className="text-lg font-semibold">Sessions</div>
-            <div className="text-sm opacity-70">
-              {sessions.length} active
+          <Card variant="elevated">
+            <div className="text-xs uppercase tracking-[0.14em] text-muted">
+              Unassigned tags
+            </div>
+            <div className="mt-1 text-3xl font-semibold">
+              {unassignedTags.length}
             </div>
           </Card>
-        </Link>
-      </div>
-
-      <Divider />
-
-      <div className="space-y-3">
-        <div className="text-sm font-semibold opacity-70">
-          Unassigned NFC tags
+          <Card variant="elevated">
+            <div className="text-xs uppercase tracking-[0.14em] text-muted">
+              Sessions
+            </div>
+            <div className="mt-1 text-3xl font-semibold">
+              {sessions.length}
+            </div>
+          </Card>
         </div>
 
-        {unassignedTags.map(tag => (
-          <Card key={tag.id}>
-            <div className="flex justify-between items-center">
-              <div className="space-y-1">
-                <div className="font-mono text-sm">
-                  {tag.id}
-                </div>
-                <div className="text-xs opacity-60">
-                  {tag.activeSessionCount} session(s)
-                </div>
-              </div>
+        <div className="grid gap-4 lg:grid-cols-[1.7fr_1fr]">
+          <Card className="space-y-3">
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg font-semibold tracking-tight">
+                Ready to deliver
+              </h2>
+              <Badge variant="neutral">
+                Oldest first
+              </Badge>
+            </div>
 
-              <div className="flex items-center gap-2">
-                <Badge>
-                  {minutesSince(tag.lastSeenAt)}m
-                </Badge>
-              </div>
+            <div className="space-y-2">
+              {readyByTable.map(table => {
+                const age = minutesSince(table.oldestSubmittedAt)
+                const urgency = queueUrgencyFromMinutes(age)
+
+                return (
+                  <Card key={table.tableNumber} variant="accent">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <div>
+                        <div className="text-base font-semibold">
+                          {table.tableNumber === 0
+                            ? "Takeaway"
+                            : `Table ${table.tableNumber}`}
+                        </div>
+                        <div className="text-sm text-secondary">
+                          {table.quantity} item(s) ready
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        <Badge
+                          variant={
+                            urgency === "critical"
+                              ? "danger"
+                              : urgency === "watch"
+                              ? "warning"
+                              : "success"
+                          }
+                        >
+                          {queueUrgencyLabel(urgency)} | {age}m
+                        </Badge>
+
+                        <Button
+                          variant="primary"
+                          className="min-h-[52px]"
+                          onClick={() =>
+                            markDelivered(table.tableNumber).catch(() => {})
+                          }
+                        >
+                          Mark delivered
+                        </Button>
+                      </div>
+                    </div>
+                  </Card>
+                )
+              })}
+
+              {readyByTable.length === 0 && (
+                <div className="py-10 text-center text-sm text-secondary">
+                  No ready items.
+                </div>
+              )}
             </div>
           </Card>
-        ))}
 
-        {unassignedTags.length === 0 && (
-          <div className="opacity-60 text-center">
-            No unassigned tags
+          <Card className="space-y-3">
+            <h2 className="text-lg font-semibold tracking-tight">
+              Unassigned tags
+            </h2>
+            <div className="space-y-2">
+              {unassignedTags.map(tag => (
+                <Card key={tag.id} variant="accent">
+                  <div className="flex items-center justify-between gap-2">
+                    <div>
+                      <div className="mono-font text-sm font-semibold">
+                        {tag.id}
+                      </div>
+                      <div className="text-xs text-secondary">
+                        {tag.activeSessionCount} session(s)
+                      </div>
+                    </div>
+                    <Badge variant="neutral">
+                      {minutesSince(tag.lastSeenAt)}m
+                    </Badge>
+                  </div>
+                </Card>
+              ))}
+
+              {unassignedTags.length === 0 && (
+                <div className="py-6 text-center text-sm text-secondary">
+                  No unassigned tags.
+                </div>
+              )}
+            </div>
+          </Card>
+        </div>
+
+        <Card variant="accent">
+          <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
+            <Link
+              href="/waiter/tables"
+              className="focus-ring inline-flex min-h-[52px] items-center justify-center rounded-[var(--radius-control)] border border-[var(--border)] bg-[var(--accent-quiet)] px-4 py-2 text-sm font-semibold"
+            >
+              Tables
+            </Link>
+            <Link
+              href="/waiter/tags"
+              className="focus-ring inline-flex min-h-[52px] items-center justify-center rounded-[var(--radius-control)] border border-[var(--border)] bg-[var(--accent-quiet)] px-4 py-2 text-sm font-semibold"
+            >
+              Tags
+            </Link>
+            <Link
+              href="/waiter/sessions"
+              className="focus-ring inline-flex min-h-[52px] items-center justify-center rounded-[var(--radius-control)] border border-[var(--border)] bg-[var(--accent-quiet)] px-4 py-2 text-sm font-semibold"
+            >
+              Sessions
+            </Link>
+            <Link
+              href="/order/takeaway"
+              className="focus-ring inline-flex min-h-[52px] items-center justify-center rounded-[var(--radius-control)] border border-[var(--border)] bg-[var(--accent-quiet)] px-4 py-2 text-sm font-semibold"
+            >
+              Takeaway
+            </Link>
           </div>
-        )}
+        </Card>
       </div>
     </div>
   )

@@ -8,14 +8,14 @@ export function validateOrder(order: any) {
 
 export function splitByStation(items: any[]) {
   return {
-    kitchen: items.filter(i => i.station === "kitchen"),
-    bar: items.filter(i => i.station === "bar"),
+    kitchen: items.filter(i => i.station === "KITCHEN"),
+    bar: items.filter(i => i.station === "BAR"),
   }
 }
 
 export function markStationComplete(
   orderId: string,
-  station: "kitchen" | "bar"
+  station: "KITCHEN" | "BAR"
 ) {
   log("INFO", "Station completed", { orderId, station })
 }

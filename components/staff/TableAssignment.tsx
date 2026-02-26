@@ -1,6 +1,9 @@
 "use client"
 
+import { Badge } from "@/components/ui/Badge"
+import { Button } from "@/components/ui/Button"
 import { Card } from "@/components/ui/Card"
+import { fetchJson } from "@/lib/fetchJson"
 
 export function TableAssignment({
   tableId,
@@ -13,10 +16,10 @@ export function TableAssignment({
   tableNumber: number
   tags: { id: string }[]
   allTags: { id: string; tableNumber: number | null }[]
-  onChange: () => void
+  onChange: () => void | Promise<void>
 }) {
-  async function assign(tagId: string | null) {
-    await fetch("/api/tags", {
+  async function assign(tagId: string) {
+    await fetchJson("/api/tags", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -24,36 +27,78 @@ export function TableAssignment({
         tableId,
       }),
     })
-    onChange()
+    await onChange()
   }
 
+  async function unassign(tagId: string) {
+    await fetchJson("/api/tags", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        tagId,
+        tableId: null,
+      }),
+    })
+    await onChange()
+  }
+
+  const availableTags = allTags.filter(
+    t => t.tableNumber === null
+  )
+
   return (
-    <Card>
-      <div className="space-y-2">
-        <div className="text-sm opacity-70">
-          Assigned tags
+    <div className="grid gap-3 md:grid-cols-2">
+      <Card variant="accent" className="space-y-2">
+        <div className="text-sm font-semibold tracking-tight">
+          Assigned tags | Table {tableNumber}
         </div>
 
-        {tags.map(t => (
-          <div key={t.id}>{t.id}</div>
-        ))}
+        {tags.length === 0 && (
+          <div className="text-sm text-secondary">
+            No tags assigned.
+          </div>
+        )}
 
-        <div className="text-sm opacity-70 mt-2">
-          Assign new
-        </div>
-
-        {allTags
-          .filter(t => t.tableNumber === null)
-          .map(t => (
-            <div
-              key={t.id}
-              className="cursor-pointer"
-              onClick={() => assign(t.id)}
+        {tags.map(tag => (
+          <div
+            key={tag.id}
+            className="flex items-center justify-between gap-2 rounded-[var(--radius-control)] border border-[var(--border)] surface-secondary px-3 py-2"
+          >
+            <div className="mono-font text-sm">{tag.id}</div>
+            <Button
+              variant="ghost"
+              className="min-h-[36px] px-3"
+              onClick={() => unassign(tag.id).catch(() => {})}
             >
-              {t.id}
-            </div>
-          ))}
-      </div>
-    </Card>
+              Unassign
+            </Button>
+          </div>
+        ))}
+      </Card>
+
+      <Card variant="accent" className="space-y-2">
+        <div className="text-sm font-semibold tracking-tight">
+          Assign new tag
+        </div>
+
+        {availableTags.length === 0 && (
+          <div className="text-sm text-secondary">
+            No unassigned tags available.
+          </div>
+        )}
+
+        {availableTags.map(tag => (
+          <button
+            key={tag.id}
+            type="button"
+            className="focus-ring flex w-full items-center justify-between rounded-[var(--radius-control)] border border-[var(--border)] surface-secondary px-3 py-2 text-left"
+            onClick={() => assign(tag.id).catch(() => {})}
+          >
+            <span className="mono-font text-sm">{tag.id}</span>
+            <Badge variant="neutral">Assign</Badge>
+          </button>
+        ))}
+      </Card>
+    </div>
   )
 }

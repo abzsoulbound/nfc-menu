@@ -1,8 +1,10 @@
 "use client"
 
 import { useState } from "react"
-import { Card } from "@/components/ui/Card"
 import { Button } from "@/components/ui/Button"
+import { Card } from "@/components/ui/Card"
+import { fetchJson } from "@/lib/fetchJson"
+import { Station } from "@/lib/types"
 
 export function StaffMessagePanel({
   tableId,
@@ -10,12 +12,12 @@ export function StaffMessagePanel({
   tableId: string
 }) {
   const [message, setMessage] = useState("")
-  const [target, setTarget] = useState<"KITCHEN" | "BAR">("KITCHEN")
+  const [target, setTarget] = useState<Station>("KITCHEN")
 
   async function send() {
     if (!message.trim()) return
 
-    await fetch("/api/staff", {
+    await fetchJson("/api/staff", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -33,9 +35,7 @@ export function StaffMessagePanel({
       <div className="space-y-2">
         <select
           value={target}
-          onChange={e =>
-            setTarget(e.target.value as any)
-          }
+          onChange={e => setTarget(e.target.value as Station)}
         >
           <option value="KITCHEN">Kitchen</option>
           <option value="BAR">Bar</option>
@@ -47,7 +47,7 @@ export function StaffMessagePanel({
           placeholder="Message for station"
         />
 
-        <Button onClick={send}>
+        <Button onClick={() => send().catch(() => {})}>
           Send
         </Button>
       </div>

@@ -7,11 +7,140 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+enum SessionOrigin {
+  CUSTOMER
+  STAFF
+}
+
+enum Station {
+  KITCHEN
+  BAR
+}
+
+enum TableCloseStatus {
+  OPEN
+  PAID
+  UNPAID
+}
+
+enum TableBillStatus {
+  OPEN
+  PARTIAL
+  PAID
+  UNPAID
+}
+
+enum PrintJobStatus {
+  QUEUED
+  PRINTED
+  FAILED
+}
+
+model History {
+  id        String   @id
+  data      Json
+  updatedAt DateTime @updatedAt
+}
+
+model Table {
+  id                       String            @id @default(uuid())
+  number                   Int               @unique
+  locked                   Boolean           @default(false)
+  stale                    Boolean           @default(false)
+  closeStatus              TableCloseStatus  @default(OPEN)
+  openedAt                 DateTime          @default(now())
+  contributionWindowEndsAt DateTime?
+  tags                     NfcTag[]
+  sessions                 Session[]
+  orders                   Order[]
+  staffMessages            StaffMessage[]
+  createdAt                DateTime          @default(now())
+}
+
 model NfcTag {
-  id         String   @id @default(uuid())
-  createdAt  DateTime @default(now())
+  id         String    @id
+  active     Boolean   @default(true)
+  lastSeenAt DateTime  @default(now())
+  tableId    String?
+  table      Table?    @relation(fields: [tableId], references: [id])
+  createdAt  DateTime  @default(now())
   assignment TableAssignment?
   sessions   Session[]
+  orders     Order[]
+
+  @@index([tableId])
+}
+
+model Session {
+  id             String       @id @default(uuid())
+  origin         SessionOrigin @default(CUSTOMER)
+  tagId          String?
+  tag            NfcTag?      @relation(fields: [tagId], references: [id])
+  tableId        String?
+  table          Table?       @relation(fields: [tableId], references: [id])
+  createdAt      DateTime     @default(now())
+  lastActivityAt DateTime     @default(now())
+  cart           SessionCart?
+  orders         Order[]
+
+  @@index([lastActivityAt])
+}
+
+model SessionCart {
+  id        String   @id @default(uuid())
+  sessionId String   @unique
+  session   Session  @relation(fields: [sessionId], references: [id])
+  items     CartItem[]
+}
+
+model CartItem {
+  id       String      @id @default(uuid())
+  cartId   String
+  cart     SessionCart @relation(fields: [cartId], references: [id])
+  name     String
+  quantity Int
+}
+
+model Order {
+  id          String      @id @default(uuid())
+  sessionId   String
+  session     Session     @relation(fields: [sessionId], references: [id])
+  tagId       String
+  tag         NfcTag      @relation(fields: [tagId], references: [id])
+  tableId     String
+  table       Table       @relation(fields: [tableId], references: [id])
+  submittedAt DateTime    @default(now())
+  items       OrderItem[]
+
+  @@index([tableId, submittedAt])
+}
+
+model OrderItem {
+  id            String    @id @default(uuid())
+  orderId       String
+  order         Order     @relation(fields: [orderId], references: [id])
+  itemId        String
+  name          String
+  quantity      Int
+  edits         Json?
+  allergens     Json?
+  unitPrice     Float
+  vatRate       Float
+  station       Station
+  kitchenSentAt DateTime?
+  barSentAt     DateTime?
+
+  @@index([station, kitchenSentAt])
+  @@index([station, barSentAt])
+}
+
+model StaffMessage {
+  id        String   @id @default(uuid())
+  tableId   String
+  table     Table    @relation(fields: [tableId], references: [id])
+  target    Station
+  message   String
+  createdAt DateTime @default(now())
 }
 
 model TableAssignment {
@@ -24,29 +153,6 @@ model TableAssignment {
   tickets   KitchenTicket[]
 }
 
-model Session {
-  id        String   @id @default(uuid())
-  tagId     String
-  tag       NfcTag   @relation(fields: [tagId], references: [id])
-  createdAt DateTime @default(now())
-  cart      SessionCart?
-}
-
-model SessionCart {
-  id        String   @id @default(uuid())
-  sessionId String   @unique
-  session   Session  @relation(fields: [sessionId], references: [id])
-  items     CartItem[]
-}
-
-model CartItem {
-  id        String      @id @default(uuid())
-  cartId   String
-  cart     SessionCart @relation(fields: [cartId], references: [id])
-  name     String
-  quantity Int
-}
-
 model TableDraft {
   id        String   @id @default(uuid())
   tableId   String
@@ -57,11 +163,11 @@ model TableDraft {
 
 model DraftItem {
   id        String     @id @default(uuid())
-  draftId  String
-  draft    TableDraft @relation(fields: [draftId], references: [id])
-  memberId Int
-  name     String
-  quantity Int
+  draftId   String
+  draft     TableDraft @relation(fields: [draftId], references: [id])
+  memberId  Int
+  name      String
+  quantity  Int
 }
 
 model KitchenTicket {
@@ -74,7 +180,7 @@ model KitchenTicket {
 }
 
 model TicketItem {
-  id        String         @id @default(uuid())
+  id       String        @id @default(uuid())
   ticketId String
   ticket   KitchenTicket @relation(fields: [ticketId], references: [id])
   name     String
@@ -93,4 +199,129 @@ model SystemEvent {
   id        String   @id @default(uuid())
   type      String
   createdAt DateTime @default(now())
+}
+
+model RuntimeMeta {
+  id        String   @id
+  menu      Json
+  flags     Json
+  updatedAt DateTime @updatedAt
+}
+
+model RuntimeTableState {
+  id                       String          @id
+  number                   Int             @unique
+  locked                   Boolean
+  stale                    Boolean
+  closeStatus              TableCloseStatus
+  billStatus               TableBillStatus @default(OPEN)
+  splitCount               Int             @default(1)
+  openedAt                 DateTime
+  contributionWindowEndsAt DateTime
+}
+
+model RuntimeTagState {
+  id         String   @id
+  active     Boolean
+  tableId    String?
+  lastSeenAt DateTime
+  createdAt  DateTime
+}
+
+model RuntimeSessionState {
+  id             String        @id
+  origin         SessionOrigin
+  tagId          String?
+  tableId        String?
+  lastActivityAt DateTime
+  createdAt      DateTime
+}
+
+model RuntimeOrderState {
+  id          String              @id
+  sessionId   String
+  tagId       String
+  tableId     String
+  tableNumber Int
+  submittedAt DateTime
+  items       RuntimeOrderLineState[]
+}
+
+model RuntimeOrderLineState {
+  id             String    @id
+  orderId         String
+  order           RuntimeOrderState @relation(fields: [orderId], references: [id])
+  itemId          String
+  name            String
+  quantity        Int
+  edits           Json?
+  allergens       Json?
+  unitPrice       Float
+  vatRate         Float
+  station         Station
+  kitchenStartedAt DateTime?
+  kitchenSentAt   DateTime?
+  barStartedAt    DateTime?
+  barSentAt       DateTime?
+  deliveredAt     DateTime?
+  voidedAt        DateTime?
+  voidReason      String?
+  compedAt        DateTime?
+  compReason      String?
+  refireOfLineId  String?
+}
+
+model RuntimeStaffMessageState {
+  id        String   @id
+  tableId   String
+  target    Station
+  message   String
+  createdAt DateTime
+}
+
+model RuntimeReprintState {
+  id          String   @id
+  tableNumber Int
+  createdAt   DateTime
+}
+
+model RuntimePaymentState {
+  id        String         @id
+  tableId   String
+  amount    Float
+  method    String
+  status    TableBillStatus
+  note      String?
+  createdAt DateTime
+}
+
+model RuntimePrintJobState {
+  id          String         @id
+  tableNumber Int
+  station     Station
+  status      PrintJobStatus
+  attempts    Int
+  reason      String
+  note        String?
+  createdAt   DateTime
+  updatedAt   DateTime
+}
+
+model RuntimeAuditState {
+  id        String   @id
+  createdAt DateTime
+  actorRole String
+  actorId   String
+  action    String
+  targetType String
+  targetId  String
+  before    Json?
+  after     Json?
+  note      String?
+}
+
+model RuntimeIdempotencyState {
+  key          String   @id
+  createdAt    DateTime
+  responseJson Json
 }

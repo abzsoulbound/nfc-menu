@@ -1,0 +1,9 @@
+{
+    "OCRExitCode":  3,
+    "IsErroredOnProcessing":  true,
+    "ErrorMessage":  [
+                         "E214:File failed validation. File size exceeds the maximum size limit. Maximum size limit 1024 KB"
+                     ],
+    "ErrorDetails":  "",
+    "ProcessingTimeInMilliseconds":  "78"
+}

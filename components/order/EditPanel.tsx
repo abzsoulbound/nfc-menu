@@ -1,62 +1,129 @@
 import { Card } from "@/components/ui/Card"
+import { ItemEdits } from "@/lib/types"
+
+type EditableItem = {
+  editableOptions?: {
+    removals?: string[]
+    swaps?: { from: string; to: string }[]
+    addOns?: { name: string; priceDelta: number }[]
+  }
+}
+
+function applySwapChoice(
+  current: ItemEdits,
+  from: string,
+  to: string
+) {
+  const swaps = (current.swaps ?? []).filter(s => s.from !== from)
+  if (to !== from) {
+    swaps.push({ from, to })
+  }
+  return {
+    ...current,
+    swaps,
+  }
+}
 
 export function EditPanel({
   item,
   value,
   onChange,
 }: {
-  item: {
-    editableOptions: {
-      removals?: string[]
-      swaps?: { from: string; to: string }[]
-      addOns?: { name: string; priceDelta: number }[]
-    }
-  }
-  value: any
-  onChange: (edits: any) => void
+  item: EditableItem
+  value: ItemEdits | null | undefined
+  onChange: (edits: ItemEdits) => void
 }) {
-  const edits = value ?? {}
+  const edits: ItemEdits = value ?? {}
+  const swapGroups = new Map<string, string[]>()
+
+  for (const option of item.editableOptions?.swaps ?? []) {
+    const existing = swapGroups.get(option.from) ?? [option.from]
+    if (!existing.includes(option.to)) existing.push(option.to)
+    swapGroups.set(option.from, existing)
+  }
 
   return (
-    <Card>
-      <div className="space-y-2 text-sm">
-        {item.editableOptions?.removals?.map(r => (
-          <label key={r} className="flex gap-2 items-center">
+    <Card variant="accent">
+      <div className="space-y-3 text-sm">
+        {(item.editableOptions?.removals ?? []).map(removal => (
+          <label
+            key={removal}
+            className="flex items-center gap-2"
+          >
             <input
               type="checkbox"
-              checked={edits.removals?.includes(r)}
+              checked={edits.removals?.includes(removal) ?? false}
               onChange={e => {
                 const next = e.target.checked
-                  ? [...(edits.removals ?? []), r]
+                  ? [...(edits.removals ?? []), removal]
                   : (edits.removals ?? []).filter(
-                      (x: string) => x !== r
+                      x => x !== removal
                     )
 
                 onChange({ ...edits, removals: next })
               }}
             />
-            Remove {r}
+            Remove {removal}
           </label>
         ))}
 
-        {item.editableOptions?.addOns?.map(a => (
-          <label key={a.name} className="flex gap-2 items-center">
-            <input
-              type="checkbox"
-              checked={edits.addOns?.includes(a.name)}
-              onChange={e => {
-                const next = e.target.checked
-                  ? [...(edits.addOns ?? []), a.name]
-                  : (edits.addOns ?? []).filter(
-                      (x: string) => x !== a.name
-                    )
+        {Array.from(swapGroups.entries()).map(([from, options]) => {
+          const selected =
+            edits.swaps?.find(s => s.from === from)?.to ?? from
 
-                onChange({ ...edits, addOns: next })
-              }}
-            />
-            Add {a.name}
-          </label>
-        ))}
+          return (
+            <label
+              key={from}
+              className="flex items-center gap-2"
+            >
+              <span className="text-secondary">Swap {from}</span>
+              <select
+                className="rounded-[var(--radius-control)] border border-[var(--border)] bg-transparent px-2 py-1"
+                value={selected}
+                onChange={e =>
+                  onChange(
+                    applySwapChoice(edits, from, e.target.value)
+                  )
+                }
+              >
+                {options.map(option => (
+                  <option key={`${from}-${option}`} value={option}>
+                    {option}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )
+        })}
+
+        {(item.editableOptions?.addOns ?? []).map(addOn => {
+          const checked =
+            edits.addOns?.some(
+              selected => selected.name === addOn.name
+            ) ?? false
+
+          return (
+            <label
+              key={addOn.name}
+              className="flex items-center gap-2"
+            >
+              <input
+                type="checkbox"
+                checked={checked}
+                onChange={e => {
+                  const next = e.target.checked
+                    ? [...(edits.addOns ?? []), addOn]
+                    : (edits.addOns ?? []).filter(
+                        x => x.name !== addOn.name
+                      )
+
+                  onChange({ ...edits, addOns: next })
+                }}
+              />
+              Add {addOn.name} (+£{addOn.priceDelta.toFixed(2)})
+            </label>
+          )
+        })}
       </div>
     </Card>
   )

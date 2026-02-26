@@ -1,136 +1,139 @@
 "use client"
 
-import { useEffect, useState } from "react"
-import { Card } from "@/components/ui/Card"
-import { Badge } from "@/components/ui/Badge"
-import { Divider } from "@/components/ui/Divider"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import { TagList } from "@/components/staff/TagList"
-
-type Tag = {
-  id: string
-  active: boolean
-  tableNumber: number | null
-  activeSessionCount: number
-  lastSeenAt: string
-}
-
-type Table = {
-  id: string
-  number: number
-}
+import { Badge } from "@/components/ui/Badge"
+import { Button } from "@/components/ui/Button"
+import { Card } from "@/components/ui/Card"
+import { fetchJson } from "@/lib/fetchJson"
+import { useRealtimeSync } from "@/lib/useRealtimeSync"
+import { TableDTO, TagDTO } from "@/lib/types"
 
 export default function StaffTagsPage() {
-  const [tags, setTags] = useState<Tag[]>([])
-  const [tables, setTables] = useState<Table[]>([])
-  const [selectedTag, setSelectedTag] = useState<Tag | null>(null)
+  const [tags, setTags] = useState<TagDTO[]>([])
+  const [tables, setTables] = useState<TableDTO[]>([])
+  const [selectedTagId, setSelectedTagId] = useState<string | null>(
+    null
+  )
 
-  async function fetchTags() {
-    const res = await fetch("/api/tags", { cache: "no-store" })
-    const data = await res.json()
+  const fetchTags = useCallback(async () => {
+    const data = await fetchJson<TagDTO[]>("/api/tags", {
+      cache: "no-store",
+    })
     setTags(data)
-  }
-
-  async function fetchTables() {
-    const res = await fetch("/api/tables", { cache: "no-store" })
-    const data = await res.json()
-    setTables(data)
-  }
-
-  useEffect(() => {
-    fetchTags()
-    fetchTables()
-    const interval = setInterval(() => {
-      fetchTags()
-      fetchTables()
-    }, 5000)
-    return () => clearInterval(interval)
   }, [])
 
-  function minutesSince(ts: string) {
-    return Math.floor(
-      (Date.now() - new Date(ts).getTime()) / 60000
-    )
-  }
+  const fetchTables = useCallback(async () => {
+    const data = await fetchJson<TableDTO[]>("/api/tables", {
+      cache: "no-store",
+    })
+    setTables(data)
+  }, [])
 
-  async function assignTag(tagId: string, tableNumber: number | null) {
-    await fetch("/api/tags", {
+  useEffect(() => {
+    fetchTags().catch(() => {})
+    fetchTables().catch(() => {})
+    const interval = setInterval(() => {
+      fetchTags().catch(() => {})
+      fetchTables().catch(() => {})
+    }, 5000)
+    return () => clearInterval(interval)
+  }, [fetchTags, fetchTables])
+
+  useRealtimeSync(() => {
+    fetchTags().catch(() => {})
+    fetchTables().catch(() => {})
+  })
+
+  const selectedTag = useMemo(
+    () => tags.find(tag => tag.id === selectedTagId) ?? null,
+    [tags, selectedTagId]
+  )
+
+  async function assignTag(tagId: string, tableId: string | null) {
+    await fetchJson("/api/tags", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         tagId,
-        tableId:
-          tableNumber === null
-            ? null
-            : tables.find(t => t.number === tableNumber)?.id,
+        tableId,
       }),
     })
-
-    setSelectedTag(null)
-    fetchTags()
-  }
-
-  if (selectedTag) {
-    return (
-      <div className="p-4 space-y-4">
-        <Card>
-          <div className="flex justify-between items-center">
-            <div className="font-mono text-sm">
-              Tag {selectedTag.id}
-            </div>
-            <div className="flex gap-2">
-              {!selectedTag.active && <Badge>inactive</Badge>}
-              {selectedTag.activeSessionCount > 3 && (
-                <Badge>many sessions</Badge>
-              )}
-            </div>
-          </div>
-        </Card>
-
-        <Divider />
-
-        <div className="space-y-2">
-          {tables.map(table => (
-            <Card
-              key={table.id}
-              className="cursor-pointer text-center"
-              onClick={() =>
-                assignTag(selectedTag.id, table.number)
-              }
-            >
-              Assign to table {table.number}
-            </Card>
-          ))}
-
-          <Card
-            className="cursor-pointer text-center opacity-70"
-            onClick={() => assignTag(selectedTag.id, null)}
-          >
-            Unassign tag
-          </Card>
-        </div>
-
-        <Card
-          className="cursor-pointer text-center opacity-70"
-          onClick={() => setSelectedTag(null)}
-        >
-          Back to tags
-        </Card>
-      </div>
-    )
+    await fetchTags()
   }
 
   return (
-    <div className="p-4 space-y-4">
-      <TagList
-        tags={tags}
-        onSelect={setSelectedTag}
-      />
+    <div className="px-4 py-5 md:px-6 md:py-6">
+      <div className="mx-auto grid max-w-[1440px] gap-4 lg:grid-cols-[1fr_1.25fr]">
+        <Card className="space-y-3">
+          <h2 className="text-lg font-semibold tracking-tight">Tags</h2>
+          <TagList
+            tags={tags}
+            onSelect={tag => setSelectedTagId(tag.id)}
+            selectedTagId={selectedTagId}
+          />
+        </Card>
 
-      {tags.length === 0 && (
-        <div className="opacity-60 text-center">
-          No active NFC tags
-        </div>
-      )}
+        <Card className="space-y-3">
+          {!selectedTag ? (
+            <div className="py-10 text-center text-sm text-secondary">
+              Select a tag to assign or unassign.
+            </div>
+          ) : (
+            <>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <div className="mono-font text-lg font-semibold">
+                    {selectedTag.id}
+                  </div>
+                  <div className="text-sm text-secondary">
+                    Current table: {selectedTag.tableNumber ?? "Unassigned"}
+                  </div>
+                </div>
+                <div className="flex gap-2">
+                  {!selectedTag.active && (
+                    <Badge variant="warning">Inactive</Badge>
+                  )}
+                  <Badge variant="neutral">
+                    {selectedTag.activeSessionCount} session(s)
+                  </Badge>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
+                {tables.map(table => (
+                  <Button
+                    key={table.id}
+                    variant={
+                      selectedTag.tableNumber === table.number
+                        ? "primary"
+                        : "quiet"
+                    }
+                    className="min-h-[52px]"
+                    onClick={() =>
+                      assignTag(selectedTag.id, table.id).catch(
+                        () => {}
+                      )
+                    }
+                  >
+                    Assign to table {table.number}
+                  </Button>
+                ))}
+              </div>
+
+              <Button
+                variant="danger"
+                className="w-full min-h-[52px]"
+                onClick={() =>
+                  assignTag(selectedTag.id, null).catch(() => {})
+                }
+              >
+                Unassign tag
+              </Button>
+            </>
+          )}
+        </Card>
+      </div>
     </div>
   )
 }

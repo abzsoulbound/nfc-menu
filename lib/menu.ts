@@ -7,7 +7,7 @@ export type MenuItem = {
   vatRate: number
   allergens: string[]
   editableOptions?: any
-  station: "kitchen" | "bar"
+  station: "KITCHEN" | "BAR"
 }
 
 export type MenuSection = {

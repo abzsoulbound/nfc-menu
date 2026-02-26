@@ -1,6 +1,7 @@
 "use client"
 
 import { ReactNode } from "react"
+import { Button } from "@/components/ui/Button"
 
 export function ModalProvider({
   children,
@@ -16,27 +17,34 @@ export function Modal({
   onConfirm,
   onCancel,
   confirmDisabled,
+  confirmLabel = "Confirm",
+  cancelLabel = "Cancel",
 }: {
   title: string
   children: ReactNode
   onConfirm: () => void
   onCancel: () => void
   confirmDisabled?: boolean
+  confirmLabel?: string
+  cancelLabel?: string
 }) {
   return (
-    <div className="fixed inset-0 flex items-center justify-center bg-[rgba(7,14,26,0.8)] z-50">
-      <div className="w-full max-w-md">
-        <div className="p-4 rounded surface-secondary border space-y-3">
-          <div className="font-semibold">{title}</div>
-          <div className="text-sm">{children}</div>
-          <div className="flex gap-2 justify-end">
-            <button onClick={onCancel}>Cancel</button>
-            <button
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-[rgba(8,14,26,0.58)] p-4 backdrop-blur-sm">
+      <div className="w-full max-w-md rounded-[var(--radius-card)] border border-[var(--border)] surface-elevated p-4 shadow-[var(--shadow-hard)]">
+        <div className="space-y-3">
+          <h3 className="text-lg font-semibold tracking-tight">{title}</h3>
+          <div className="text-sm text-secondary">{children}</div>
+          <div className="flex justify-end gap-2 pt-1">
+            <Button variant="quiet" onClick={onCancel}>
+              {cancelLabel}
+            </Button>
+            <Button
+              variant="primary"
               onClick={onConfirm}
               disabled={confirmDisabled}
             >
-              Confirm
-            </button>
+              {confirmLabel}
+            </Button>
           </div>
         </div>
       </div>

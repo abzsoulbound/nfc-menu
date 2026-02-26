@@ -1,10 +1,21 @@
+import { StatusChipVariant } from "@/lib/types"
+
 export function Badge({
   children,
+  variant = "neutral",
 }: {
   children: React.ReactNode
+  variant?: StatusChipVariant
 }) {
+  const tone: Record<StatusChipVariant, string> = {
+    neutral: "status-chip-neutral",
+    success: "status-chip-success",
+    warning: "status-chip-warning",
+    danger: "status-chip-danger",
+  }
+
   return (
-    <span className="px-2 py-0.5 text-xs rounded surface-accent text-primary">
+    <span className={`status-chip ${tone[variant]}`}>
       {children}
     </span>
   )

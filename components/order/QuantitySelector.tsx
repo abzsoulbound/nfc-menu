@@ -17,11 +17,12 @@ export function QuantitySelector({
         variant="secondary"
         disabled={value <= min}
         onClick={() => onChange(value - 1)}
+        className="min-h-[44px] min-w-[44px] px-0"
       >
-        −
+        -
       </Button>
 
-      <div className="min-w-[2rem] text-center">
+      <div className="min-w-[2.2rem] text-center font-semibold">
         {value}
       </div>
 
@@ -29,6 +30,7 @@ export function QuantitySelector({
         variant="secondary"
         disabled={value >= max}
         onClick={() => onChange(value + 1)}
+        className="min-h-[44px] min-w-[44px] px-0"
       >
         +
       </Button>

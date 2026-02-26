@@ -1,19 +1,24 @@
 import { create } from "zustand"
+import { fetchJson } from "@/lib/fetchJson"
+import { SessionDTO } from "@/lib/types"
 
-const SESSION_KEY = "nfc-pos.session.v1"
+const SESSION_KEY = "nfc-pos.session.v2"
+
+type Origin = "customer" | "staff"
 
 type SessionState = {
   sessionId: string | null
-  origin: "customer" | "staff" | null
-  setSession: (id: string, origin: "customer" | "staff") => void
+  origin: Origin | null
+  setSession: (id: string, origin: Origin) => void
   clearSession: () => void
   hydrate: () => void
-  ensureSession: (tagId?: string) => Promise<string | null>
+  ensureCustomerSession: (tagId: string) => Promise<string | null>
+  ensureStaffSession: () => Promise<string | null>
 }
 
 function persistSession(
   sessionId: string | null,
-  origin: "customer" | "staff" | null
+  origin: Origin | null
 ) {
   if (typeof window === "undefined") return
   if (!sessionId || !origin) {
@@ -24,6 +29,10 @@ function persistSession(
     SESSION_KEY,
     JSON.stringify({ sessionId, origin })
   )
+}
+
+function normalizeOrigin(origin: SessionDTO["origin"]): Origin {
+  return origin === "STAFF" ? "staff" : "customer"
 }
 
 export const useSessionStore = create<SessionState>((set, get) => ({
@@ -46,7 +55,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     try {
       const parsed = JSON.parse(raw) as {
         sessionId?: string
-        origin?: "customer" | "staff"
+        origin?: Origin
       }
       if (parsed.sessionId && parsed.origin) {
         set({
@@ -58,44 +67,100 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       set({ sessionId: null, origin: null })
     }
   },
-  ensureSession: async (tagId?: string) => {
+  ensureCustomerSession: async tagId => {
     const existingId = get().sessionId
-    const existingOrigin = get().origin ?? "customer"
+    const existingOrigin = get().origin
 
-    if (existingId) {
-      const resumeRes = await fetch("/api/sessions", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          sessionId: existingId,
-          origin:
-            existingOrigin === "staff"
-              ? "STAFF"
-              : "CUSTOMER",
-          tagId,
-        }),
-      })
-
-      if (resumeRes.ok) {
-        return existingId
+    if (existingId && existingOrigin === "customer") {
+      try {
+        const resumed = await fetchJson<SessionDTO>(
+          "/api/sessions",
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              sessionId: existingId,
+              origin: "CUSTOMER",
+              tagId,
+            }),
+          }
+        )
+        get().setSession(
+          resumed.id,
+          normalizeOrigin(resumed.origin)
+        )
+        return resumed.id
+      } catch {
+        // fall through to create
       }
     }
 
-    const createRes = await fetch("/api/sessions", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        origin: "CUSTOMER",
-        tagId,
-      }),
-    })
-
-    if (!createRes.ok) {
+    try {
+      const created = await fetchJson<SessionDTO>(
+        "/api/sessions",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            origin: "CUSTOMER",
+            tagId,
+          }),
+        }
+      )
+      get().setSession(
+        created.id,
+        normalizeOrigin(created.origin)
+      )
+      return created.id
+    } catch {
       return null
     }
+  },
+  ensureStaffSession: async () => {
+    const existingId = get().sessionId
+    const existingOrigin = get().origin
 
-    const session = await createRes.json()
-    get().setSession(session.id, "customer")
-    return session.id
+    if (existingId && existingOrigin === "staff") {
+      try {
+        const resumed = await fetchJson<SessionDTO>(
+          "/api/sessions",
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              sessionId: existingId,
+              origin: "STAFF",
+            }),
+          }
+        )
+        get().setSession(
+          resumed.id,
+          normalizeOrigin(resumed.origin)
+        )
+        return resumed.id
+      } catch {
+        // fall through to create
+      }
+    }
+
+    try {
+      const created = await fetchJson<SessionDTO>(
+        "/api/sessions",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            origin: "STAFF",
+          }),
+        }
+      )
+      get().setSession(
+        created.id,
+        normalizeOrigin(created.origin)
+      )
+      return created.id
+    } catch {
+      return null
+    }
   },
 }))

@@ -20,7 +20,7 @@ Key invariant:
 */
 
 export function Providers({ children }: { children: ReactNode }) {
-  const ensureSession = useSessionStore(s => s.ensureSession)
+  const hydrateSession = useSessionStore(s => s.hydrate)
   const hydrateCart = useCartStore(s => s.hydrate)
   const hydrateStaff = useStaffStore(s => s.hydrate)
   const hydrateUI = useUIStore(s => s.hydrate)
@@ -28,15 +28,15 @@ export function Providers({ children }: { children: ReactNode }) {
   useEffect(() => {
     /*
       On first client mount:
-      - Ensure a user session exists or is resumed.
+      - Restore persisted state for the current browser.
       - Hydrate all client-side stores from persisted state.
-      - Do NOT perform any table or order mutations here.
+      - Do NOT create sessions or mutate tables/orders here.
     */
-    ensureSession()
+    hydrateSession()
     hydrateCart()
     hydrateStaff()
     hydrateUI()
-  }, [ensureSession, hydrateCart, hydrateStaff, hydrateUI])
+  }, [hydrateSession, hydrateCart, hydrateStaff, hydrateUI])
 
   return (
     <ToastProvider>

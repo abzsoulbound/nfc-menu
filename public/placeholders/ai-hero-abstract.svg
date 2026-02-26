@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#f4e3c5"/>
+      <stop offset="100%" stop-color="#ead6b6"/>
+    </linearGradient>
+    <linearGradient id="shapeA" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#b77144"/>
+      <stop offset="100%" stop-color="#7b3f2e"/>
+    </linearGradient>
+    <linearGradient id="shapeB" x1="0" y1="1" x2="1" y2="0">
+      <stop offset="0%" stop-color="#4e6f58"/>
+      <stop offset="100%" stop-color="#294538"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="1600" height="900" fill="url(#bg)"/>
+  <circle cx="260" cy="210" r="170" fill="#ffffff" fill-opacity="0.55"/>
+  <circle cx="1360" cy="170" r="130" fill="#ffffff" fill-opacity="0.42"/>
+  <circle cx="1240" cy="720" r="220" fill="#ffffff" fill-opacity="0.3"/>
+
+  <rect x="140" y="290" width="410" height="230" rx="32" fill="url(#shapeA)" opacity="0.88"/>
+  <rect x="520" y="235" width="360" height="320" rx="44" fill="#fef8eb" stroke="#845342" stroke-width="8"/>
+  <rect x="902" y="270" width="560" height="240" rx="38" fill="url(#shapeB)" opacity="0.9"/>
+  <rect x="220" y="560" width="820" height="220" rx="40" fill="#fff4de" stroke="#9c7c5d" stroke-width="8"/>
+
+  <circle cx="700" cy="390" r="52" fill="#c87b55"/>
+  <rect x="643" y="458" width="114" height="58" rx="20" fill="#7b3f2e"/>
+  <circle cx="1060" cy="390" r="72" fill="#ecd8bf"/>
+  <path d="M990 420c20-50 90-66 130-26 26 28 26 72-2 96-44 38-118 18-128-30Z" fill="#d7b892"/>
+
+  <text x="92" y="834" font-family="Arial, Helvetica, sans-serif" font-size="34" letter-spacing="3" fill="#5e4634">
+    AI PLACEHOLDER ART • TEMPORARY
+  </text>
+</svg>

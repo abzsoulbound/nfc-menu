@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 320">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#dbe7de"/>
+      <stop offset="100%" stop-color="#bfd1c6"/>
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="320" fill="url(#bg)"/>
+  <rect x="76" y="70" width="300" height="184" rx="26" fill="#325a4a" opacity="0.92"/>
+  <rect x="410" y="48" width="304" height="228" rx="30" fill="#f1f8f3" stroke="#3e6553" stroke-width="6"/>
+  <rect x="748" y="62" width="374" height="194" rx="28" fill="#8d5b74" opacity="0.9"/>
+  <path d="M556 88h24l16 56c8 28-6 58-32 70v34h-28v-34c-26-12-40-42-32-70l16-56h24Z" fill="#6c937f"/>
+  <circle cx="550" cy="128" r="14" fill="#f6ffff"/>
+  <text x="52" y="298" font-family="Arial, Helvetica, sans-serif" font-size="22" letter-spacing="2" fill="#2f4a3f">
+    AI TEMP ART • BAR STYLE
+  </text>
+</svg>
