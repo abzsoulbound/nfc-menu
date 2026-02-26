@@ -52,6 +52,7 @@ export function MenuItemCard({
   variant = "menu",
   children,
   readOnly = false,
+  actionPlacement = "bottom",
 }: {
   name: string
   description: string
@@ -64,6 +65,7 @@ export function MenuItemCard({
   variant?: "menu" | "order" | "staff"
   children?: ReactNode
   readOnly?: boolean
+  actionPlacement?: "bottom" | "underPrice"
 }) {
   const stationTone = station === "BAR"
     ? "status-chip status-chip-warning"
@@ -87,6 +89,7 @@ export function MenuItemCard({
   const collapsibleAllergens = variant !== "staff"
   const vatPercent = Number((vatRate * 100).toFixed(1))
   const optionLines = formatOptionLines(editableOptions)
+  const showOptionLines = variant === "staff" && optionLines.length > 0
   const explicitImageUrl = typeof image === "string" ? image.trim() : ""
   const hasExplicitImage = explicitImageUrl !== ""
   const staticFallbackImageUrl = getMenuItemPlaceholderUrl()
@@ -105,6 +108,9 @@ export function MenuItemCard({
     ? explicitImageUrl
     : aiGeneratedImageUrl ?? staticFallbackImageUrl
   const backgroundImage = `url("${primaryImageUrl}"), url("${staticFallbackImageUrl}")`
+  const showInlineActions =
+    !readOnly && actionPlacement === "underPrice" && !!children
+  const showBottomActions = !readOnly && !showInlineActions
 
   return (
     <Card className={variantCardClass[variant]}>
@@ -142,13 +148,21 @@ export function MenuItemCard({
             </div>
           </div>
 
-          <div className={`h-fit rounded-xl border border-[var(--border)] px-3 py-1.5 text-right ${variantPriceClass[variant]}`}>
-            <div className="text-sm font-semibold text-[var(--text-primary)]">
-              £{price.toFixed(2)}
+          <div className="flex gap-2 sm:flex-col sm:items-end">
+            <div className={`h-fit rounded-xl border border-[var(--border)] px-3 py-1.5 text-right ${variantPriceClass[variant]}`}>
+              <div className="text-sm font-semibold text-[var(--text-primary)]">
+                £{price.toFixed(2)}
+              </div>
+              {showVatDetails && (
+                <div className="text-[11px] text-secondary">
+                  VAT included {vatPercent}%
+                </div>
+              )}
             </div>
-            {showVatDetails && (
-              <div className="text-[11px] text-secondary">
-                VAT included {vatPercent}%
+
+            {showInlineActions && (
+              <div className="w-full sm:w-auto">
+                {children}
               </div>
             )}
           </div>
@@ -159,7 +173,7 @@ export function MenuItemCard({
           collapsible={collapsibleAllergens}
         />
 
-        {optionLines.length > 0 && (
+        {showOptionLines && (
           <div className="rounded-lg border border-[var(--border)] surface-accent px-3 py-2">
             <div className="text-[10px] uppercase tracking-[0.2em] text-muted">
               Options
@@ -172,7 +186,7 @@ export function MenuItemCard({
           </div>
         )}
 
-        {!readOnly && (
+        {showBottomActions && (
           <div className="pt-1">
             {children}
           </div>

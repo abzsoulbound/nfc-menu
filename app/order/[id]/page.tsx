@@ -13,7 +13,7 @@ import {
   showCustomerDebugLabels,
 } from "@/lib/customerMode"
 import { fetchJson } from "@/lib/fetchJson"
-import { buildCartLineId, getMenuItemIdFromCartLineId } from "@/lib/cartLine"
+import { buildCartLineId } from "@/lib/cartLine"
 import { calculateCartTotals, calculateItemPrice } from "@/lib/pricing"
 import { useRealtimeSync } from "@/lib/useRealtimeSync"
 import {
@@ -366,15 +366,6 @@ export default function TagOrderingPage({
     )
   }, [menuSections, selectedSectionId])
 
-  const quantityByMenuItemId = useMemo(() => {
-    const map = new Map<string, number>()
-    for (const line of items) {
-      const menuItemId = getMenuItemIdFromCartLineId(line.id)
-      map.set(menuItemId, (map.get(menuItemId) ?? 0) + line.quantity)
-    }
-    return map
-  }, [items])
-
   const requiredChoiceGroups = useMemo(
     () => (configItem ? buildRequiredChoiceGroups(configItem) : []),
     [configItem]
@@ -589,7 +580,6 @@ export default function TagOrderingPage({
 
             <div className="space-y-3">
               {selectedSection.items.map(item => {
-                const quantity = quantityByMenuItemId.get(item.id) ?? 0
                 const itemUnavailable =
                   item.active === false ||
                   (typeof item.stockCount === "number" &&
@@ -607,6 +597,7 @@ export default function TagOrderingPage({
                     station={item.station}
                     editableOptions={item.editableOptions}
                     variant="order"
+                    actionPlacement="underPrice"
                     readOnly={viewOnly || itemUnavailable}
                   >
                     {itemUnavailable ? (
@@ -614,21 +605,13 @@ export default function TagOrderingPage({
                         Unavailable
                       </div>
                     ) : (
-                      <div className="flex flex-wrap items-center justify-between gap-2">
-                        <Button
-                          variant="primary"
-                          className="min-h-[40px]"
-                          onClick={() => openConfigurator(item)}
-                        >
-                          {item.editableOptions ? "Select options" : "Add item"}
-                        </Button>
-
-                        {quantity > 0 && (
-                          <span className="status-chip status-chip-neutral">
-                            In basket: {quantity}
-                          </span>
-                        )}
-                      </div>
+                      <Button
+                        variant="primary"
+                        className="min-h-[40px] w-full sm:w-auto"
+                        onClick={() => openConfigurator(item)}
+                      >
+                        Add item
+                      </Button>
                     )}
                   </MenuItemCard>
                 )
