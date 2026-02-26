@@ -82,7 +82,7 @@ export default function TagOrderingPage({
     string | null
   >(null)
   const customerMinimalMode = isCustomerMinimalModeEnabled()
-  const showDebugSession = showCustomerDebugLabels()
+  const showCustomerDebug = showCustomerDebugLabels()
 
   const refreshTableAndProgress = useCallback(async () => {
     if (!sessionReady) return
@@ -344,43 +344,48 @@ export default function TagOrderingPage({
   return (
     <div className="relative px-4 py-4 md:px-6 md:py-6">
       <div className="mx-auto max-w-[1120px] space-y-4">
-        <section className="sticky top-[70px] z-30 rounded-2xl border border-[var(--border)] surface-secondary p-3 shadow-[var(--shadow-soft)]">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <div className="flex items-center gap-2">
-              <Link
-                href="/menu"
-                className="focus-ring inline-flex min-h-[36px] items-center justify-center rounded-[var(--radius-control)] border border-[var(--border)] bg-[var(--accent-quiet)] px-3 text-sm font-semibold"
-              >
-                Back
-              </Link>
-              {!takeaway &&
-                tableState?.tableNumber &&
-                tableState.tableNumber > 0 && (
-                  <Link
-                    href={`/pay/${tableState.tableNumber}`}
-                    className="focus-ring inline-flex min-h-[36px] items-center justify-center rounded-[var(--radius-control)] border border-[var(--border)] bg-[var(--accent-quiet)] px-3 text-sm font-semibold"
-                  >
-                    Pay bill
-                  </Link>
-                )}
-              <span className="status-chip status-chip-neutral">
-                {customerContextLabel(takeaway)}
-              </span>
-              {showDebugSession && sessionReady && (
-                <span className="status-chip status-chip-neutral mono-font">
-                  {sessionReady.slice(0, 8)}
-                </span>
+        <section
+          className={`rounded-2xl border border-[var(--border)] surface-secondary p-3 ${
+            showCustomerDebug ? "sticky top-[70px] z-30 shadow-[var(--shadow-soft)]" : ""
+          }`}
+        >
+          <div className="flex flex-wrap items-center gap-2">
+            <Link
+              href="/menu"
+              className="focus-ring inline-flex min-h-[36px] items-center justify-center rounded-[var(--radius-control)] border border-[var(--border)] bg-[var(--accent-quiet)] px-3 text-sm font-semibold"
+            >
+              Back
+            </Link>
+            {!takeaway &&
+              tableState?.tableNumber &&
+              tableState.tableNumber > 0 && (
+                <Link
+                  href={`/pay/${tableState.tableNumber}`}
+                  className="focus-ring inline-flex min-h-[36px] items-center justify-center rounded-[var(--radius-control)] border border-[var(--border)] bg-[var(--accent-quiet)] px-3 text-sm font-semibold"
+                >
+                  Pay bill
+                </Link>
               )}
-            </div>
-
-            {viewOnly ? (
-              <span className="status-chip status-chip-danger">
-                Unavailable
-              </span>
-            ) : (
-              <span className="status-chip status-chip-success">
-                Available
-              </span>
+            {showCustomerDebug && (
+              <>
+                <span className="status-chip status-chip-neutral">
+                  {customerContextLabel(takeaway)}
+                </span>
+                {sessionReady && (
+                  <span className="status-chip status-chip-neutral mono-font">
+                    {sessionReady.slice(0, 8)}
+                  </span>
+                )}
+                {viewOnly ? (
+                  <span className="status-chip status-chip-danger">
+                    Unavailable
+                  </span>
+                ) : (
+                  <span className="status-chip status-chip-success">
+                    Available
+                  </span>
+                )}
+              </>
             )}
           </div>
         </section>
@@ -417,7 +422,7 @@ export default function TagOrderingPage({
           </Card>
         )}
 
-        {!customerMinimalMode && orderProgress.length > 0 && (
+        {showCustomerDebug && orderProgress.length > 0 && (
           <Card variant="accent">
             <div className="space-y-3">
               <div className="flex flex-wrap items-center justify-between gap-2">
@@ -462,7 +467,7 @@ export default function TagOrderingPage({
           </Card>
         )}
 
-        {!customerMinimalMode && customerNotifications.length > 0 && (
+        {showCustomerDebug && customerNotifications.length > 0 && (
           <Card variant="accent">
             <div className="space-y-2">
               <h3 className="text-base font-semibold tracking-tight">
