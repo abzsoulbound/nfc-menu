@@ -5,8 +5,10 @@ import { useSessionStore } from "@/store/useSessionStore"
 import { useCartStore } from "@/store/useCartStore"
 import { useStaffStore } from "@/store/useStaffStore"
 import { useUIStore } from "@/store/useUIStore"
+import { useRestaurantStore } from "@/store/useRestaurantStore"
 import { ToastProvider } from "@/components/ui/Toast"
 import { ModalProvider } from "@/components/ui/Modal"
+import { fetchJson } from "@/lib/fetchJson"
 
 /*
 APPLICATION-WIDE PROVIDERS
@@ -20,23 +22,115 @@ Key invariant:
 */
 
 export function Providers({ children }: { children: ReactNode }) {
-  const ensureSession = useSessionStore(s => s.ensureSession)
+  const hydrateSession = useSessionStore(s => s.hydrate)
   const hydrateCart = useCartStore(s => s.hydrate)
   const hydrateStaff = useStaffStore(s => s.hydrate)
   const hydrateUI = useUIStore(s => s.hydrate)
+  const setRestaurant = useRestaurantStore(s => s.setRestaurant)
 
   useEffect(() => {
     /*
       On first client mount:
-      - Ensure a user session exists or is resumed.
+      - Restore persisted state for the current browser.
       - Hydrate all client-side stores from persisted state.
-      - Do NOT perform any table or order mutations here.
+      - Do NOT create sessions or mutate tables/orders here.
     */
-    ensureSession()
+    hydrateSession()
     hydrateCart()
     hydrateStaff()
     hydrateUI()
-  }, [ensureSession, hydrateCart, hydrateStaff, hydrateUI])
+    fetchJson<{
+      restaurant: {
+        slug: string
+        name: string
+        monogram: string
+        location: string | null
+        assets: {
+          logoUrl?: string
+          heroUrl?: string
+          sectionImageMap?: Record<string, string>
+        }
+        experienceConfig: {
+          menu: {
+            heroTitle: string
+            heroSubtitle: string
+            showMetaStats: boolean
+            showPlaceholderNote: boolean
+            primaryCtaLabel: string
+            primaryCtaHref: string
+            secondaryCtaLabel: string
+            secondaryCtaHref: string
+          }
+          review: {
+            title: string
+            subtitleDineIn: string
+            subtitleTakeaway: string
+            placeOrderLabel: string
+            backLabel: string
+            confirmDineIn: string
+            confirmTakeaway: string
+            showAllergens: boolean
+          }
+          theme: {
+            fontPreset: "SANS" | "SERIF" | "MONO"
+            radiusPreset: "SOFT" | "ROUND" | "SHARP"
+            customerPrimary: string
+            customerSurface: string
+            customerText: string
+            customerFocus: string
+            staffPrimary: string
+          }
+          launch: {
+            isPublished: boolean
+          }
+          ux: {
+            menuDiscovery:
+              | "HERO_FIRST"
+              | "SECTION_FIRST"
+              | "SEARCH_FIRST"
+            ordering:
+              | "BOTTOM_SHEET_FAST"
+              | "INLINE_STEPPER"
+              | "GUIDED_CONFIGURATOR"
+            review: "SHEET_REVIEW" | "PAGE_REVIEW"
+            checkout:
+              | "ONE_PAGE"
+              | "GUIDED_SPLIT"
+              | "EXPRESS_FIRST"
+            engagement:
+              | "ALL_IN_ONE"
+              | "TASK_TABS"
+              | "POST_PURCHASE_PROMPT"
+            showProgressAnchors: boolean
+            emphasizeSocialProof: boolean
+            trustMicrocopy: "MINIMAL" | "BALANCED" | "HIGH_ASSURANCE"
+            defaultTipPercent: number
+          }
+        }
+        isDemo: boolean
+      }
+    }>("/api/tenant/bootstrap", { cache: "no-store" })
+      .then(payload => {
+        setRestaurant({
+          slug: payload.restaurant.slug,
+          name: payload.restaurant.name,
+          monogram: payload.restaurant.monogram,
+          location: payload.restaurant.location,
+          assets: payload.restaurant.assets ?? {},
+          experienceConfig: payload.restaurant.experienceConfig,
+          isDemo: payload.restaurant.isDemo,
+        })
+      })
+      .catch(() => {
+        // Preserve default local brand state if tenant endpoint is unavailable.
+      })
+  }, [
+    hydrateSession,
+    hydrateCart,
+    hydrateStaff,
+    hydrateUI,
+    setRestaurant,
+  ])
 
   return (
     <ToastProvider>

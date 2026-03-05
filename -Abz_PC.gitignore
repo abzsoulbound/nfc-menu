@@ -1,0 +1,46 @@
+node_modules
+/generated/prisma
+.next
+.next-build*
+.next-e2e*
+playwright-report
+test-results
+*.tsbuildinfo
+.tmp-*
+.tools/
+
+.env.local
+.env.*
+!.env.example
+
+.vercel
+
+.nvmrc
+
+# env
+.env
+.env.local
+.env.*.local
+
+# logs
+*.log
+build.log
+
+# local test data
+*.json
+*.cookies.txt
+
+# vscode
+.vscode/
+
+# archives
+*.zip
+
+# build artifacts
+*.tsbuildinfo
+
+# node tools
+.tools/
+
+# misc dev scripts
+esbuild-smoke.js

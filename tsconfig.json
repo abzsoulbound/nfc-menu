@@ -35,9 +35,14 @@
     "next-env.d.ts",
     "**/*.ts",
     "**/*.tsx",
-    ".next/types/**/*.ts"
+    ".next*/types/**/*.ts",
+    ".next-build-proof/types/**/*.ts",
+    ".next-build/types/**/*.ts",
+    ".next-e2e/types/**/*.ts",
+    ".next-build-release/types/**/*.ts"
   ],
   "exclude": [
-    "node_modules"
+    "node_modules",
+    ".next-*/**"
   ]
 }

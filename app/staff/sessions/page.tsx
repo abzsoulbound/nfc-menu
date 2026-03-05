@@ -1,40 +1,47 @@
 "use client"
 
-import { useEffect, useState } from "react"
-import { Card } from "@/components/ui/Card"
-import { Badge } from "@/components/ui/Badge"
-import { Divider } from "@/components/ui/Divider"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import { StaffOrderEditor } from "@/components/staff/StaffOrderEditor"
+import { Badge } from "@/components/ui/Badge"
+import { Button } from "@/components/ui/Button"
+import { Card } from "@/components/ui/Card"
+import { fetchJson } from "@/lib/fetchJson"
+import { useRealtimeSync } from "@/lib/useRealtimeSync"
+import { SessionDTO } from "@/lib/types"
 
-type Session = {
-  id: string
-  origin: "CUSTOMER" | "STAFF"
-  tagId: string | null
-  tableId: string | null
-  lastActivityAt: string
-  stale: boolean
+function minutesSince(ts: string) {
+  return Math.floor(
+    (Date.now() - new Date(ts).getTime()) / 60000
+  )
 }
 
 export default function StaffSessionsPage() {
-  const [sessions, setSessions] = useState<Session[]>([])
-  const [activeSession, setActiveSession] = useState<Session | null>(null)
+  const [sessions, setSessions] = useState<SessionDTO[]>([])
+  const [activeSession, setActiveSession] =
+    useState<SessionDTO | null>(null)
+  const [search, setSearch] = useState("")
 
-  async function fetchSessions() {
-    const res = await fetch("/api/sessions", {
+  const fetchSessions = useCallback(async () => {
+    const data = await fetchJson<SessionDTO[]>("/api/sessions", {
       cache: "no-store",
     })
-    const data = await res.json()
     setSessions(data)
-  }
-
-  useEffect(() => {
-    fetchSessions()
-    const interval = setInterval(fetchSessions, 5000)
-    return () => clearInterval(interval)
   }, [])
 
+  useEffect(() => {
+    fetchSessions().catch(() => setSessions([]))
+    const interval = setInterval(() => {
+      fetchSessions().catch(() => setSessions([]))
+    }, 5000)
+    return () => clearInterval(interval)
+  }, [fetchSessions])
+
+  useRealtimeSync(() => {
+    fetchSessions().catch(() => setSessions([]))
+  })
+
   async function createStaffSession() {
-    const res = await fetch("/api/sessions", {
+    const session = await fetchJson<SessionDTO>("/api/sessions", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -42,79 +49,170 @@ export default function StaffSessionsPage() {
       }),
     })
 
-    const session = await res.json()
     setActiveSession(session)
-    fetchSessions()
+    await fetchSessions()
   }
 
-  function minutesSince(ts: string) {
-    return Math.floor(
-      (Date.now() - new Date(ts).getTime()) / 60000
-    )
-  }
+  const filteredSessions = useMemo(() => {
+    const query = search.trim().toLowerCase()
+    if (!query) return sessions
 
-  if (activeSession) {
-    return (
-      <StaffOrderEditor
-        sessionId={activeSession.id}
-        onBack={() => {
-          setActiveSession(null)
-          fetchSessions()
-        }}
-      />
-    )
-  }
+    return sessions.filter(session => {
+      const haystack = [
+        session.id,
+        session.origin,
+        session.tagId ?? "",
+        session.tableId ?? "",
+      ]
+        .join(" ")
+        .toLowerCase()
+      return haystack.includes(query)
+    })
+  }, [search, sessions])
+
+  const staffSessions = sessions.filter(
+    session => session.origin === "STAFF"
+  )
+  const staleSessions = sessions.filter(session => session.stale)
 
   return (
-    <div className="p-4 space-y-4">
-      <Card
-        className="cursor-pointer text-center"
-        onClick={createStaffSession}
-      >
-        + Create staff session
-      </Card>
+    <div className="relative px-4 py-5 md:px-6 md:py-6">
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute -left-12 top-16 h-44 w-44 rounded-full bg-[radial-gradient(circle,rgba(96,138,214,0.22),rgba(96,138,214,0))] blur-3xl"
+      />
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute -right-10 top-52 h-48 w-48 rounded-full bg-[radial-gradient(circle,rgba(103,162,236,0.2),rgba(103,162,236,0))] blur-3xl"
+      />
 
-      <Divider />
-
-      {sessions.map(session => (
+      <div className="mx-auto space-y-4">
         <Card
-          key={session.id}
-          onClick={() => setActiveSession(session)}
-          className="cursor-pointer"
+          variant="elevated"
+          className="border-[rgba(111,147,213,0.4)] bg-[linear-gradient(132deg,rgba(15,28,50,0.96),rgba(21,39,66,0.94),rgba(29,52,85,0.92))]"
         >
-          <div className="flex justify-between items-center">
-            <div className="space-y-1">
-              <div className="text-sm font-mono">
-                {session.id}
+          <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
+            <div className="space-y-2">
+              <div className="text-[10px] uppercase tracking-[0.18em] text-[rgba(184,205,244,0.82)]">
+                Session Operations
               </div>
-
-              <div className="text-sm opacity-70">
-                {session.origin === "STAFF"
-                  ? "Staff-created session"
-                  : "Customer session"}
-              </div>
-
-              <div className="text-xs opacity-60">
-                Tag: {session.tagId ?? "—"} · Table:{" "}
-                {session.tableId ?? "—"}
+              <h1 className="text-3xl font-semibold tracking-tight text-[#eef4ff] md:text-4xl">
+                Control active service sessions
+              </h1>
+              <p className="max-w-3xl text-sm leading-6 text-[rgba(197,214,244,0.86)]">
+                Manage staff and customer sessions in one place before opening
+                the order editor.
+              </p>
+              <div className="flex flex-wrap gap-2">
+                <span className="status-chip status-chip-neutral">
+                  Total: {sessions.length}
+                </span>
+                <span className="status-chip status-chip-neutral">
+                  Staff: {staffSessions.length}
+                </span>
+                <span className="status-chip status-chip-warning">
+                  Stale: {staleSessions.length}
+                </span>
               </div>
             </div>
 
-            <div className="flex items-center gap-2">
-              {session.stale && <Badge>stale</Badge>}
-              <Badge>
-                {minutesSince(session.lastActivityAt)}m
-              </Badge>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                variant="primary"
+                className="min-h-[44px]"
+                onClick={() => createStaffSession().catch(() => {})}
+              >
+                + Create
+              </Button>
+              <Button
+                variant="quiet"
+                className="min-h-[44px]"
+                onClick={() => fetchSessions().catch(() => setSessions([]))}
+              >
+                Refresh
+              </Button>
             </div>
           </div>
         </Card>
-      ))}
 
-      {sessions.length === 0 && (
-        <div className="opacity-60 text-center">
-          No active sessions
+        <div className="mx-auto grid max-w-[1440px] gap-4 lg:grid-cols-[1fr_1.35fr]">
+          <Card className="space-y-3 border-[rgba(114,153,225,0.34)]">
+            <div className="space-y-2">
+              <h2 className="text-lg font-semibold tracking-tight">Sessions</h2>
+              <label className="space-y-1 text-xs uppercase tracking-[0.12em] text-muted">
+                Search session
+                <input
+                  type="text"
+                  value={search}
+                  onChange={event => setSearch(event.target.value)}
+                  placeholder="id, origin, tag, table"
+                  className="w-full rounded-[var(--radius-control)] border border-[var(--border)] bg-transparent px-3 py-2 text-sm"
+                />
+              </label>
+            </div>
+
+            <div className="space-y-2">
+              {filteredSessions.map(session => (
+                <button
+                  key={session.id}
+                  type="button"
+                  onClick={() => setActiveSession(session)}
+                  className={`focus-ring w-full rounded-[var(--radius-control)] border border-[var(--border)] p-3 text-left ${
+                    activeSession?.id === session.id
+                      ? "surface-accent"
+                      : "surface-secondary"
+                  }`}
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="space-y-1">
+                      <div className="mono-font text-sm font-semibold">
+                        {session.id}
+                      </div>
+                      <div className="text-xs text-secondary">
+                        {session.origin === "STAFF"
+                          ? "Staff-created session"
+                          : "Customer session"}
+                      </div>
+                      <div className="text-xs text-muted">
+                        Tag: {session.tagId ?? "-"} | Table:{" "}
+                        {session.tableId ?? "-"}
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-1">
+                      {session.stale && (
+                        <Badge variant="warning">Stale</Badge>
+                      )}
+                      <Badge variant="neutral">
+                        {minutesSince(session.lastActivityAt)}m
+                      </Badge>
+                    </div>
+                  </div>
+                </button>
+              ))}
+
+              {filteredSessions.length === 0 && (
+                <div className="py-8 text-center text-sm text-secondary">
+                  No matching sessions.
+                </div>
+              )}
+            </div>
+          </Card>
+
+          <Card className="border-[rgba(114,153,225,0.34)] p-0">
+            {!activeSession ? (
+              <div className="p-10 text-center text-sm text-secondary">
+                Select a session to open the staff order editor.
+              </div>
+            ) : (
+              <StaffOrderEditor
+                sessionId={activeSession.id}
+                onBack={() => setActiveSession(null)}
+              />
+            )}
+          </Card>
         </div>
-      )}
+      </div>
     </div>
   )
 }

@@ -1,20 +1,16 @@
 "use client"
 
-import { Card } from "@/components/ui/Card"
 import { Badge } from "@/components/ui/Badge"
+import { TagDTO } from "@/lib/types"
 
 export function TagList({
   tags,
   onSelect,
+  selectedTagId,
 }: {
-  tags: {
-    id: string
-    tableNumber: number | null
-    activeSessionCount: number
-    active: boolean
-    lastSeenAt: string
-  }[]
-  onSelect: (tag: any) => void
+  tags: TagDTO[]
+  onSelect: (tag: TagDTO) => void
+  selectedTagId?: string | null
 }) {
   function minutesSince(ts: string) {
     return Math.floor(
@@ -25,32 +21,42 @@ export function TagList({
   return (
     <div className="space-y-2">
       {tags.map(tag => (
-        <Card
+        <button
           key={tag.id}
-          className="cursor-pointer"
+          type="button"
+          className={`focus-ring w-full rounded-[var(--radius-control)] border border-[var(--border)] p-3 text-left transition-all ${
+            selectedTagId === tag.id
+              ? "surface-accent"
+              : "surface-secondary"
+          }`}
           onClick={() => onSelect(tag)}
         >
-          <div className="flex justify-between items-center">
+          <div className="flex items-center justify-between gap-2">
             <div className="space-y-1">
-              <div className="font-mono text-sm">
+              <div className="mono-font text-sm font-semibold">
                 {tag.id}
               </div>
-              <div className="text-xs opacity-60">
-                Table:{" "}
-                {tag.tableNumber ?? "—"} · Sessions:{" "}
+              <div className="text-xs text-secondary">
+                Table: {tag.tableNumber ?? "-"} | Sessions:{" "}
                 {tag.activeSessionCount}
               </div>
             </div>
 
-            <div className="flex gap-2">
-              {!tag.active && <Badge>inactive</Badge>}
-              <Badge>
+            <div className="flex gap-1">
+              {!tag.active && <Badge variant="warning">Inactive</Badge>}
+              <Badge variant="neutral">
                 {minutesSince(tag.lastSeenAt)}m
               </Badge>
             </div>
           </div>
-        </Card>
+        </button>
       ))}
+
+      {tags.length === 0 && (
+        <div className="py-8 text-center text-sm text-secondary">
+          No active NFC tags.
+        </div>
+      )}
     </div>
   )
 }

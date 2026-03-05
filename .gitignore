@@ -1,7 +1,33 @@
 node_modules
-
 /generated/prisma
+.next
+.next-build*
+.next-e2e*
+playwright-report
+test-results
+*.tsbuildinfo
+.tmp-*
+.tools/
+build.log
+*.cookies.txt
+atlas-launch-handoff.zip
 
+.env.local
 .env
+.env.*
+.env.*.local
+!.env.example
 
-.env
+.vercel
+.vscode/
+
+# local-only smoke fixtures
+assign.json
+login.json
+order.json
+session.json
+tag.json
+smoke-*.json
+
+# local scripts
+esbuild-smoke.js

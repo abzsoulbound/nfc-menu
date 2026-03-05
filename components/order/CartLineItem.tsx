@@ -1,5 +1,5 @@
-import { Card } from "@/components/ui/Card"
 import { AllergenList } from "@/components/menu/AllergenList"
+import { Card } from "@/components/ui/Card"
 
 export function CartLineItem({
   name,
@@ -11,7 +11,7 @@ export function CartLineItem({
   name: string
   quantity: number
   unitPrice: number
-  edits: any
+  edits: Record<string, unknown> | null
   allergens: string[]
 }) {
   return (
@@ -19,10 +19,10 @@ export function CartLineItem({
       <div className="flex justify-between items-start">
         <div className="space-y-1">
           <div className="font-medium">
-            {quantity}× {name}
+            {quantity} x {name}
           </div>
 
-          {edits && (
+          {edits !== null && (
             <div className="text-xs opacity-60">
               modified
             </div>

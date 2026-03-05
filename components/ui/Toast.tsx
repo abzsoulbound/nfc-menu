@@ -1,22 +1,26 @@
 "use client"
 
 import { createContext, useContext, useState } from "react"
+import type { ReactNode } from "react"
 
-const ToastContext = createContext<any>(null)
+type ToastContextValue = {
+  setMessage: (message: string | null) => void
+}
+
+const ToastContext = createContext<ToastContextValue | null>(null)
 
 export function ToastProvider({
   children,
 }: {
-  children: React.ReactNode
+  children: ReactNode
 }) {
-  const [message, setMessage] =
-    useState<string | null>(null)
+  const [message, setMessage] = useState<string | null>(null)
 
   return (
     <ToastContext.Provider value={{ setMessage }}>
       {children}
       {message && (
-        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 surface-secondary border px-4 py-2 rounded text-sm">
+        <div className="fixed bottom-4 left-1/2 z-50 -translate-x-1/2 rounded-[var(--radius-control)] border border-[var(--border)] surface-elevated px-4 py-2 text-sm shadow-[var(--shadow-hard)]">
           {message}
         </div>
       )}
@@ -27,15 +31,19 @@ export function ToastProvider({
 export function Toast({
   children,
 }: {
-  children: React.ReactNode
+  children: ReactNode
 }) {
   return (
-    <div className="surface-secondary border px-3 py-2 rounded text-sm">
+    <div className="rounded-[var(--radius-control)] border border-[var(--border)] surface-elevated px-3 py-2 text-sm">
       {children}
     </div>
   )
 }
 
 export function useToast() {
-  return useContext(ToastContext)
+  const context = useContext(ToastContext)
+  if (!context) {
+    throw new Error("useToast must be used within ToastProvider")
+  }
+  return context
 }

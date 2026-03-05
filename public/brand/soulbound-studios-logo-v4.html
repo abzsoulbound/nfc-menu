@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Soulbound Studios</title>
+<link href="https://fonts.googleapis.com/css2?family=Jost:wght@200;300;400&display=swap" rel="stylesheet">
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body {
+    background: #07090f;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 56px;
+    font-family: 'Jost', sans-serif;
+    transition: background 0.4s;
+  }
+  body.light { background: #ebebeb; }
+
+  .logo-stack {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 24px;
+    animation: rise 0.9s cubic-bezier(.16,1,.3,1) both;
+  }
+
+  .wordmark {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 7px;
+  }
+  .w-name {
+    font-weight: 300;
+    font-size: 16.5px;
+    letter-spacing: 0.44em;
+    text-transform: uppercase;
+    color: #e0dbd2;
+    padding-right: 0.44em;
+  }
+  .w-rule {
+    width: 100%;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, #c9a96e99, transparent);
+  }
+  .w-sub {
+    font-weight: 200;
+    font-size: 8px;
+    letter-spacing: 0.55em;
+    text-transform: uppercase;
+    color: #c9a96e;
+    padding-right: 0.55em;
+    opacity: 0.75;
+  }
+
+  body.light .w-name { color: #0d0f1a; }
+  body.light .w-sub  { opacity: 0.9; }
+
+  .controls { display: flex; gap: 10px; }
+  .btn {
+    padding: 7px 20px;
+    font-family: 'Jost', sans-serif;
+    font-size: 9px;
+    font-weight: 300;
+    letter-spacing: 0.4em;
+    text-transform: uppercase;
+    background: transparent;
+    border: 1px solid #1a1f35;
+    color: #30395a;
+    cursor: pointer;
+    border-radius: 2px;
+    transition: all 0.2s;
+  }
+  .btn:hover  { border-color: #c9a96e; color: #c9a96e; }
+  .btn.active { border-color: #c9a96e; color: #c9a96e; }
+  body.light .btn { border-color: #ccc; color: #aaa; }
+  body.light .btn.active { border-color: #9a7a40; color: #9a7a40; }
+
+  @keyframes rise {
+    from { opacity:0; transform:translateY(14px); }
+    to   { opacity:1; transform:translateY(0); }
+  }
+</style>
+</head>
+<body>
+
+<div class="logo-stack">
+  <svg width="96" height="96" viewBox="0 0 96 96" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+      <linearGradient id="gold" x1="0%" y1="0%" x2="100%" y2="100%">
+        <stop offset="0%"   stop-color="#f0d898"/>
+        <stop offset="55%"  stop-color="#c9a96e"/>
+        <stop offset="100%" stop-color="#9a7030"/>
+      </linearGradient>
+      <filter id="glow" x="-40%" y="-40%" width="180%" height="180%">
+        <feGaussianBlur stdDeviation="2.5" result="b"/>
+        <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+      </filter>
+    </defs>
+
+    <!-- ── Square base rotated 45° — bold diamond ── -->
+    <rect x="14" y="14" width="68" height="68" rx="4"
+          fill="#0c1020"
+          stroke="url(#gold)" stroke-width="2.2"
+          transform="rotate(45 48 48)"/>
+
+    <!-- ── Inner square same rotation, thinner ── -->
+    <rect x="22" y="22" width="52" height="52" rx="2"
+          fill="none"
+          stroke="url(#gold)" stroke-width="0.7" opacity="0.2"
+          transform="rotate(45 48 48)"/>
+
+    <!-- ── Upward chevron (bold, centered) ── -->
+    <polyline points="26,58 48,30 70,58"
+              fill="none" stroke="url(#gold)" stroke-width="4"
+              stroke-linecap="square" stroke-linejoin="miter"/>
+
+    <!-- ── Second chevron below, slightly smaller, thinner ── -->
+    <polyline points="32,68 48,50 64,68"
+              fill="none" stroke="url(#gold)" stroke-width="2"
+              stroke-linecap="square" stroke-linejoin="miter"
+              opacity="0.45"/>
+
+    <!-- ── Dot at apex ── -->
+    <circle cx="48" cy="30" r="3.2" fill="#c9a96e" filter="url(#glow)"/>
+
+  </svg>
+
+  <div class="wordmark">
+    <span class="w-name">Soulbound Studios</span>
+    <div class="w-rule"></div>
+    <span class="w-sub">Game Development</span>
+  </div>
+</div>
+
+<div class="controls">
+  <button class="btn active" onclick="setBg(false,this)">Dark</button>
+  <button class="btn"        onclick="setBg(true, this)">Light</button>
+</div>
+
+<script>
+  function setBg(light, btn) {
+    document.body.classList.toggle('light', light);
+    document.querySelectorAll('.btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+  }
+</script>
+</body>
+</html>

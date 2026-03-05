@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 160">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#d7e4da"/>
+      <stop offset="100%" stop-color="#b6cdbf"/>
+    </linearGradient>
+  </defs>
+  <rect width="160" height="160" rx="18" fill="url(#bg)"/>
+  <rect x="22" y="30" width="116" height="100" rx="18" fill="#f4faf6" stroke="#416555" stroke-width="4"/>
+  <path d="M82 44h10l8 26c6 18-2 38-19 46v22h-12v-22c-17-8-25-28-19-46l8-26h10Z" fill="#5f8772"/>
+  <circle cx="78" cy="66" r="7" fill="#ffffff"/>
+  <text x="20" y="148" font-family="Arial, Helvetica, sans-serif" font-size="10" letter-spacing="1" fill="#385547">
+    AI TEMP
+  </text>
+</svg>

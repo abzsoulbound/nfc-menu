@@ -1,9 +1,19 @@
 type LogLevel = "INFO" | "WARN" | "ERROR"
+type LogMeta = Record<string, unknown>
+
+export type ApiLogContext = {
+  requestId?: string
+  restaurantSlug?: string
+  actorRole?: string
+  route?: string
+  latencyMs?: number
+  statusCode?: number
+}
 
 export function log(
   level: LogLevel,
   message: string,
-  meta?: Record<string, any>
+  meta?: LogMeta
 ) {
   const entry = {
     level,
@@ -17,7 +27,19 @@ export function log(
 
 export async function logSystemEvent(
   action: string,
-  meta?: Record<string, any>
+  meta?: LogMeta
 ) {
   log("INFO", `SYSTEM:${action}`, meta)
+}
+
+export function logApi(
+  level: LogLevel,
+  message: string,
+  context?: ApiLogContext,
+  meta?: LogMeta
+) {
+  log(level, message, {
+    ...(context ?? {}),
+    ...(meta ?? {}),
+  })
 }

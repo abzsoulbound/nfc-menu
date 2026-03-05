@@ -1,15 +1,98 @@
+.ui-customer {
+  --bg-primary: #efe7d6;
+  --bg-secondary: #f7efde;
+  --bg-accent: #eadcbf;
+
+  --surface-primary: #f7efde;
+  --surface-secondary: #fbf4e7;
+  --surface-accent: #f1e3c9;
+  --surface-elevated: #fffaf0;
+
+  --text-primary: #2c2418;
+  --text-secondary: #5f4f3a;
+  --text-muted: #807058;
+
+  --accent-action: #7d5a2a;
+  --accent-action-strong: #66461e;
+  --accent-quiet: #f2e6cf;
+
+  --success-bg: #e4f3e8;
+  --success-fg: #2d6a4a;
+  --warning-bg: #fff1d7;
+  --warning-fg: #8a6115;
+  --danger-bg: #ffe3df;
+  --danger-fg: #8f2e2e;
+  --neutral-bg: #efe2c9;
+  --neutral-fg: #554734;
+
+  --border: #d7c3a2;
+  --focus: #8f6a3a;
+
+  --shadow-soft: 0 24px 60px -36px rgba(66, 44, 20, 0.45);
+  --shadow-hard: 0 18px 36px -26px rgba(8, 18, 34, 0.9);
+
+  --radius-card: 20px;
+  --radius-control: 12px;
+
+  --shell-max-width: 1120px;
+}
+
+.ui-staff {
+  --bg-primary: #0a1220;
+  --bg-secondary: #0f192d;
+  --bg-accent: #15233c;
+
+  --surface-primary: #0f192d;
+  --surface-secondary: #15233c;
+  --surface-accent: #1b2e4b;
+  --surface-elevated: #1a2a44;
+
+  --text-primary: #e8edf8;
+  --text-secondary: #b8c5dc;
+  --text-muted: #94a2be;
+
+  --accent-action: #4d7ff4;
+  --accent-action-strong: #3f68c7;
+  --accent-quiet: #1f2f4c;
+
+  --success-bg: #1f3d2f;
+  --success-fg: #b7e9cc;
+  --warning-bg: #493718;
+  --warning-fg: #f6d491;
+  --danger-bg: #4a2222;
+  --danger-fg: #f3b1b1;
+  --neutral-bg: #233553;
+  --neutral-fg: #d6dff0;
+
+  --border: #2b3d5f;
+  --focus: #7da4ff;
+
+  --shadow-soft: 0 14px 30px -22px rgba(7, 16, 31, 0.95);
+  --shadow-hard: 0 14px 34px -20px rgba(7, 14, 28, 0.98);
+
+  --radius-card: 12px;
+  --radius-control: 10px;
+
+  --shell-max-width: 1440px;
+}
+
 .surface-primary {
-  background: var(--bg-primary);
+  background: var(--surface-primary);
   color: var(--text-primary);
 }
 
 .surface-secondary {
-  background: var(--bg-secondary);
+  background: var(--surface-secondary);
   color: var(--text-primary);
 }
 
 .surface-accent {
-  background: var(--bg-accent);
+  background: var(--surface-accent);
+  color: var(--text-primary);
+}
+
+.surface-elevated {
+  background: var(--surface-elevated);
   color: var(--text-primary);
 }
 

@@ -22,7 +22,7 @@ export type AllergenSource = {
 export type ItemEdits = {
   removals?: string[]
   swaps?: { from: string; to: string }[]
-  addOns?: string[]
+  addOns?: (string | { name: string })[]
 }
 
 export function resolveAllergens(
@@ -51,8 +51,10 @@ export function resolveAllergens(
   }
 
   if (edits?.addOns) {
-    for (const a of edits.addOns) {
-      const added = sources.addOns?.[a]
+    for (const addOn of edits.addOns) {
+      const key =
+        typeof addOn === "string" ? addOn : addOn.name
+      const added = sources.addOns?.[key]
       if (added) {
         for (const x of added) active.add(x)
       }

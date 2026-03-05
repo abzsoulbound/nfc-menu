@@ -2,7 +2,48 @@
   color: var(--text-secondary);
 }
 
-.focus-ring:focus {
-  outline: 2px solid var(--accent-action);
+.text-muted {
+  color: var(--text-muted);
+}
+
+.display-font {
+  font-family: var(--font-display), "Times New Roman", serif;
+}
+
+.mono-font {
+  font-family: var(--font-mono), ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.focus-ring:focus-visible {
+  outline: 2px solid var(--focus);
   outline-offset: 2px;
+}
+
+.status-chip {
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 0.25rem 0.625rem;
+  font-size: 0.75rem;
+  line-height: 1rem;
+  font-weight: 600;
+}
+
+.status-chip-neutral {
+  background: var(--neutral-bg);
+  color: var(--neutral-fg);
+}
+
+.status-chip-success {
+  background: var(--success-bg);
+  color: var(--success-fg);
+}
+
+.status-chip-warning {
+  background: var(--warning-bg);
+  color: var(--warning-fg);
+}
+
+.status-chip-danger {
+  background: var(--danger-bg);
+  color: var(--danger-fg);
 }
