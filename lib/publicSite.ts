@@ -8,7 +8,7 @@ export const PUBLIC_SITE_LINKS = [
   { href: "/privacy", label: "Privacy" },
 ] as const
 
-export const PUBLIC_SITE_NAME = "Soulbound Studios"
+export const PUBLIC_SITE_NAME = "Soulbound Studio"
 
 export const PUBLIC_SITE_MONOGRAM = "SB"
 
@@ -27,7 +27,7 @@ export const PUBLIC_SITE_SUPPORT_HOURS =
   process.env.NEXT_PUBLIC_SUPPORT_HOURS?.trim() || "Mon-Fri, 09:00-17:00 GMT"
 
 export const PUBLIC_SITE_SUMMARY =
-  "Soulbound Studios builds branded digital products, tactile guest journeys, and operational systems for hospitality-led businesses."
+  "Soulbound Studio builds branded digital products, tactile guest journeys, and operational systems for hospitality-led businesses."
 
 export const PUBLIC_SITE_HEADER_HINT =
   "Creative technology for hospitality, guest experience, and operations."

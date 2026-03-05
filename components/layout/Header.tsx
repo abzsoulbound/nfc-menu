@@ -3,7 +3,7 @@
 import Link from "next/link"
 import { useMemo } from "react"
 import { usePathname, useRouter } from "next/navigation"
-import { SoulboundStudiosLogo } from "@/components/public/SoulboundStudiosLogo"
+import { SoulboundStudioLogo } from "@/components/public/SoulboundStudioLogo"
 import { calculateCartTotals } from "@/lib/pricing"
 import {
   PUBLIC_SITE_HEADER_HINT,
@@ -190,7 +190,7 @@ export function Header() {
         <div className={`flex items-center ${desktopOps ? "gap-4" : "gap-3"}`}>
           {publicSite ? (
             <div className="space-y-1">
-              <SoulboundStudiosLogo compact tone="light" />
+              <SoulboundStudioLogo compact tone="light" />
               <div className="max-w-[540px] text-xs text-[rgba(233,219,190,0.72)]">
                 {contextHint}
               </div>

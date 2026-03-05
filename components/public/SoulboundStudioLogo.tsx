@@ -1,7 +1,7 @@
 import { useId } from "react"
 import { Jost } from "next/font/google"
 
-type SoulboundStudiosLogoProps = {
+type SoulboundStudioLogoProps = {
   className?: string
   compact?: boolean
   tone?: "default" | "light"
@@ -12,7 +12,7 @@ const logoWordmarkFont = Jost({
   weight: ["200", "300", "400"],
 })
 
-function SoulboundStudiosGlyph({
+function SoulboundStudioGlyph({
   className,
 }: {
   className: string
@@ -90,11 +90,11 @@ function SoulboundStudiosGlyph({
   )
 }
 
-export function SoulboundStudiosLogo({
+export function SoulboundStudioLogo({
   className = "",
   compact = false,
   tone = "default",
-}: SoulboundStudiosLogoProps) {
+}: SoulboundStudioLogoProps) {
   const nameToneClass = tone === "light"
     ? "text-[#e7ddcc]"
     : "text-[var(--text-primary)]"
@@ -102,11 +102,18 @@ export function SoulboundStudiosLogo({
   if (compact) {
     return (
       <div className={`flex items-center gap-3 ${className}`}>
-        <SoulboundStudiosGlyph className="h-12 w-12 shrink-0" />
-        <div className={logoWordmarkFont.className}>
-          <span className={`pr-[0.44em] text-[11px] font-light uppercase tracking-[0.44em] sm:text-[12px] ${nameToneClass}`}>
+        <SoulboundStudioGlyph className="h-12 w-12 shrink-0" />
+        <div className={`${logoWordmarkFont.className} leading-tight`}>
+          <div
+            className={`pr-[0.26em] text-[10px] font-light uppercase tracking-[0.26em] sm:text-[11px] ${nameToneClass}`}
+          >
             Soulbound
-          </span>
+          </div>
+          <div
+            className={`pr-[0.26em] text-[10px] font-light uppercase tracking-[0.26em] sm:text-[11px] ${nameToneClass}`}
+          >
+            Studio
+          </div>
         </div>
       </div>
     )
@@ -114,11 +121,11 @@ export function SoulboundStudiosLogo({
 
   return (
     <div className={`flex flex-col items-center gap-6 ${className}`}>
-      <SoulboundStudiosGlyph className="h-24 w-24 md:h-28 md:w-28" />
+      <SoulboundStudioGlyph className="h-24 w-24 md:h-28 md:w-28" />
 
       <div className={logoWordmarkFont.className}>
         <span className={`pr-[0.44em] text-[15px] font-light uppercase tracking-[0.44em] md:text-[16.5px] ${nameToneClass}`}>
-          Soulbound
+          Soulbound Studio
         </span>
       </div>
     </div>

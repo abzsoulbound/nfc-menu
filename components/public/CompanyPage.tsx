@@ -1,5 +1,5 @@
 import Link from "next/link"
-import { SoulboundStudiosLogo } from "@/components/public/SoulboundStudiosLogo"
+import { SoulboundStudioLogo } from "@/components/public/SoulboundStudioLogo"
 import {
   PUBLIC_SITE_LAST_UPDATED,
   PUBLIC_SITE_NAME,
@@ -191,14 +191,14 @@ export function CompanyPage() {
                 {PUBLIC_SITE_NAME}
               </div>
 
-              <SoulboundStudiosLogo tone="light" className="items-start" />
+              <SoulboundStudioLogo tone="light" className="items-start" />
 
               <h1 className="max-w-4xl font-[family:var(--font-display)] text-4xl leading-tight tracking-tight text-[#f7efdf] md:text-6xl">
                 Startup product studio building real software used by real people.
               </h1>
 
               <p className="max-w-3xl text-sm leading-7 text-[rgba(236,226,206,0.86)] md:text-base">
-                Soulbound Studios is a developer-led company focused on product execution, deployment discipline, and solving real operational problems through software.
+                Soulbound Studio is a developer-led company focused on product execution, deployment discipline, and solving real operational problems through software.
               </p>
 
               <div className="flex flex-wrap gap-2">
@@ -212,7 +212,7 @@ export function CompanyPage() {
                   href="/contact"
                   className="focus-ring inline-flex min-h-[46px] items-center justify-center rounded-[var(--radius-control)] border border-[rgba(201,169,110,0.44)] bg-[rgba(9,18,35,0.72)] px-4 py-2 text-sm font-semibold text-[#f2e9d6] transition-colors hover:bg-[rgba(18,34,60,0.9)]"
                 >
-                  Work with Soulbound
+                  Work with Soulbound Studio
                 </Link>
                 <a
                   href="https://github.com/abzsoulbound"
@@ -252,7 +252,7 @@ export function CompanyPage() {
                   Abdullah &quot;Abz&quot; Ozdemir
                 </p>
                 <p className="mt-1 text-sm leading-6 text-[rgba(234,223,203,0.84)]">
-                  Software Engineering student at the University of Leicester, building and shipping production-focused software products through Soulbound Studios.
+                  Software Engineering student at the University of Leicester, building and shipping production-focused software products through Soulbound Studio.
                 </p>
               </div>
 
@@ -281,7 +281,7 @@ export function CompanyPage() {
             A company portfolio built around product execution.
           </h2>
           <p className="mt-2 max-w-4xl text-sm leading-7 text-[rgba(236,227,210,0.84)] md:text-base">
-            Soulbound Studios operates as a modern developer portfolio and startup product studio. The company focus is on building practical systems with clear business value, strong technical foundations, and real deployment outcomes.
+            Soulbound Studio operates as a modern developer portfolio and startup product studio. The company focus is on building practical systems with clear business value, strong technical foundations, and real deployment outcomes.
           </p>
 
           <div className="mt-4 flex flex-wrap gap-2">
@@ -360,7 +360,7 @@ export function CompanyPage() {
                 Projects / Products
               </div>
               <h2 className="mt-2 font-[family:var(--font-display)] text-4xl leading-tight text-[#f6efdf]">
-                Core products built under Soulbound Studios.
+                Core products built under Soulbound Studio.
               </h2>
             </div>
           </div>
