@@ -8,6 +8,7 @@ import { useUIStore } from "@/store/useUIStore"
 import { useRestaurantStore } from "@/store/useRestaurantStore"
 import { ToastProvider } from "@/components/ui/Toast"
 import { ModalProvider } from "@/components/ui/Modal"
+import { DemoNarrationOverlay } from "@/components/demo/DemoNarrationOverlay"
 import { fetchJson } from "@/lib/fetchJson"
 
 /*
@@ -84,6 +85,10 @@ export function Providers({ children }: { children: ReactNode }) {
             isPublished: boolean
           }
           ux: {
+            presetId:
+              | "FAST_CASUAL_TRUSTED"
+              | "FULL_SERVICE_ASSURANCE"
+              | "BAR_LOUNGE_SAFE_EXPRESS"
             menuDiscovery:
               | "HERO_FIRST"
               | "SECTION_FIRST"
@@ -101,6 +106,16 @@ export function Providers({ children }: { children: ReactNode }) {
               | "ALL_IN_ONE"
               | "TASK_TABS"
               | "POST_PURCHASE_PROMPT"
+            orderSafetyMode: "STANDARD" | "STRICT"
+            checkoutSafetyMode: "STANDARD" | "STRICT"
+            socialProofMode:
+              | "OFF"
+              | "VERIFIED_REVIEWS"
+              | "VERIFIED_USAGE"
+            tipPresetStrategy:
+              | "CONSERVATIVE"
+              | "BALANCED"
+              | "PREMIUM"
             showProgressAnchors: boolean
             emphasizeSocialProof: boolean
             trustMicrocopy: "MINIMAL" | "BALANCED" | "HIGH_ASSURANCE"
@@ -136,6 +151,7 @@ export function Providers({ children }: { children: ReactNode }) {
     <ToastProvider>
       <ModalProvider>
         {children}
+        <DemoNarrationOverlay />
       </ModalProvider>
     </ToastProvider>
   )

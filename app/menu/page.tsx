@@ -5,6 +5,7 @@ import { AI_PLACEHOLDER_HERO_URL } from "@/lib/placeholders"
 import { getMenuSnapshot } from "@/lib/runtimeStore"
 import { getRestaurantForCurrentRequest } from "@/lib/restaurants"
 import { withRestaurantContext } from "@/lib/tenantContext"
+import { UxPageTracker } from "@/components/ux/UxPageTracker"
 
 export const dynamic = "force-dynamic"
 
@@ -74,6 +75,7 @@ export default async function PublicMenuPage() {
 
   return (
     <div className="relative px-4 py-6 md:px-8 md:py-10">
+      <UxPageTracker page="menu" step="discover" />
       <div
         aria-hidden="true"
         className="menu-orbit pointer-events-none absolute -left-20 top-20 h-48 w-48 rounded-full bg-[radial-gradient(circle,rgba(201,169,110,0.24),rgba(201,169,110,0))] blur-3xl"
@@ -215,13 +217,15 @@ export default async function PublicMenuPage() {
             </div>
           </div>
 
-          {!customerMinimalMode && uxConfig.emphasizeSocialProof && (
+          {!customerMinimalMode && uxConfig.socialProofMode !== "OFF" && (
             <div className="mt-3 flex flex-wrap gap-2 text-xs">
               <span className="status-chip status-chip-success">
-                Trusted by repeat guests
+                {uxConfig.socialProofMode === "VERIFIED_REVIEWS"
+                  ? "Verified guest reviews"
+                  : "Verified guest usage"}
               </span>
               <span className="status-chip status-chip-success">
-                Fast mobile ordering
+                Evidence-based trust cues
               </span>
               <span className="status-chip status-chip-success">
                 Table-safe checkout

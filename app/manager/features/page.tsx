@@ -14,6 +14,8 @@ import {
   MenuDaypartDTO,
   PromoCodeDTO,
   ReservationDTO,
+  UxExperimentDTO,
+  UxInsightsDTO,
   WaitlistEntryDTO,
 } from "@/lib/types"
 
@@ -58,6 +60,8 @@ export default function ManagerFeaturePage() {
   const [feedback, setFeedback] = useState<FeedbackDTO[]>([])
   const [notifications, setNotifications] = useState<NotificationDTO[]>([])
   const [receipts, setReceipts] = useState<CustomerCheckoutReceiptDTO[]>([])
+  const [uxExperiments, setUxExperiments] = useState<UxExperimentDTO[]>([])
+  const [uxInsights, setUxInsights] = useState<UxInsightsDTO | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [lastRefreshedAt, setLastRefreshedAt] = useState<string | null>(null)
@@ -80,6 +84,38 @@ export default function ManagerFeaturePage() {
   const [deliveryTotal, setDeliveryTotal] = useState("42.50")
 
   const [thresholdInput, setThresholdInput] = useState("5")
+  const [uxKey, setUxKey] = useState("customer_funnel_v1")
+  const [uxName, setUxName] = useState("Customer Funnel V1")
+  const [uxDescription, setUxDescription] = useState(
+    "Compare trust-heavy guidance vs control."
+  )
+  const [uxStatus, setUxStatus] = useState<
+    "DRAFT" | "LIVE" | "PAUSED" | "ARCHIVED"
+  >("DRAFT")
+  const [uxTrafficPercent, setUxTrafficPercent] = useState("100")
+  const [uxInsightsDays, setUxInsightsDays] = useState("14")
+  const [uxVariantsJson, setUxVariantsJson] = useState(
+    JSON.stringify(
+      [
+        {
+          key: "control",
+          label: "Control",
+          weight: 1,
+        },
+        {
+          key: "strict",
+          label: "Strict safety",
+          weight: 1,
+          uxPatch: {
+            orderSafetyMode: "STRICT",
+            checkoutSafetyMode: "STRICT",
+          },
+        },
+      ],
+      null,
+      2
+    )
+  )
 
   const fetchAll = useCallback(async () => {
     const results = await Promise.allSettled([
@@ -94,6 +130,13 @@ export default function ManagerFeaturePage() {
       fetchJson<FeedbackDTO[]>("/api/staff?view=feedback&limit=80", { cache: "no-store" }),
       fetchJson<NotificationDTO[]>("/api/staff?view=notifications&limit=80", { cache: "no-store" }),
       fetchJson<CustomerCheckoutReceiptDTO[]>("/api/staff?view=receipts&limit=80", { cache: "no-store" }),
+      fetchJson<UxExperimentDTO[]>("/api/ux/experiments", { cache: "no-store" }),
+      fetchJson<UxInsightsDTO>(
+        `/api/ux/insights?experimentKey=${encodeURIComponent(uxKey)}&days=${encodeURIComponent(
+          uxInsightsDays
+        )}`,
+        { cache: "no-store" }
+      ),
     ])
 
     if (results[0].status === "fulfilled") setSummary(results[0].value)
@@ -110,8 +153,10 @@ export default function ManagerFeaturePage() {
     if (results[8].status === "fulfilled") setFeedback(results[8].value)
     if (results[9].status === "fulfilled") setNotifications(results[9].value)
     if (results[10].status === "fulfilled") setReceipts(results[10].value)
+    if (results[11].status === "fulfilled") setUxExperiments(results[11].value)
+    if (results[12].status === "fulfilled") setUxInsights(results[12].value)
     setLastRefreshedAt(new Date().toLocaleTimeString())
-  }, [])
+  }, [uxInsightsDays, uxKey])
 
   useEffect(() => {
     fetchAll().catch(err => setError((err as Error).message))
@@ -120,6 +165,16 @@ export default function ManagerFeaturePage() {
     }, 7000)
     return () => clearInterval(timer)
   }, [fetchAll])
+
+  useEffect(() => {
+    const current = uxExperiments.find(experiment => experiment.key === uxKey)
+    if (!current) return
+    setUxName(current.name)
+    setUxDescription(current.description ?? "")
+    setUxStatus(current.status)
+    setUxTrafficPercent(String(current.trafficPercent))
+    setUxVariantsJson(JSON.stringify(current.variants, null, 2))
+  }, [uxExperiments, uxKey])
 
   async function postAction(key: string, payload: Record<string, unknown>) {
     setBusy(key)
@@ -131,6 +186,51 @@ export default function ManagerFeaturePage() {
         body: JSON.stringify(payload),
       })
       await fetchAll()
+    } catch (err) {
+      setError((err as Error).message)
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  async function saveUxExperiment() {
+    setBusy("UX_EXPERIMENT_SAVE")
+    setError(null)
+    try {
+      const variants = JSON.parse(uxVariantsJson)
+      await fetchJson<UxExperimentDTO>("/api/ux/experiments", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          key: uxKey,
+          name: uxName,
+          description: uxDescription || null,
+          status: uxStatus,
+          trafficPercent: Number(uxTrafficPercent || "0"),
+          variants,
+        }),
+      })
+      await fetchAll()
+    } catch (err) {
+      setError((err as Error).message)
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  async function refreshUxInsights() {
+    setBusy("UX_INSIGHTS_REFRESH")
+    setError(null)
+    try {
+      const payload = await fetchJson<UxInsightsDTO>(
+        `/api/ux/insights?experimentKey=${encodeURIComponent(
+          uxKey
+        )}&days=${encodeURIComponent(uxInsightsDays)}`,
+        {
+          cache: "no-store",
+        }
+      )
+      setUxInsights(payload)
     } catch (err) {
       setError((err as Error).message)
     } finally {
@@ -795,6 +895,161 @@ export default function ManagerFeaturePage() {
             </div>
           </Card>
         </div>
+
+        <Card className="space-y-3 border-[rgba(114,153,225,0.34)] bg-[rgba(16,27,47,0.72)]">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h3 className="text-base font-semibold tracking-tight text-[#e8f1ff]">
+              UX Experiments
+            </h3>
+            <div className="text-xs text-[rgba(183,205,239,0.76)]">
+              {uxExperiments.length} experiment(s)
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 gap-2 md:grid-cols-4">
+            <input
+              className={controlFieldClass}
+              placeholder="Experiment key"
+              value={uxKey}
+              onChange={event => setUxKey(event.target.value)}
+            />
+            <input
+              className={`${controlFieldClass} md:col-span-2`}
+              placeholder="Experiment name"
+              value={uxName}
+              onChange={event => setUxName(event.target.value)}
+            />
+            <select
+              className={controlFieldClass}
+              value={uxStatus}
+              onChange={event =>
+                setUxStatus(
+                  event.target.value as
+                    | "DRAFT"
+                    | "LIVE"
+                    | "PAUSED"
+                    | "ARCHIVED"
+                )
+              }
+            >
+              <option value="DRAFT">Draft</option>
+              <option value="LIVE">Live</option>
+              <option value="PAUSED">Paused</option>
+              <option value="ARCHIVED">Archived</option>
+            </select>
+            <input
+              className={`${controlFieldClass} md:col-span-4`}
+              placeholder="Description"
+              value={uxDescription}
+              onChange={event => setUxDescription(event.target.value)}
+            />
+            <label className="space-y-1 text-xs text-[rgba(183,205,239,0.76)] md:col-span-1">
+              Traffic %
+              <input
+                className={controlFieldClass}
+                value={uxTrafficPercent}
+                onChange={event => setUxTrafficPercent(event.target.value)}
+              />
+            </label>
+            <label className="space-y-1 text-xs text-[rgba(183,205,239,0.76)] md:col-span-3">
+              Variant JSON
+              <textarea
+                className={`${controlFieldClass} min-h-[140px]`}
+                value={uxVariantsJson}
+                onChange={event => setUxVariantsJson(event.target.value)}
+              />
+            </label>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              disabled={busy !== null}
+              onClick={() => saveUxExperiment().catch(() => {})}
+            >
+              Save experiment
+            </Button>
+            <label className="flex items-center gap-2 text-xs text-[rgba(183,205,239,0.76)]">
+              Insights days
+              <input
+                className={`${controlFieldClass} w-24 px-2 py-1`}
+                value={uxInsightsDays}
+                onChange={event => setUxInsightsDays(event.target.value)}
+              />
+            </label>
+            <Button
+              variant="secondary"
+              disabled={busy !== null}
+              onClick={() => refreshUxInsights().catch(() => {})}
+            >
+              Refresh insights
+            </Button>
+          </div>
+
+          <div className="grid gap-3 lg:grid-cols-2">
+            <div className="rounded-[var(--radius-control)] border border-[rgba(120,161,234,0.3)] bg-[rgba(20,34,58,0.45)] p-3">
+              <div className="text-xs font-semibold uppercase tracking-[0.12em] text-[rgba(183,205,239,0.76)]">
+                Experiment list
+              </div>
+              <div className="mt-2 max-h-[220px] space-y-1 overflow-y-auto pr-1 text-sm text-[rgba(183,205,239,0.82)]">
+                {uxExperiments.map(experiment => (
+                  <button
+                    key={experiment.id}
+                    type="button"
+                    className="w-full rounded-[var(--radius-control)] border border-[rgba(120,161,234,0.3)] bg-[rgba(16,27,47,0.72)] px-3 py-2 text-left transition-colors hover:bg-[rgba(29,50,81,0.72)]"
+                    onClick={() => setUxKey(experiment.key)}
+                  >
+                    <div className="font-semibold text-[#e8f1ff]">
+                      {experiment.key}
+                    </div>
+                    <div className="text-xs">
+                      {experiment.status} | {experiment.trafficPercent}% traffic
+                    </div>
+                  </button>
+                ))}
+                {uxExperiments.length === 0 ? (
+                  <div className="text-sm text-[rgba(183,205,239,0.74)]">
+                    No UX experiments configured yet.
+                  </div>
+                ) : null}
+              </div>
+            </div>
+
+            <div className="rounded-[var(--radius-control)] border border-[rgba(120,161,234,0.3)] bg-[rgba(20,34,58,0.45)] p-3">
+              <div className="text-xs font-semibold uppercase tracking-[0.12em] text-[rgba(183,205,239,0.76)]">
+                Insights
+              </div>
+              {uxInsights ? (
+                <div className="mt-2 space-y-2 text-sm text-[rgba(183,205,239,0.82)]">
+                  <div>
+                    Sessions: {uxInsights.totalSessions} | Events:{" "}
+                    {uxInsights.totalEvents}
+                  </div>
+                  <div className="max-h-[180px] space-y-2 overflow-y-auto pr-1">
+                    {uxInsights.variants.map(variant => (
+                      <div
+                        key={variant.variantKey}
+                        className="rounded-[var(--radius-control)] border border-[rgba(120,161,234,0.3)] bg-[rgba(16,27,47,0.72)] px-3 py-2"
+                      >
+                        <div className="font-semibold text-[#e8f1ff]">
+                          {variant.variantKey} ({variant.sessions} sessions)
+                        </div>
+                        <div className="text-xs">
+                          {Object.entries(variant.eventCounts)
+                            .map(([event, count]) => `${event}:${count}`)
+                            .join(" | ") || "No events yet"}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <div className="mt-2 text-sm text-[rgba(183,205,239,0.74)]">
+                  No insights yet. Save and run an experiment first.
+                </div>
+              )}
+            </div>
+          </div>
+        </Card>
 
         <Card className="space-y-2 border-[rgba(114,153,225,0.34)] bg-[rgba(16,27,47,0.72)]">
           <h3 className="text-base font-semibold tracking-tight text-[#e8f1ff]">

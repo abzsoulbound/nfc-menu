@@ -28,6 +28,8 @@
     "qa:full": "npm run typecheck && npm run lint && npm run test:qa && npm run build && npm run qa:routes",
     "qa:release": "node scripts/qa-release.mjs",
     "qa:release:prod": "node scripts/qa-release.mjs --env-file .env.neoncheck.production",
+    "demo:open": "node scripts/open-demo-pages.mjs",
+    "demo:auto": "node scripts/open-demo-pages.mjs --base-url https://fable-stores-nfc-menu.vercel.app --tenant-slug demo --profile first-run --auto-feed --auto-next",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:migrate:deploy": "prisma migrate deploy",

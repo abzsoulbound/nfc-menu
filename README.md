@@ -52,6 +52,15 @@ Development:
 3. `npm run prisma:generate`
 4. `npm run dev`
 5. `npm run playwright:install` (first time only, for browser e2e)
+6. Demo launcher (opens all required demo tabs in default browser):
+   - `npm run demo:open -- --base-url https://fable-stores-nfc-menu.vercel.app --tenant-slug demo --profile first-run`
+   - `npm run demo:open -- --base-url https://fable-stores-nfc-menu.vercel.app --tenant-slug demo --profile rush-hour`
+   - `npm run demo:open -- --base-url https://fable-stores-nfc-menu.vercel.app --tenant-slug demo --profile full`
+   - `npm run demo:auto` (zero-arg autopilot, includes guided feed autostart)
+   - Add `--auto-feed --auto-next` to auto-enable guided feed and jump to first step.
+7. Portable launchers (no manual terminal typing once copied):
+   - Windows: double-click `Run-Demo.bat` (optional profile arg: `first-run`, `rush-hour`, `full`)
+   - macOS/Linux: run `bash run-demo.sh` (optional profile arg: `first-run`, `rush-hour`, `full`)
 
 Quality checks:
 - `npm run typecheck`

@@ -4,6 +4,7 @@ import { ReactNode, useMemo } from "react"
 import { usePathname } from "next/navigation"
 import { Header } from "@/components/layout/Header"
 import { Footer } from "@/components/layout/Footer"
+import { InformationFeedBar } from "@/components/layout/InformationFeedBar"
 import { resolveUiMode } from "@/lib/ui"
 import { buildThemeVars } from "@/lib/restaurantTheme"
 import { useRestaurantStore } from "@/store/useRestaurantStore"
@@ -25,6 +26,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       style={dynamicThemeVars}
     >
       <Header />
+      <InformationFeedBar />
       <main className="flex-1">
         {children}
       </main>

@@ -1,6 +1,8 @@
 import { OrderSubmissionItemDTO, Station } from "@/lib/types"
 import { getRestaurantContextSlug } from "@/lib/tenantContext"
 import {
+  DEMO_SIM_DAY_END_MINUTE,
+  DEMO_SIM_DAY_START_MINUTE,
   assignTag,
   createOrResumeSession,
   getDemoSimulatorConfig,
@@ -12,8 +14,12 @@ import {
   markStationPreparing,
   markStationSent,
   markTableDelivered,
+  resetDemoSimulatorDayClock,
+  setDemoSimulatorAutoMode,
+  setDemoSimulatorClockMinute,
   setDemoSimulatorEnabled,
   setDemoSimulatorLastTick,
+  setDemoSimulatorStepMinutes,
   submitOrder,
 } from "@/lib/runtimeStore"
 
@@ -21,6 +27,20 @@ const DEMO_TAG_PREFIX = "demo-table-"
 const DEMO_TABLE_MAX = 12
 const MIN_TICK_INTERVAL_MS = 4500
 const MAX_PENDING_LINES = 26
+const MAX_STEP_MINUTES = 60
+
+export const DEMO_SIM_RUSH_WINDOWS = [
+  {
+    startMinute: 11 * 60,
+    endMinute: 12 * 60,
+    label: "11:00-12:00",
+  },
+  {
+    startMinute: 14 * 60,
+    endMinute: 15 * 60,
+    label: "14:00-15:00",
+  },
+] as const
 
 const globalForDemoSimulator = globalThis as unknown as {
   __NFC_DEMO_SIM_LAST_RUN_MS_BY_TENANT__?: Record<string, number>
@@ -49,6 +69,75 @@ export type DemoSimulatorStatus = {
     ready: number
   }
   activeDemoSessions: number
+  simulatedMinuteOfDay: number
+  simulatedTimeLabel: string
+  dayStartMinute: number
+  dayEndMinute: number
+  stepMinutes: number
+  autoMode: boolean
+  isRushHour: boolean
+  dayComplete: boolean
+  rushWindows: ReadonlyArray<{
+    startMinute: number
+    endMinute: number
+    label: string
+  }>
+}
+
+function clampProbability(value: number) {
+  if (!Number.isFinite(value)) return 0
+  return Math.max(0, Math.min(1, value))
+}
+
+function clampStepMinutes(value: number) {
+  if (!Number.isFinite(value)) return 10
+  return Math.max(1, Math.min(MAX_STEP_MINUTES, Math.floor(value)))
+}
+
+function clampSimulatedMinute(minute: number) {
+  if (!Number.isFinite(minute)) return DEMO_SIM_DAY_START_MINUTE
+  return Math.max(
+    DEMO_SIM_DAY_START_MINUTE,
+    Math.min(DEMO_SIM_DAY_END_MINUTE, Math.floor(minute))
+  )
+}
+
+function formatSimulatedTime(minuteOfDay: number) {
+  const hours = Math.floor(minuteOfDay / 60)
+  const minutes = minuteOfDay % 60
+  const h = String(hours).padStart(2, "0")
+  const m = String(minutes).padStart(2, "0")
+  return `${h}:${m}`
+}
+
+function isRushHourMinute(minuteOfDay: number) {
+  return DEMO_SIM_RUSH_WINDOWS.some(
+    window =>
+      minuteOfDay >= window.startMinute &&
+      minuteOfDay < window.endMinute
+  )
+}
+
+function demandFactor(minuteOfDay: number) {
+  const minute = clampSimulatedMinute(minuteOfDay)
+  const daySpan = DEMO_SIM_DAY_END_MINUTE - DEMO_SIM_DAY_START_MINUTE
+  const progress =
+    daySpan <= 0 ? 0 : (minute - DEMO_SIM_DAY_START_MINUTE) / daySpan
+  const broadLunchCurve = 0.46 + 0.24 * Math.sin(progress * Math.PI)
+  const morningBump = minute < 10 * 60 ? 0.06 : 0
+  const closingDrop = minute >= 16 * 60 ? -0.12 : 0
+  const rushBoost = isRushHourMinute(minute) ? 0.34 : 0
+  return clampProbability(
+    broadLunchCurve + morningBump + closingDrop + rushBoost
+  )
+}
+
+function queuePressure() {
+  return (
+    getStationQueue("KITCHEN").length +
+    getStationQueue("BAR").length +
+    getReadyQueue().length
+  )
 }
 
 function demoSessionMap() {
@@ -151,11 +240,26 @@ function spawnDemoOrder() {
   return true
 }
 
-function progressStation(station: Station) {
+function progressStation(
+  station: Station,
+  options: {
+    minuteOfDay: number
+    sliceMinutes: number
+  }
+) {
   const queue = getStationQueue(station)
   if (queue.length === 0) return false
 
-  const candidates = queue.slice(0, Math.min(2, queue.length))
+  const sliceMinutes = Math.max(1, Math.floor(options.sliceMinutes))
+  const rush = isRushHourMinute(options.minuteOfDay)
+  const queueLoadPenalty = Math.min(0.18, queuePressure() / 90)
+  const readyChance = clampProbability(
+    0.64 + sliceMinutes * 0.02 + (rush ? -0.06 : 0.04) - queueLoadPenalty
+  )
+
+  const candidateTarget =
+    Math.max(2, Math.round(sliceMinutes / 3) + (rush ? 1 : 0))
+  const candidates = queue.slice(0, Math.min(candidateTarget, queue.length))
   let changed = false
 
   for (const line of candidates) {
@@ -166,7 +270,7 @@ function progressStation(station: Station) {
     })
     if (prep.updated > 0) changed = true
 
-    if (Math.random() < 0.75) {
+    if (Math.random() < readyChance) {
       const ready = markStationSent({
         tableNumber: line.tableNumber,
         station,
@@ -179,17 +283,60 @@ function progressStation(station: Station) {
   return changed
 }
 
-function deliverReadyLines() {
+function deliverReadyLines(options: {
+  minuteOfDay: number
+  sliceMinutes: number
+}) {
   const readyQueue = getReadyQueue()
   if (readyQueue.length === 0) return false
 
+  const sliceMinutes = Math.max(1, Math.floor(options.sliceMinutes))
+  const rush = isRushHourMinute(options.minuteOfDay)
+  const queueLoadPenalty = Math.min(0.2, queuePressure() / 95)
+  const deliverChance = clampProbability(
+    0.72 + sliceMinutes * 0.015 + (rush ? -0.05 : 0.03) - queueLoadPenalty
+  )
+
+  const deliveryTarget =
+    Math.max(2, Math.round(sliceMinutes / 3) + (rush ? 1 : 0))
   let changed = false
-  for (const line of readyQueue.slice(0, Math.min(2, readyQueue.length))) {
-    if (Math.random() < 0.8) {
+  for (const line of readyQueue.slice(0, Math.min(deliveryTarget, readyQueue.length))) {
+    if (Math.random() < deliverChance) {
       const delivered = markTableDelivered(line.tableNumber, [line.lineId])
       if (delivered.updated > 0) changed = true
     }
   }
+  return changed
+}
+
+function runDemandSlice(options: {
+  minuteOfDay: number
+  sliceMinutes: number
+}) {
+  let changed = false
+  const demand = demandFactor(options.minuteOfDay)
+  const spawnAttempts =
+    Math.max(1, Math.round(options.sliceMinutes / 3)) +
+    (isRushHourMinute(options.minuteOfDay) ? 1 : 0)
+
+  for (let attempt = 0; attempt < spawnAttempts; attempt += 1) {
+    const pressure = queuePressure()
+    if (pressure >= MAX_PENDING_LINES) break
+
+    const queuePenalty = (pressure / MAX_PENDING_LINES) * 0.5
+    const sliceBoost = Math.min(0.28, options.sliceMinutes * 0.02)
+    const spawnChance = clampProbability(
+      0.14 + demand * 0.66 + sliceBoost - queuePenalty
+    )
+    if (Math.random() < spawnChance && spawnDemoOrder()) {
+      changed = true
+    }
+  }
+
+  if (progressStation("KITCHEN", options)) changed = true
+  if (progressStation("BAR", options)) changed = true
+  if (deliverReadyLines(options)) changed = true
+
   return changed
 }
 
@@ -198,6 +345,9 @@ export function getDemoSimulatorStatus(): DemoSimulatorStatus {
   const kitchen = getStationQueue("KITCHEN").length
   const bar = getStationQueue("BAR").length
   const ready = getReadyQueue().length
+  const simulatedMinuteOfDay = clampSimulatedMinute(
+    config.simulatedMinuteOfDay
+  )
   const activeDemoSessions = listSessions().filter(
     session =>
       typeof session.tagId === "string" &&
@@ -213,6 +363,15 @@ export function getDemoSimulatorStatus(): DemoSimulatorStatus {
       ready,
     },
     activeDemoSessions,
+    simulatedMinuteOfDay,
+    simulatedTimeLabel: formatSimulatedTime(simulatedMinuteOfDay),
+    dayStartMinute: DEMO_SIM_DAY_START_MINUTE,
+    dayEndMinute: DEMO_SIM_DAY_END_MINUTE,
+    stepMinutes: clampStepMinutes(config.stepMinutes),
+    autoMode: config.autoMode === true,
+    isRushHour: isRushHourMinute(simulatedMinuteOfDay),
+    dayComplete: simulatedMinuteOfDay >= DEMO_SIM_DAY_END_MINUTE,
+    rushWindows: DEMO_SIM_RUSH_WINDOWS,
   }
 }
 
@@ -223,11 +382,34 @@ export function startDemoSimulator() {
 
 export function stopDemoSimulator() {
   setDemoSimulatorEnabled(false)
+  setDemoSimulatorAutoMode(false)
+  return getDemoSimulatorStatus()
+}
+
+export function resetDemoSimulatorDay() {
+  resetDemoSimulatorDayClock()
+  return getDemoSimulatorStatus()
+}
+
+export function setDemoSimulatorStep(stepMinutes: number) {
+  setDemoSimulatorStepMinutes(stepMinutes)
+  return getDemoSimulatorStatus()
+}
+
+export function setDemoSimulatorAutoRun(autoMode: boolean) {
+  setDemoSimulatorAutoMode(autoMode)
+  return getDemoSimulatorStatus()
+}
+
+export function setDemoSimulatorTime(minuteOfDay: number) {
+  setDemoSimulatorClockMinute(minuteOfDay)
   return getDemoSimulatorStatus()
 }
 
 export function runDemoSimulatorTick(options?: {
   force?: boolean
+  stepMinutes?: number
+  advanceClock?: boolean
 }): TickResult {
   const config = getDemoSimulatorConfig()
   if (!config.enabled) {
@@ -257,23 +439,52 @@ export function runDemoSimulatorTick(options?: {
     }
   }
 
-  lastRuns[tenant] = nowMs
-
-  let changed = false
-  const queuePressure =
-    getStationQueue("KITCHEN").length +
-    getStationQueue("BAR").length +
-    getReadyQueue().length
-
-  if (queuePressure < MAX_PENDING_LINES && Math.random() < 0.85) {
-    if (spawnDemoOrder()) {
-      changed = true
+  const currentMinute = clampSimulatedMinute(config.simulatedMinuteOfDay)
+  if (currentMinute >= DEMO_SIM_DAY_END_MINUTE) {
+    if (config.autoMode) {
+      setDemoSimulatorAutoMode(false)
+    }
+    return {
+      ran: false,
+      changed: false,
+      status: getDemoSimulatorStatus(),
     }
   }
 
-  if (progressStation("KITCHEN")) changed = true
-  if (progressStation("BAR")) changed = true
-  if (deliverReadyLines()) changed = true
+  const stepMinutes = clampStepMinutes(
+    Number(options?.stepMinutes ?? config.stepMinutes)
+  )
+  const advanceClock = options?.advanceClock !== false
+
+  lastRuns[tenant] = nowMs
+  setDemoSimulatorStepMinutes(stepMinutes)
+
+  let minuteCursor = currentMinute
+  let remaining = stepMinutes
+  let changed = false
+
+  while (remaining > 0 && minuteCursor < DEMO_SIM_DAY_END_MINUTE) {
+    const sliceMinutes = Math.min(5, remaining)
+    const sliceChanged = runDemandSlice({
+      minuteOfDay: minuteCursor,
+      sliceMinutes,
+    })
+    if (sliceChanged) {
+      changed = true
+    }
+    minuteCursor = Math.min(
+      DEMO_SIM_DAY_END_MINUTE,
+      minuteCursor + sliceMinutes
+    )
+    remaining -= sliceMinutes
+  }
+
+  if (advanceClock) {
+    setDemoSimulatorClockMinute(minuteCursor)
+    if (minuteCursor >= DEMO_SIM_DAY_END_MINUTE && config.autoMode) {
+      setDemoSimulatorAutoMode(false)
+    }
+  }
 
   setDemoSimulatorLastTick(new Date(nowMs).toISOString())
   return {
@@ -286,16 +497,25 @@ export function runDemoSimulatorTick(options?: {
 export function runDemoSimulatorBurst(options?: {
   ticks?: number
   force?: boolean
+  stepMinutes?: number
+  advanceClock?: boolean
 }): BurstResult {
   const ticksRequested = Number(options?.ticks ?? 1)
   const ticks = Math.max(1, Math.min(24, Math.floor(ticksRequested)))
 
   let ran = false
   let changed = false
+  let executedTicks = 0
   for (let index = 0; index < ticks; index += 1) {
     const tick = runDemoSimulatorTick({
       force: options?.force ?? true,
+      stepMinutes: options?.stepMinutes,
+      advanceClock: options?.advanceClock,
     })
+    if (!tick.ran) {
+      break
+    }
+    executedTicks += 1
     ran = ran || tick.ran
     changed = changed || tick.changed
   }
@@ -303,7 +523,7 @@ export function runDemoSimulatorBurst(options?: {
   return {
     ran,
     changed,
-    ticks,
+    ticks: executedTicks,
     status: getDemoSimulatorStatus(),
   }
 }

@@ -4,8 +4,13 @@ import Link from "next/link"
 import { useEffect, useState } from "react"
 import { Button } from "@/components/ui/Button"
 import { Card } from "@/components/ui/Card"
+import {
+  applyCustomerExperiencePreset,
+  CUSTOMER_EXPERIENCE_PRESETS,
+} from "@/lib/customerExperience"
 import { fetchJson } from "@/lib/fetchJson"
 import type {
+  CustomerExperiencePresetId,
   CustomerExperienceConfig,
   LaunchReadiness,
 } from "@/lib/types"
@@ -27,6 +32,15 @@ const fieldClass =
   "w-full rounded-[var(--radius-control)] border border-[rgba(120,161,234,0.36)] bg-[rgba(20,34,58,0.54)] px-3 py-2 text-sm text-[var(--text-primary)] outline-none transition-colors focus:border-[rgba(138,180,255,0.72)]"
 const textareaClass = `${fieldClass} min-h-[80px]`
 
+const presetDescriptions: Record<CustomerExperiencePresetId, string> = {
+  FAST_CASUAL_TRUSTED:
+    "Fast-moving ordering with explicit final review and low-friction correction.",
+  FULL_SERVICE_ASSURANCE:
+    "Guided, high-assurance journey focused on confidence and order accuracy.",
+  BAR_LOUNGE_SAFE_EXPRESS:
+    "Search-led repeat ordering with lightweight but visible safety checkpoints.",
+}
+
 export default function ManagerCustomizePage() {
   const [slug, setSlug] = useState("")
   const [name, setName] = useState("")
@@ -34,6 +48,9 @@ export default function ManagerCustomizePage() {
   const [logoUrl, setLogoUrl] = useState("")
   const [heroUrl, setHeroUrl] = useState("")
   const [config, setConfig] = useState<CustomerExperienceConfig | null>(null)
+  const [presetDraftId, setPresetDraftId] = useState<CustomerExperiencePresetId>(
+    "FULL_SERVICE_ASSURANCE"
+  )
   const [launchReadiness, setLaunchReadiness] =
     useState<LaunchReadiness | null>(null)
   const [loading, setLoading] = useState(true)
@@ -56,6 +73,7 @@ export default function ManagerCustomizePage() {
         setLogoUrl(payload.assets.logoUrl ?? "")
         setHeroUrl(payload.assets.heroUrl ?? "")
         setConfig(payload.experienceConfig)
+        setPresetDraftId(payload.experienceConfig.ux.presetId)
         setLaunchReadiness(payload.launchReadiness)
       })
       .catch(err => {
@@ -98,6 +116,7 @@ export default function ManagerCustomizePage() {
       setLogoUrl(updated.assets.logoUrl ?? "")
       setHeroUrl(updated.assets.heroUrl ?? "")
       setConfig(updated.experienceConfig)
+      setPresetDraftId(updated.experienceConfig.ux.presetId)
       setLaunchReadiness(updated.launchReadiness)
       setSavedAt(new Date().toLocaleTimeString())
     } catch (err) {
@@ -124,6 +143,7 @@ export default function ManagerCustomizePage() {
         }
       )
       setConfig(updated.experienceConfig)
+      setPresetDraftId(updated.experienceConfig.ux.presetId)
       setLaunchReadiness(updated.launchReadiness)
       setSavedAt(new Date().toLocaleTimeString())
     } catch (err) {
@@ -151,6 +171,7 @@ export default function ManagerCustomizePage() {
         }
       )
       setConfig(updated.experienceConfig)
+      setPresetDraftId(updated.experienceConfig.ux.presetId)
       setLaunchReadiness(updated.launchReadiness)
       setSavedAt(new Date().toLocaleTimeString())
     } catch (err) {
@@ -158,6 +179,14 @@ export default function ManagerCustomizePage() {
     } finally {
       setPublishing(false)
     }
+  }
+
+  function applyPreset(presetId: CustomerExperiencePresetId) {
+    setConfig(prev => {
+      if (!prev) return prev
+      return applyCustomerExperiencePreset(prev, presetId)
+    })
+    setPresetDraftId(presetId)
   }
 
   if (loading || !config) {
@@ -491,6 +520,53 @@ export default function ManagerCustomizePage() {
                 </p>
               </div>
 
+              <div className="space-y-2 rounded-[var(--radius-control)] border border-[rgba(120,161,234,0.3)] bg-[rgba(20,34,58,0.45)] p-3">
+                <div className="grid gap-2 md:grid-cols-[minmax(0,1fr)_auto] md:items-end">
+                  <label className="space-y-1 text-sm">
+                    <span className="font-medium">Preset pack</span>
+                    <select
+                      className={fieldClass}
+                      value={presetDraftId}
+                      onChange={event =>
+                        setPresetDraftId(
+                          event.target.value as CustomerExperiencePresetId
+                        )
+                      }
+                    >
+                      <option value="FAST_CASUAL_TRUSTED">Fast casual trusted</option>
+                      <option value="FULL_SERVICE_ASSURANCE">Full service assurance</option>
+                      <option value="BAR_LOUNGE_SAFE_EXPRESS">Bar lounge safe express</option>
+                    </select>
+                  </label>
+                  <Button
+                    variant="secondary"
+                    className="min-h-[40px]"
+                    onClick={() => applyPreset(presetDraftId)}
+                  >
+                    Apply preset
+                  </Button>
+                </div>
+                <div className="text-xs text-[rgba(183,205,239,0.78)]">
+                  {presetDescriptions[presetDraftId]}
+                </div>
+                <div className="grid gap-1 text-xs text-[rgba(183,205,239,0.72)] md:grid-cols-2">
+                  <div>
+                    Preset flow: {CUSTOMER_EXPERIENCE_PRESETS[presetDraftId].menuDiscovery}
+                    {" -> "}
+                    {CUSTOMER_EXPERIENCE_PRESETS[presetDraftId].ordering}
+                    {" -> "}
+                    {CUSTOMER_EXPERIENCE_PRESETS[presetDraftId].checkout}
+                  </div>
+                  <div>
+                    Safety: {CUSTOMER_EXPERIENCE_PRESETS[presetDraftId].orderSafetyMode}
+                    {" / "}
+                    {CUSTOMER_EXPERIENCE_PRESETS[presetDraftId].checkoutSafetyMode}
+                    {" | Tip default: "}
+                    {CUSTOMER_EXPERIENCE_PRESETS[presetDraftId].defaultTipPercent}%
+                  </div>
+                </div>
+              </div>
+
               <div className="grid gap-2 md:grid-cols-2">
                 <label className="space-y-1 text-sm">
                   <span className="font-medium">Menu discovery flow</span>
@@ -622,6 +698,109 @@ export default function ManagerCustomizePage() {
                 </label>
 
                 <label className="space-y-1 text-sm">
+                  <span className="font-medium">Order safety mode</span>
+                  <select
+                    className={fieldClass}
+                    value={config.ux.orderSafetyMode}
+                    onChange={event =>
+                      setConfig(prev =>
+                        prev
+                          ? {
+                              ...prev,
+                              ux: {
+                                ...prev.ux,
+                                orderSafetyMode: event.target
+                                  .value as CustomerExperienceConfig["ux"]["orderSafetyMode"],
+                              },
+                            }
+                          : prev
+                      )
+                    }
+                  >
+                    <option value="STANDARD">Standard</option>
+                    <option value="STRICT">Strict</option>
+                  </select>
+                </label>
+
+                <label className="space-y-1 text-sm">
+                  <span className="font-medium">Checkout safety mode</span>
+                  <select
+                    className={fieldClass}
+                    value={config.ux.checkoutSafetyMode}
+                    onChange={event =>
+                      setConfig(prev =>
+                        prev
+                          ? {
+                              ...prev,
+                              ux: {
+                                ...prev.ux,
+                                checkoutSafetyMode: event.target
+                                  .value as CustomerExperienceConfig["ux"]["checkoutSafetyMode"],
+                              },
+                            }
+                          : prev
+                      )
+                    }
+                  >
+                    <option value="STANDARD">Standard</option>
+                    <option value="STRICT">Strict</option>
+                  </select>
+                </label>
+
+                <label className="space-y-1 text-sm">
+                  <span className="font-medium">Social proof mode</span>
+                  <select
+                    className={fieldClass}
+                    value={config.ux.socialProofMode}
+                    onChange={event =>
+                      setConfig(prev =>
+                        prev
+                          ? {
+                              ...prev,
+                              ux: {
+                                ...prev.ux,
+                                socialProofMode: event.target
+                                  .value as CustomerExperienceConfig["ux"]["socialProofMode"],
+                                emphasizeSocialProof: event.target.value !== "OFF",
+                              },
+                            }
+                          : prev
+                      )
+                    }
+                  >
+                    <option value="OFF">Off</option>
+                    <option value="VERIFIED_USAGE">Verified usage</option>
+                    <option value="VERIFIED_REVIEWS">Verified reviews</option>
+                  </select>
+                </label>
+
+                <label className="space-y-1 text-sm">
+                  <span className="font-medium">Tip preset strategy</span>
+                  <select
+                    className={fieldClass}
+                    value={config.ux.tipPresetStrategy}
+                    onChange={event =>
+                      setConfig(prev =>
+                        prev
+                          ? {
+                              ...prev,
+                              ux: {
+                                ...prev.ux,
+                                tipPresetStrategy: event.target
+                                  .value as CustomerExperienceConfig["ux"]["tipPresetStrategy"],
+                              },
+                            }
+                          : prev
+                      )
+                    }
+                  >
+                    <option value="CONSERVATIVE">Conservative</option>
+                    <option value="BALANCED">Balanced</option>
+                    <option value="PREMIUM">Premium</option>
+                  </select>
+                </label>
+
+                <label className="space-y-1 text-sm">
                   <span className="font-medium">Trust microcopy level</span>
                   <select
                     className={fieldClass}
@@ -716,6 +895,11 @@ export default function ManagerCustomizePage() {
                               ux: {
                                 ...prev.ux,
                                 emphasizeSocialProof: event.target.checked,
+                                socialProofMode: event.target.checked
+                                  ? prev.ux.socialProofMode === "OFF"
+                                    ? "VERIFIED_USAGE"
+                                    : prev.ux.socialProofMode
+                                  : "OFF",
                               },
                             }
                           : prev
@@ -1199,11 +1383,20 @@ export default function ManagerCustomizePage() {
                 UX Snapshot
               </div>
               <div className="rounded-[var(--radius-control)] border border-[rgba(120,161,234,0.3)] bg-[rgba(20,34,58,0.5)] p-3 text-xs text-[rgba(202,220,247,0.92)]">
+                <div>Preset: {config.ux.presetId}</div>
                 <div>Discovery: {config.ux.menuDiscovery}</div>
                 <div>Ordering: {config.ux.ordering}</div>
                 <div>Review: {config.ux.review}</div>
                 <div>Checkout: {config.ux.checkout}</div>
                 <div>Engagement: {config.ux.engagement}</div>
+                <div>
+                  Safety: {config.ux.orderSafetyMode} /{" "}
+                  {config.ux.checkoutSafetyMode}
+                </div>
+                <div>
+                  Social proof: {config.ux.socialProofMode} | Tip strategy:{" "}
+                  {config.ux.tipPresetStrategy}
+                </div>
                 <div>
                   Default tip: {config.ux.defaultTipPercent}% | Trust:{" "}
                   {config.ux.trustMicrocopy}

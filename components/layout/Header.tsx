@@ -187,7 +187,11 @@ export function Header() {
   return (
     <header className={headerClass}>
       <div className="mx-auto flex w-full max-w-[var(--shell-max-width)] items-center justify-between gap-3 px-4 py-4 md:px-6 md:py-4">
-        <div className={`flex items-center ${desktopOps ? "gap-4" : "gap-3"}`}>
+        <Link
+          href="/"
+          className={`focus-ring rounded-[var(--radius-control)] ${desktopOps ? "px-1 py-1" : "px-1"} flex items-center ${desktopOps ? "gap-4" : "gap-3"}`}
+          aria-label="Go to company home page"
+        >
           {publicSite ? (
             <div className="space-y-1">
               <SoulboundStudioLogo compact tone="light" />
@@ -214,7 +218,7 @@ export function Header() {
               </div>
             </>
           )}
-        </div>
+        </Link>
 
         {showOrderMenuCart ? (
           <HeaderOrderCartControl />

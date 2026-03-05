@@ -13,11 +13,14 @@ import {
 } from "next/navigation"
 import { Button } from "@/components/ui/Button"
 import { Card } from "@/components/ui/Card"
+import { tipPresetsForStrategy } from "@/lib/customerExperience"
 import { fetchJson } from "@/lib/fetchJson"
+import { trackUxFunnelEventClient } from "@/lib/uxClient"
 import {
   CustomerCheckoutQuoteDTO,
   PromoCodeDTO,
 } from "@/lib/types"
+import { useUxFunnelTracking } from "@/lib/useUxFunnelTracking"
 import { useRestaurantStore } from "@/store/useRestaurantStore"
 
 declare global {
@@ -158,6 +161,10 @@ export default function CustomerCheckoutPage({
   const searchParams = useSearchParams()
   const tableNumber = Number(params.tableNumber)
   const uxConfig = useRestaurantStore(s => s.experienceConfig.ux)
+  const uxTracking = useUxFunnelTracking({
+    page: "checkout",
+    step: "pay",
+  })
 
   const [quote, setQuote] = useState<CustomerCheckoutQuoteDTO | null>(null)
   const [promos, setPromos] = useState<PromoCodeDTO[]>([])
@@ -185,6 +192,9 @@ export default function CustomerCheckoutPage({
     ExternalIntentResponse["paymentIntent"] | null
   >(null)
   const [guidedStep, setGuidedStep] = useState(1)
+  const strictCheckoutSafety = uxConfig.checkoutSafetyMode === "STRICT"
+  const [strictAmountConfirmed, setStrictAmountConfirmed] = useState(false)
+  const [strictMethodConfirmed, setStrictMethodConfirmed] = useState(false)
 
   const stripeRef = useRef<any>(null)
   const elementsRef = useRef<any>(null)
@@ -349,8 +359,28 @@ export default function CustomerCheckoutPage({
       if (!payload.idempotencyReplay) {
         setIdempotencyKey(createIdempotencyKey())
       }
+      void trackUxFunnelEventClient({
+        sessionId: uxTracking.sessionId || `checkout-${tableNumber}`,
+        eventName: "checkout_success",
+        page: "checkout",
+        step: "pay",
+        experimentKey: uxTracking.experimentKey ?? undefined,
+        variantKey: uxTracking.variantKey ?? undefined,
+        value: payload.receipt.totalCharged,
+      })
     } catch (err) {
       setError((err as Error).message)
+      void trackUxFunnelEventClient({
+        sessionId: uxTracking.sessionId || `checkout-${tableNumber}`,
+        eventName: "checkout_error",
+        page: "checkout",
+        step: "pay",
+        experimentKey: uxTracking.experimentKey ?? undefined,
+        variantKey: uxTracking.variantKey ?? undefined,
+        metadata: {
+          mode: "direct",
+        },
+      })
     } finally {
       setSubmitting(false)
     }
@@ -407,14 +437,34 @@ export default function CustomerCheckoutPage({
         if (!payload.idempotencyReplay) {
           setIdempotencyKey(createIdempotencyKey())
         }
+        void trackUxFunnelEventClient({
+          sessionId: uxTracking.sessionId || `checkout-${tableNumber}`,
+          eventName: "checkout_success",
+          page: "checkout",
+          step: "confirm",
+          experimentKey: uxTracking.experimentKey ?? undefined,
+          variantKey: uxTracking.variantKey ?? undefined,
+          value: payload.receipt.totalCharged,
+        })
       } catch (err) {
         setError((err as Error).message)
         setStatusMessage(null)
+        void trackUxFunnelEventClient({
+          sessionId: uxTracking.sessionId || `checkout-${tableNumber}`,
+          eventName: "checkout_error",
+          page: "checkout",
+          step: "confirm",
+          experimentKey: uxTracking.experimentKey ?? undefined,
+          variantKey: uxTracking.variantKey ?? undefined,
+          metadata: {
+            mode: "external",
+          },
+        })
       } finally {
         setSubmitting(false)
       }
     },
-    [resetExternalIntent]
+    [resetExternalIntent, tableNumber, uxTracking.experimentKey, uxTracking.sessionId, uxTracking.variantKey]
   )
 
   useEffect(() => {
@@ -517,6 +567,15 @@ export default function CustomerCheckoutPage({
     setShareCount("1")
     setAmount(expressAmount.toFixed(2))
     setTipPercent(String(expressTip))
+    void trackUxFunnelEventClient({
+      sessionId: uxTracking.sessionId || `checkout-${tableNumber}`,
+      eventName: "checkout_express_attempt",
+      page: "checkout",
+      step: "pay",
+      experimentKey: uxTracking.experimentKey ?? undefined,
+      variantKey: uxTracking.variantKey ?? undefined,
+      value: expressAmount,
+    })
 
     await handlePrimaryAction({
       shareCount: 1,
@@ -539,15 +598,76 @@ export default function CustomerCheckoutPage({
       : uxConfig.trustMicrocopy === "MINIMAL"
         ? "Quick payment flow."
         : "Secure payment with receipt confirmation."
-  const tipPresets = Array.from(
-    new Set(["0", String(uxConfig.defaultTipPercent), "12.5", "15"])
-  )
+  const tipPresets = tipPresetsForStrategy({
+    strategy: uxConfig.tipPresetStrategy,
+    defaultTipPercent: uxConfig.defaultTipPercent,
+  }).map(value => String(value))
+
+  function validateCheckoutInput() {
+    const parsedShareCount = Number(shareCount || "0")
+    const parsedAmount = Number(amount || "0")
+    const parsedTip = Number(tipPercent || "0")
+
+    if (!Number.isFinite(parsedShareCount) || parsedShareCount <= 0) {
+      return "Split count must be at least 1."
+    }
+
+    if (!Number.isFinite(parsedAmount) || parsedAmount <= 0) {
+      return "Amount must be greater than 0."
+    }
+
+    if (quote && parsedAmount > quote.dueTotal) {
+      return "Amount cannot exceed the current due total."
+    }
+
+    if (!Number.isFinite(parsedTip) || parsedTip < 0 || parsedTip > 30) {
+      return "Tip must be between 0 and 30."
+    }
+
+    if (
+      email.trim() !== "" &&
+      !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())
+    ) {
+      return "Enter a valid email or leave it blank."
+    }
+
+    if (
+      strictCheckoutSafety &&
+      (!strictAmountConfirmed || !strictMethodConfirmed)
+    ) {
+      return "Confirm the strict checkout checklist before paying."
+    }
+
+    return null
+  }
 
   async function handlePrimaryButtonClick() {
     if (guidedSplit && guidedStep < 3) {
       setGuidedStep(prev => Math.min(3, prev + 1))
       return
     }
+    const validationError = validateCheckoutInput()
+    if (validationError) {
+      setError(validationError)
+      void trackUxFunnelEventClient({
+        sessionId: uxTracking.sessionId || `checkout-${tableNumber}`,
+        eventName: "checkout_validation_error",
+        page: "checkout",
+        step: "validate",
+        experimentKey: uxTracking.experimentKey ?? undefined,
+        variantKey: uxTracking.variantKey ?? undefined,
+      })
+      return
+    }
+    void trackUxFunnelEventClient({
+      sessionId: uxTracking.sessionId || `checkout-${tableNumber}`,
+      eventName: "checkout_pay_attempt",
+      page: "checkout",
+      step: "pay",
+      experimentKey: uxTracking.experimentKey ?? undefined,
+      variantKey: uxTracking.variantKey ?? undefined,
+      value: Number(amount || "0"),
+    })
     await handlePrimaryAction()
   }
 
@@ -801,7 +921,7 @@ export default function CustomerCheckoutPage({
               checked={marketingOptIn}
               onChange={e => setMarketingOptIn(e.target.checked)}
             />
-            Accept marketing updates
+            Optional: receive marketing updates
           </label>
 
           <div className="rounded-[var(--radius-control)] border border-[var(--border)] bg-[rgba(255,255,255,0.58)] px-3 py-2 text-sm">
@@ -809,10 +929,46 @@ export default function CustomerCheckoutPage({
             <span className="font-semibold">{money(estimatedTotal)}</span>
           </div>
 
+          {strictCheckoutSafety && (
+            <div className="space-y-2 rounded-[var(--radius-control)] border border-[var(--border)] bg-[rgba(255,255,255,0.58)] px-3 py-3 text-sm">
+              <div className="text-xs font-semibold uppercase tracking-[0.12em] text-muted">
+                Strict checkout checklist
+              </div>
+              <label className="flex items-start gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={strictAmountConfirmed}
+                  onChange={event =>
+                    setStrictAmountConfirmed(event.target.checked)
+                  }
+                />
+                I confirmed the amount and split details are correct.
+              </label>
+              <label className="flex items-start gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={strictMethodConfirmed}
+                  onChange={event =>
+                    setStrictMethodConfirmed(event.target.checked)
+                  }
+                />
+                I confirmed the payment method and receipt details.
+              </label>
+              <div className="text-xs text-secondary">
+                Need help? Ask a staff member before final payment.
+              </div>
+            </div>
+          )}
+
           {expressFirst && (
             <Button
               variant="secondary"
-              disabled={submitting || !quote}
+              disabled={
+                submitting ||
+                !quote ||
+                (strictCheckoutSafety &&
+                  (!strictAmountConfirmed || !strictMethodConfirmed))
+              }
               onClick={() => runExpressCheckout().catch(() => {})}
             >
               Quick pay suggested share ({money(
@@ -856,7 +1012,12 @@ export default function CustomerCheckoutPage({
               </Button>
             )}
             <Button
-              disabled={submitting || !quote}
+              disabled={
+                submitting ||
+                !quote ||
+                (strictCheckoutSafety &&
+                  (!strictAmountConfirmed || !strictMethodConfirmed))
+              }
               onClick={() => handlePrimaryButtonClick().catch(() => {})}
             >
               {submitting

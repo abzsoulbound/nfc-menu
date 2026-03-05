@@ -30,6 +30,14 @@ describe("sales simulator api", () => {
     const payload = (await res.json()) as {
       snapshot: {
         status: {
+          simulatedMinuteOfDay: number
+          simulatedTimeLabel: string
+          dayStartMinute: number
+          dayEndMinute: number
+          stepMinutes: number
+          autoMode: boolean
+          isRushHour: boolean
+          dayComplete: boolean
           queue: {
             kitchen: number
             bar: number
@@ -51,6 +59,14 @@ describe("sales simulator api", () => {
     expect(typeof payload.snapshot.status.queue.kitchen).toBe("number")
     expect(typeof payload.snapshot.status.queue.bar).toBe("number")
     expect(typeof payload.snapshot.status.queue.ready).toBe("number")
+    expect(typeof payload.snapshot.status.simulatedMinuteOfDay).toBe("number")
+    expect(typeof payload.snapshot.status.simulatedTimeLabel).toBe("string")
+    expect(typeof payload.snapshot.status.dayStartMinute).toBe("number")
+    expect(typeof payload.snapshot.status.dayEndMinute).toBe("number")
+    expect(typeof payload.snapshot.status.stepMinutes).toBe("number")
+    expect(typeof payload.snapshot.status.autoMode).toBe("boolean")
+    expect(typeof payload.snapshot.status.isRushHour).toBe("boolean")
+    expect(typeof payload.snapshot.status.dayComplete).toBe("boolean")
     expect(typeof payload.snapshot.shift.orders).toBe("number")
     expect(typeof payload.snapshot.shift.totalRevenue).toBe("number")
     expect(typeof payload.snapshot.live.activeSessions).toBe("number")
@@ -83,6 +99,112 @@ describe("sales simulator api", () => {
     }
     expect(payload.snapshot.status.enabled).toBe(true)
     expect(payload.ticks).toBe(3)
+  })
+
+  it("supports minute-step progression and rush-hour flagging", async () => {
+    const resetRes = await POST(
+      demoRequest("http://localhost:3000/api/sales/simulator", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          action: "RESET_DAY",
+        }),
+      })
+    )
+    expect(resetRes.status).toBe(200)
+
+    const firstStepRes = await POST(
+      demoRequest("http://localhost:3000/api/sales/simulator", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          action: "STEP",
+          stepMinutes: 60,
+        }),
+      })
+    )
+    expect(firstStepRes.status).toBe(200)
+
+    const stepRes = await POST(
+      demoRequest("http://localhost:3000/api/sales/simulator", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          action: "STEP",
+          stepMinutes: 60,
+        }),
+      })
+    )
+    expect(stepRes.status).toBe(200)
+
+    const payload = (await stepRes.json()) as {
+      snapshot: {
+        status: {
+          simulatedTimeLabel: string
+          isRushHour: boolean
+        }
+      }
+      ticks: number
+    }
+    expect(payload.snapshot.status.simulatedTimeLabel).toBe("11:00")
+    expect(payload.snapshot.status.isRushHour).toBe(true)
+    expect(payload.ticks).toBe(1)
+  })
+
+  it("supports auto mode toggling", async () => {
+    const enableRes = await POST(
+      demoRequest("http://localhost:3000/api/sales/simulator", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          action: "SET_AUTO_MODE",
+          autoMode: true,
+        }),
+      })
+    )
+    expect(enableRes.status).toBe(200)
+
+    const enabledPayload = (await enableRes.json()) as {
+      snapshot: {
+        status: {
+          enabled: boolean
+          autoMode: boolean
+        }
+      }
+    }
+    expect(enabledPayload.snapshot.status.enabled).toBe(true)
+    expect(enabledPayload.snapshot.status.autoMode).toBe(true)
+
+    const disableRes = await POST(
+      demoRequest("http://localhost:3000/api/sales/simulator", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          action: "SET_AUTO_MODE",
+          autoMode: false,
+        }),
+      })
+    )
+    expect(disableRes.status).toBe(200)
+
+    const disabledPayload = (await disableRes.json()) as {
+      snapshot: {
+        status: {
+          autoMode: boolean
+        }
+      }
+    }
+    expect(disabledPayload.snapshot.status.autoMode).toBe(false)
   })
 
   it("rejects unsupported actions", async () => {

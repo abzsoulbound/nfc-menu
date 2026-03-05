@@ -201,6 +201,9 @@ type RuntimeState = {
 const STALE_MS = 30 * 60 * 1000
 const CONTRIBUTION_WINDOW_MS = 90 * 60 * 1000
 const IDEMPOTENCY_TTL_MS = 10 * 60 * 1000
+export const DEMO_SIM_DAY_START_MINUTE = 9 * 60
+export const DEMO_SIM_DAY_END_MINUTE = 17 * 60
+export const DEMO_SIM_DEFAULT_STEP_MINUTES = 10
 
 function nowIso() {
   return new Date().toISOString()
@@ -332,7 +335,13 @@ function createInitialState(
       },
       "demo:simulator": {
         id: "demo:simulator",
-        data: { enabled: false, lastTickAt: null },
+        data: {
+          enabled: false,
+          lastTickAt: null,
+          simulatedMinuteOfDay: DEMO_SIM_DAY_START_MINUTE,
+          stepMinutes: DEMO_SIM_DEFAULT_STEP_MINUTES,
+          autoMode: false,
+        },
         updatedAt: now,
       },
     },
@@ -884,6 +893,46 @@ export function getSystemFlags() {
 export type DemoSimulatorConfig = {
   enabled: boolean
   lastTickAt: string | null
+  simulatedMinuteOfDay: number
+  stepMinutes: number
+  autoMode: boolean
+}
+
+function normalizeDemoSimulatorMinute(value: unknown) {
+  const parsed = Number(value)
+  if (!Number.isFinite(parsed)) {
+    return DEMO_SIM_DAY_START_MINUTE
+  }
+  return Math.max(
+    DEMO_SIM_DAY_START_MINUTE,
+    Math.min(DEMO_SIM_DAY_END_MINUTE, Math.floor(parsed))
+  )
+}
+
+function normalizeDemoSimulatorStepMinutes(value: unknown) {
+  const parsed = Number(value)
+  if (!Number.isFinite(parsed)) {
+    return DEMO_SIM_DEFAULT_STEP_MINUTES
+  }
+  return Math.max(1, Math.min(60, Math.floor(parsed)))
+}
+
+function writeDemoSimulatorConfig(
+  state: RuntimeState,
+  config: DemoSimulatorConfig
+) {
+  state.history["demo:simulator"] = {
+    id: "demo:simulator",
+    data: {
+      enabled: config.enabled,
+      lastTickAt: config.lastTickAt,
+      simulatedMinuteOfDay: config.simulatedMinuteOfDay,
+      stepMinutes: config.stepMinutes,
+      autoMode: config.autoMode,
+    },
+    updatedAt: nowIso(),
+  }
+  return config
 }
 
 function demoSimulatorConfigFromState(state: RuntimeState): DemoSimulatorConfig {
@@ -892,6 +941,9 @@ function demoSimulatorConfigFromState(state: RuntimeState): DemoSimulatorConfig 
     return {
       enabled: false,
       lastTickAt: null,
+      simulatedMinuteOfDay: DEMO_SIM_DAY_START_MINUTE,
+      stepMinutes: DEMO_SIM_DEFAULT_STEP_MINUTES,
+      autoMode: false,
     }
   }
 
@@ -899,6 +951,11 @@ function demoSimulatorConfigFromState(state: RuntimeState): DemoSimulatorConfig 
     enabled: raw.enabled === true,
     lastTickAt:
       typeof raw.lastTickAt === "string" ? raw.lastTickAt : null,
+    simulatedMinuteOfDay: normalizeDemoSimulatorMinute(
+      raw.simulatedMinuteOfDay
+    ),
+    stepMinutes: normalizeDemoSimulatorStepMinutes(raw.stepMinutes),
+    autoMode: raw.autoMode === true,
   }
 }
 
@@ -914,38 +971,64 @@ export function setDemoSimulatorEnabled(enabled: boolean) {
     return current
   }
 
-  state.history["demo:simulator"] = {
-    id: "demo:simulator",
-    data: {
-      enabled,
-      lastTickAt: current.lastTickAt,
-    },
-    updatedAt: nowIso(),
-  }
-
-  return {
+  return writeDemoSimulatorConfig(state, {
+    ...current,
     enabled,
-    lastTickAt: current.lastTickAt,
-  }
+  })
 }
 
-export function setDemoSimulatorLastTick(lastTickAt: string) {
+export function setDemoSimulatorLastTick(lastTickAt: string | null) {
   const state = getState()
   const current = demoSimulatorConfigFromState(state)
 
-  state.history["demo:simulator"] = {
-    id: "demo:simulator",
-    data: {
-      enabled: current.enabled,
-      lastTickAt,
-    },
-    updatedAt: nowIso(),
-  }
-
-  return {
-    enabled: current.enabled,
+  return writeDemoSimulatorConfig(state, {
+    ...current,
     lastTickAt,
-  }
+  })
+}
+
+export function setDemoSimulatorClockMinute(simulatedMinuteOfDay: number) {
+  const state = getState()
+  const current = demoSimulatorConfigFromState(state)
+
+  return writeDemoSimulatorConfig(state, {
+    ...current,
+    simulatedMinuteOfDay: normalizeDemoSimulatorMinute(
+      simulatedMinuteOfDay
+    ),
+  })
+}
+
+export function setDemoSimulatorStepMinutes(stepMinutes: number) {
+  const state = getState()
+  const current = demoSimulatorConfigFromState(state)
+
+  return writeDemoSimulatorConfig(state, {
+    ...current,
+    stepMinutes: normalizeDemoSimulatorStepMinutes(stepMinutes),
+  })
+}
+
+export function setDemoSimulatorAutoMode(autoMode: boolean) {
+  const state = getState()
+  const current = demoSimulatorConfigFromState(state)
+
+  return writeDemoSimulatorConfig(state, {
+    ...current,
+    autoMode,
+  })
+}
+
+export function resetDemoSimulatorDayClock() {
+  const state = getState()
+  const current = demoSimulatorConfigFromState(state)
+
+  return writeDemoSimulatorConfig(state, {
+    ...current,
+    simulatedMinuteOfDay: DEMO_SIM_DAY_START_MINUTE,
+    lastTickAt: null,
+    autoMode: false,
+  })
 }
 
 export function setServiceActive(serviceActive: boolean) {

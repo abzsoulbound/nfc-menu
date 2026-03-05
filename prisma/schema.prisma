@@ -440,3 +440,49 @@ model StripeConnectSampleProduct {
 
   @@index([sellerId, createdAt])
 }
+
+model UxExperiment {
+  id             String   @id @default(uuid())
+  restaurantSlug String
+  key            String
+  name           String
+  description    String?
+  status         String   @default("DRAFT")
+  trafficPercent Float    @default(100)
+  variants       Json
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@unique([restaurantSlug, key])
+  @@index([restaurantSlug, status, updatedAt])
+}
+
+model UxExperimentAssignment {
+  id             String   @id @default(uuid())
+  restaurantSlug String
+  experimentKey  String
+  sessionId      String
+  variantKey     String
+  assignedAt     DateTime @default(now())
+
+  @@unique([restaurantSlug, experimentKey, sessionId])
+  @@index([restaurantSlug, experimentKey, assignedAt])
+}
+
+model UxFunnelEvent {
+  id             String   @id @default(uuid())
+  restaurantSlug String
+  sessionId      String
+  experimentKey  String?
+  variantKey     String?
+  eventName      String
+  page           String
+  step           String
+  value          Float?
+  metadata       Json?
+  occurredAt     DateTime @default(now())
+
+  @@index([restaurantSlug, occurredAt])
+  @@index([restaurantSlug, experimentKey, occurredAt])
+  @@index([restaurantSlug, sessionId, occurredAt])
+}

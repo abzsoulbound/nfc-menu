@@ -8,7 +8,20 @@ import { fetchJson } from "@/lib/fetchJson"
 import { restaurantEntryPathForSlug } from "@/lib/tenant"
 import { useRestaurantStore } from "@/store/useRestaurantStore"
 
-type SalesMode = "PAUSED" | "GUIDED" | "LUNCH_RUSH" | "FULL_HOUSE"
+type SalesScenario = "FIRST_RUN" | "RUSH_HOUR_FOCUS" | "FULL_DAY_AUTOPILOT"
+
+type SalesSimulatorAction =
+  | "START"
+  | "STOP"
+  | "TICK"
+  | "STEP"
+  | "BURST"
+  | "START_AND_BURST"
+  | "RESET"
+  | "RESET_DAY"
+  | "SET_AUTO_MODE"
+  | "SET_STEP_MINUTES"
+  | "SET_SIMULATED_TIME"
 
 type SalesSimulatorSnapshot = {
   status: {
@@ -20,6 +33,19 @@ type SalesSimulatorSnapshot = {
       ready: number
     }
     activeDemoSessions: number
+    simulatedMinuteOfDay: number
+    simulatedTimeLabel: string
+    dayStartMinute: number
+    dayEndMinute: number
+    stepMinutes: number
+    autoMode: boolean
+    isRushHour: boolean
+    dayComplete: boolean
+    rushWindows: Array<{
+      startMinute: number
+      endMinute: number
+      label: string
+    }>
   }
   shift: {
     generatedAt: string
@@ -62,37 +88,39 @@ type SalesSimulatorResponse = {
   ticks: number
 }
 
-const MODE_CONFIG: Record<
-  Exclude<SalesMode, "PAUSED">,
+const STEP_OPTIONS = [5, 10, 15, 20, 30] as const
+
+const SCENARIO_CONFIG: Record<
+  SalesScenario,
   {
     label: string
     note: string
-    burstTicks: number
+    stepMinutes: number
     cadenceMs: number
     toneClass: string
   }
 > = {
-  GUIDED: {
-    label: "Guided Demo",
-    note: "Steady background activity while you explain screens.",
-    burstTicks: 1,
-    cadenceMs: 2600,
+  FIRST_RUN: {
+    label: "First Run Through",
+    note: "Balanced pace for first-call storytelling and clear transitions.",
+    stepMinutes: 10,
+    cadenceMs: 2300,
     toneClass:
       "border-[rgba(104,164,237,0.46)] bg-[rgba(29,53,90,0.58)] text-[#d9e7ff]",
   },
-  LUNCH_RUSH: {
-    label: "Lunch Rush",
-    note: "Higher traffic and queue churn for peak-time storytelling.",
-    burstTicks: 2,
-    cadenceMs: 1350,
+  RUSH_HOUR_FOCUS: {
+    label: "Rush Hour Focus",
+    note: "Tighter time-steps to highlight queue pressure at 11-12 and 14-15.",
+    stepMinutes: 5,
+    cadenceMs: 1300,
     toneClass:
       "border-[rgba(219,184,118,0.54)] bg-[rgba(82,63,26,0.56)] text-[#f0dcae]",
   },
-  FULL_HOUSE: {
-    label: "Full House",
-    note: "Aggressive load to stress-test queue handling in real time.",
-    burstTicks: 4,
-    cadenceMs: 850,
+  FULL_DAY_AUTOPILOT: {
+    label: "Full Day Autopilot",
+    note: "Run the full cafe day from opening to close with auto progression.",
+    stepMinutes: 15,
+    cadenceMs: 900,
     toneClass:
       "border-[rgba(230,128,120,0.52)] bg-[rgba(90,36,36,0.56)] text-[#ffd7d2]",
   },
@@ -141,21 +169,63 @@ const QUICK_LINKS = [
   },
 ] as const
 
+const QUICK_TIME_JUMPS = [
+  {
+    label: "09:00 Open",
+    minute: 9 * 60,
+  },
+  {
+    label: "11:00 Rush",
+    minute: 11 * 60,
+  },
+  {
+    label: "14:00 Rush",
+    minute: 14 * 60,
+  },
+  {
+    label: "17:00 Close",
+    minute: 17 * 60,
+  },
+] as const
+
 function formatCurrency(value: number) {
   return `£${value.toFixed(2)}`
+}
+
+function formatMinuteLabel(minuteOfDay: number) {
+  const hours = Math.floor(minuteOfDay / 60)
+  const minutes = minuteOfDay % 60
+  return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(
+    2,
+    "0"
+  )}`
+}
+
+function toProgressPercent(input: {
+  minute: number
+  start: number
+  end: number
+}) {
+  const span = input.end - input.start
+  if (span <= 0) return 0
+  const progress = (input.minute - input.start) / span
+  return Math.max(0, Math.min(100, Math.round(progress * 1000) / 10))
 }
 
 export function SalesSimulatorShowcase() {
   const restaurantSlug = useRestaurantStore(s => s.slug)
   const [snapshot, setSnapshot] =
     useState<SalesSimulatorSnapshot | null>(null)
-  const [mode, setMode] = useState<SalesMode>("GUIDED")
+  const [scenario, setScenario] = useState<SalesScenario>("FIRST_RUN")
+  const [stepMinutes, setStepMinutes] = useState<number>(
+    SCENARIO_CONFIG.FIRST_RUN.stepMinutes
+  )
   const [loading, setLoading] = useState(true)
   const [pendingAction, setPendingAction] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const automationBusyRef = useRef(false)
 
-  const activeModeConfig = mode === "PAUSED" ? null : MODE_CONFIG[mode]
+  const activeScenarioConfig = SCENARIO_CONFIG[scenario]
   const resolveHref = useCallback(
     (nextPath: string) =>
       restaurantEntryPathForSlug(restaurantSlug, nextPath),
@@ -179,8 +249,14 @@ export function SalesSimulatorShowcase() {
 
   const runAction = useCallback(
     async (
-      action: "START" | "STOP" | "BURST" | "RESET",
-      options?: { burstTicks?: number; silent?: boolean }
+      action: SalesSimulatorAction,
+      options?: {
+        burstTicks?: number
+        stepMinutes?: number
+        autoMode?: boolean
+        simulatedMinuteOfDay?: number
+        silent?: boolean
+      }
     ) => {
       if (!options?.silent) {
         setPendingAction(true)
@@ -194,10 +270,14 @@ export function SalesSimulatorShowcase() {
             body: JSON.stringify({
               action,
               burstTicks: options?.burstTicks,
+              stepMinutes: options?.stepMinutes,
+              autoMode: options?.autoMode,
+              simulatedMinuteOfDay: options?.simulatedMinuteOfDay,
             }),
           }
         )
         setSnapshot(result.snapshot)
+        setStepMinutes(result.snapshot.status.stepMinutes)
         setError(null)
       } catch (err) {
         setError((err as Error).message)
@@ -217,11 +297,12 @@ export function SalesSimulatorShowcase() {
       if (cancelled) return
       try {
         const result = await fetchJson<SalesSimulatorResponse>(
-          "/api/sales/simulator?autostart=1&burstTicks=2",
+          "/api/sales/simulator?autostart=1&burstTicks=1",
           { cache: "no-store" }
         )
         if (!cancelled) {
           setSnapshot(result.snapshot)
+          setStepMinutes(result.snapshot.status.stepMinutes)
           setError(null)
         }
       } catch (err) {
@@ -247,16 +328,17 @@ export function SalesSimulatorShowcase() {
   }, [refresh])
 
   useEffect(() => {
-    if (mode === "PAUSED") return
-    const config = MODE_CONFIG[mode]
+    if (!snapshot?.status.autoMode) return
+    if (!snapshot.status.enabled) return
+    if (snapshot.status.dayComplete) return
 
     let cancelled = false
     async function cycle() {
       if (cancelled || automationBusyRef.current) return
       automationBusyRef.current = true
       try {
-        await runAction("BURST", {
-          burstTicks: config.burstTicks,
+        await runAction("STEP", {
+          stepMinutes,
           silent: true,
         })
       } finally {
@@ -267,17 +349,28 @@ export function SalesSimulatorShowcase() {
     cycle().catch(() => {})
     const timer = setInterval(() => {
       cycle().catch(() => {})
-    }, config.cadenceMs)
+    }, activeScenarioConfig.cadenceMs)
 
     return () => {
       cancelled = true
       clearInterval(timer)
     }
-  }, [mode, runAction])
+  }, [
+    activeScenarioConfig.cadenceMs,
+    runAction,
+    snapshot?.status.autoMode,
+    snapshot?.status.dayComplete,
+    snapshot?.status.enabled,
+    stepMinutes,
+  ])
 
   const summaryRows = useMemo(() => {
     if (!snapshot) return []
     return [
+      {
+        label: "Simulated time",
+        value: snapshot.status.simulatedTimeLabel,
+      },
       {
         label: "Active sessions",
         value: snapshot.live.activeSessions,
@@ -305,10 +398,6 @@ export function SalesSimulatorShowcase() {
       {
         label: "Simulated revenue",
         value: formatCurrency(snapshot.shift.totalRevenue),
-      },
-      {
-        label: "Avg prep time",
-        value: `${snapshot.shift.performance.avgPrepMinutes.toFixed(1)}m`,
       },
     ]
   }, [snapshot])
@@ -367,6 +456,15 @@ export function SalesSimulatorShowcase() {
     ]
   }, [snapshot])
 
+  const dayProgress = useMemo(() => {
+    if (!snapshot) return 0
+    return toProgressPercent({
+      minute: snapshot.status.simulatedMinuteOfDay,
+      start: snapshot.status.dayStartMinute,
+      end: snapshot.status.dayEndMinute,
+    })
+  }, [snapshot])
+
   return (
     <div className="space-y-4">
       <Card
@@ -376,15 +474,15 @@ export function SalesSimulatorShowcase() {
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="space-y-1">
             <div className="text-xs font-semibold uppercase tracking-[0.16em] text-[rgba(218,186,125,0.92)]">
-              Dedicated Simulator Mode
+              09:00 to 17:00 Simulated Day
             </div>
             <h2 className="font-[family:var(--font-display)] text-3xl tracking-tight text-[#f4ecdc] md:text-5xl">
-              Live Owner Sales Console
+              Cafe Day Sales Simulator
             </h2>
             <p className="max-w-3xl text-sm leading-6 text-[rgba(213,228,250,0.86)]">
-              Simulate a busy service while you demo guest ordering, kitchen/bar
-              throughput, and checkout outcomes. Use this during calls so owners
-              can watch real queue movement, not static screenshots.
+              Every click advances virtual time by X minutes. Rush windows are
+              modeled at 11:00-12:00 and 14:00-15:00, with optional autopilot
+              that walks the full day.
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
@@ -397,96 +495,210 @@ export function SalesSimulatorShowcase() {
             >
               {snapshot?.status.enabled ? "Running" : "Paused"}
             </span>
-            {activeModeConfig ? (
-              <span
-                className={`inline-flex rounded-full border px-3 py-1 text-xs font-semibold uppercase tracking-[0.14em] ${activeModeConfig.toneClass}`}
-              >
-                {activeModeConfig.label}
+            <span
+              className={`inline-flex rounded-full border px-3 py-1 text-xs font-semibold uppercase tracking-[0.14em] ${activeScenarioConfig.toneClass}`}
+            >
+              {activeScenarioConfig.label}
+            </span>
+            {snapshot?.status.isRushHour ? (
+              <span className="inline-flex rounded-full border border-[rgba(214,179,108,0.62)] bg-[rgba(95,69,28,0.58)] px-3 py-1 text-xs font-semibold uppercase tracking-[0.14em] text-[#f5ddb0]">
+                Rush Hour
               </span>
             ) : null}
           </div>
         </div>
 
+        <div className="space-y-2 rounded-xl border border-[rgba(121,166,239,0.34)] bg-[rgba(17,31,55,0.66)] px-3 py-3">
+          <div className="flex flex-wrap items-center justify-between gap-2 text-xs uppercase tracking-[0.16em] text-[rgba(189,210,244,0.78)]">
+            <span>Simulated Timeline</span>
+            <span className="font-semibold text-[#edf4ff]">
+              {snapshot?.status.simulatedTimeLabel ?? "09:00"}
+            </span>
+          </div>
+          <div className="relative h-3 rounded-full bg-[rgba(9,17,31,0.95)]">
+            {snapshot?.status.rushWindows.map(window => {
+              const left = toProgressPercent({
+                minute: window.startMinute,
+                start: snapshot.status.dayStartMinute,
+                end: snapshot.status.dayEndMinute,
+              })
+              const right = toProgressPercent({
+                minute: window.endMinute,
+                start: snapshot.status.dayStartMinute,
+                end: snapshot.status.dayEndMinute,
+              })
+              return (
+                <div
+                  key={window.label}
+                  className="absolute bottom-0 top-0 rounded-full bg-[rgba(217,180,109,0.34)]"
+                  style={{
+                    left: `${left}%`,
+                    width: `${Math.max(0, right - left)}%`,
+                  }}
+                  title={window.label}
+                />
+              )
+            })}
+            <div
+              className="absolute bottom-0 top-0 rounded-full bg-[linear-gradient(90deg,rgba(95,161,244,0.96),rgba(214,179,108,0.96))]"
+              style={{
+                width: `${Math.max(2, dayProgress)}%`,
+              }}
+            />
+          </div>
+          <div className="flex items-center justify-between text-[10px] uppercase tracking-[0.16em] text-[rgba(175,198,237,0.8)]">
+            <span>
+              {snapshot
+                ? formatMinuteLabel(snapshot.status.dayStartMinute)
+                : "09:00"}
+            </span>
+            <span>11:00 Rush</span>
+            <span>14:00 Rush</span>
+            <span>
+              {snapshot
+                ? formatMinuteLabel(snapshot.status.dayEndMinute)
+                : "17:00"}
+            </span>
+          </div>
+        </div>
+
+        <div className="grid gap-2 md:grid-cols-3">
+          {(Object.keys(SCENARIO_CONFIG) as SalesScenario[]).map(key => (
+            <Button
+              key={key}
+              variant={scenario === key ? "primary" : "secondary"}
+              disabled={pendingAction || loading}
+              onClick={async () => {
+                setScenario(key)
+                const nextStep = SCENARIO_CONFIG[key].stepMinutes
+                setStepMinutes(nextStep)
+                await runAction("SET_STEP_MINUTES", {
+                  stepMinutes: nextStep,
+                })
+              }}
+            >
+              {SCENARIO_CONFIG[key].label}
+            </Button>
+          ))}
+        </div>
+
         <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
           <Button
-            variant={mode === "PAUSED" ? "primary" : "secondary"}
+            variant="primary"
             disabled={pendingAction || loading}
-            onClick={async () => {
-              setMode("PAUSED")
-              await runAction("STOP")
-            }}
+            onClick={() => runAction("START")}
+          >
+            Start Day
+          </Button>
+          <Button
+            variant="secondary"
+            disabled={pendingAction || loading}
+            onClick={() => runAction("STOP")}
           >
             Pause
           </Button>
           <Button
-            variant={mode === "GUIDED" ? "primary" : "secondary"}
-            disabled={pendingAction || loading}
-            onClick={async () => {
-              setMode("GUIDED")
-              await runAction("START")
-            }}
+            variant="quiet"
+            disabled={
+              pendingAction || loading || snapshot?.status.dayComplete
+            }
+            onClick={() =>
+              runAction("STEP", {
+                stepMinutes,
+              })
+            }
           >
-            Guided
+            +{stepMinutes} Minutes
           </Button>
           <Button
-            variant={mode === "LUNCH_RUSH" ? "primary" : "secondary"}
-            disabled={pendingAction || loading}
-            onClick={async () => {
-              setMode("LUNCH_RUSH")
-              await runAction("START")
-            }}
+            variant={
+              snapshot?.status.autoMode ? "primary" : "ghost"
+            }
+            disabled={pendingAction || loading || snapshot?.status.dayComplete}
+            onClick={() =>
+              runAction("SET_AUTO_MODE", {
+                autoMode: !(snapshot?.status.autoMode ?? false),
+              })
+            }
           >
-            Lunch Rush
-          </Button>
-          <Button
-            variant={mode === "FULL_HOUSE" ? "primary" : "secondary"}
-            disabled={pendingAction || loading}
-            onClick={async () => {
-              setMode("FULL_HOUSE")
-              await runAction("START")
-            }}
-          >
-            Full House
+            {snapshot?.status.autoMode ? "Stop Auto" : "Auto Mode"}
           </Button>
         </div>
 
-        <div className="grid gap-2 md:grid-cols-[1.1fr_1fr_1.1fr]">
-          <Button
-            variant="quiet"
-            disabled={pendingAction || loading}
-            onClick={() => {
-              const ticks = mode === "FULL_HOUSE" ? 6 : 3
-              return runAction("BURST", { burstTicks: ticks })
-            }}
-          >
-            Burst Now
-          </Button>
+        <div className="grid gap-2 md:grid-cols-[0.9fr_1fr_1fr]">
+          <label className="flex items-center gap-2 rounded-xl border border-[rgba(121,166,239,0.32)] bg-[rgba(22,39,66,0.62)] px-3 py-2 text-xs text-[rgba(208,224,248,0.88)]">
+            <span className="uppercase tracking-[0.14em] text-[rgba(182,205,241,0.88)]">
+              Step
+            </span>
+            <select
+              value={stepMinutes}
+              className="min-h-[36px] flex-1 rounded-md border border-[rgba(126,170,240,0.42)] bg-[rgba(10,20,38,0.86)] px-2 text-sm text-[#eef4ff] focus:outline-none"
+              onChange={event => {
+                const next = Number(event.target.value)
+                setStepMinutes(next)
+                runAction("SET_STEP_MINUTES", {
+                  stepMinutes: next,
+                  silent: true,
+                }).catch(() => {})
+              }}
+            >
+              {STEP_OPTIONS.map(minutes => (
+                <option key={minutes} value={minutes}>
+                  {minutes} minutes
+                </option>
+              ))}
+            </select>
+          </label>
           <Button
             variant="ghost"
             disabled={pendingAction || loading}
-            onClick={() => refresh().catch(() => {})}
+            onClick={() => runAction("RESET_DAY")}
           >
-            Refresh Snapshot
+            Reset to 09:00
           </Button>
           <Button
             variant="ghost"
             disabled={pendingAction || loading}
             onClick={async () => {
-              setMode("GUIDED")
+              setScenario("FIRST_RUN")
+              setStepMinutes(SCENARIO_CONFIG.FIRST_RUN.stepMinutes)
               await runAction("RESET")
               await runAction("START")
+              await runAction("SET_STEP_MINUTES", {
+                stepMinutes: SCENARIO_CONFIG.FIRST_RUN.stepMinutes,
+              })
             }}
           >
-            Reset Floor
+            Reset Floor + Day
           </Button>
+        </div>
+
+        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+          {QUICK_TIME_JUMPS.map(jump => (
+            <Button
+              key={jump.label}
+              variant="secondary"
+              disabled={pendingAction || loading}
+              onClick={() =>
+                runAction("SET_SIMULATED_TIME", {
+                  simulatedMinuteOfDay: jump.minute,
+                })
+              }
+            >
+              {jump.label}
+            </Button>
+          ))}
         </div>
 
         <div className="text-xs text-[rgba(198,216,245,0.78)]">
-          Current mode:{" "}
+          Scenario:{" "}
           <span className="font-semibold text-[#eef4ff]">
-            {mode === "PAUSED" ? "Paused" : MODE_CONFIG[mode].label}
+            {activeScenarioConfig.label}
           </span>
-          {activeModeConfig ? ` | ${activeModeConfig.note}` : ""}
+          {` | ${activeScenarioConfig.note}`}
+          {snapshot?.status.dayComplete
+            ? " | Day complete at 17:00."
+            : ""}
         </div>
 
         {error && (

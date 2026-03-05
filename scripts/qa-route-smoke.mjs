@@ -120,10 +120,10 @@ const DEFAULT_RESTAURANT_SLUG =
   resolveEnvValue("DEFAULT_RESTAURANT_SLUG") || "demo-template"
 
 const protectedRoutes = [
-  "/waiter",
-  "/waiter/tables",
-  "/waiter/tags",
-  "/waiter/sessions",
+  "/staff",
+  "/staff/tables",
+  "/staff/tags",
+  "/staff/sessions",
   "/kitchen",
   "/bar",
   "/manager",
@@ -132,10 +132,10 @@ const protectedRoutes = [
 ]
 
 const routeRoleMap = {
-  "/waiter": ["WAITER", "MANAGER", "ADMIN"],
-  "/waiter/tables": ["WAITER", "MANAGER", "ADMIN"],
-  "/waiter/tags": ["WAITER", "MANAGER", "ADMIN"],
-  "/waiter/sessions": ["WAITER", "MANAGER", "ADMIN"],
+  "/staff": ["WAITER", "MANAGER", "ADMIN"],
+  "/staff/tables": ["WAITER", "MANAGER", "ADMIN"],
+  "/staff/tags": ["WAITER", "MANAGER", "ADMIN"],
+  "/staff/sessions": ["WAITER", "MANAGER", "ADMIN"],
   "/kitchen": ["KITCHEN", "MANAGER", "ADMIN"],
   "/bar": ["BAR", "MANAGER", "ADMIN"],
   "/manager": ["MANAGER", "ADMIN"],
@@ -153,15 +153,12 @@ const publicRoutes = [
   "/connect-demo",
   "/connect-demo/success",
   "/menu",
+  "/guest-tools",
   "/order/takeaway",
   "/order/demo-tag",
   "/order/review/demo-tag",
   "/order/1/review",
   "/staff-login",
-  "/t/demo-tag",
-  "/t/demo-tag/review",
-  "/table/1/review",
-  "/t/demo-tag/closed",
 ]
 
 function startServer() {

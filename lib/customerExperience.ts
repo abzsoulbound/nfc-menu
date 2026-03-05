@@ -1,13 +1,81 @@
 import type {
   CustomerCheckoutFlow,
+  CustomerCheckoutSafetyMode,
   CustomerEngagementFlow,
   CustomerExperienceConfig,
+  CustomerExperiencePresetId,
   CustomerMenuDiscoveryFlow,
   CustomerOrderingFlow,
+  CustomerOrderSafetyMode,
   CustomerReviewFlow,
+  CustomerSocialProofMode,
+  CustomerTipPresetStrategy,
   CustomerTrustMicrocopyLevel,
 } from "@/lib/types"
 import { isSalesDemoSlug } from "@/lib/tenant"
+
+type CustomerPresetDefinition = {
+  menuDiscovery: CustomerMenuDiscoveryFlow
+  ordering: CustomerOrderingFlow
+  review: CustomerReviewFlow
+  checkout: CustomerCheckoutFlow
+  engagement: CustomerEngagementFlow
+  orderSafetyMode: CustomerOrderSafetyMode
+  checkoutSafetyMode: CustomerCheckoutSafetyMode
+  socialProofMode: CustomerSocialProofMode
+  tipPresetStrategy: CustomerTipPresetStrategy
+  trustMicrocopy: CustomerTrustMicrocopyLevel
+  defaultTipPercent: number
+  showProgressAnchors: boolean
+}
+
+export const CUSTOMER_EXPERIENCE_PRESETS: Record<
+  CustomerExperiencePresetId,
+  CustomerPresetDefinition
+> = {
+  FAST_CASUAL_TRUSTED: {
+    menuDiscovery: "SECTION_FIRST",
+    ordering: "INLINE_STEPPER",
+    review: "PAGE_REVIEW",
+    checkout: "EXPRESS_FIRST",
+    engagement: "TASK_TABS",
+    orderSafetyMode: "STANDARD",
+    checkoutSafetyMode: "STANDARD",
+    socialProofMode: "VERIFIED_USAGE",
+    tipPresetStrategy: "CONSERVATIVE",
+    trustMicrocopy: "BALANCED",
+    defaultTipPercent: 10,
+    showProgressAnchors: true,
+  },
+  FULL_SERVICE_ASSURANCE: {
+    menuDiscovery: "HERO_FIRST",
+    ordering: "GUIDED_CONFIGURATOR",
+    review: "PAGE_REVIEW",
+    checkout: "GUIDED_SPLIT",
+    engagement: "POST_PURCHASE_PROMPT",
+    orderSafetyMode: "STRICT",
+    checkoutSafetyMode: "STRICT",
+    socialProofMode: "OFF",
+    tipPresetStrategy: "BALANCED",
+    trustMicrocopy: "HIGH_ASSURANCE",
+    defaultTipPercent: 12.5,
+    showProgressAnchors: true,
+  },
+  BAR_LOUNGE_SAFE_EXPRESS: {
+    menuDiscovery: "SEARCH_FIRST",
+    ordering: "INLINE_STEPPER",
+    review: "SHEET_REVIEW",
+    checkout: "ONE_PAGE",
+    engagement: "TASK_TABS",
+    orderSafetyMode: "STANDARD",
+    checkoutSafetyMode: "STANDARD",
+    socialProofMode: "VERIFIED_USAGE",
+    tipPresetStrategy: "PREMIUM",
+    trustMicrocopy: "BALANCED",
+    defaultTipPercent: 10,
+    showProgressAnchors: true,
+  },
+}
 
 export const DEFAULT_CUSTOMER_EXPERIENCE_CONFIG: CustomerExperienceConfig = {
   menu: {
@@ -45,11 +113,16 @@ export const DEFAULT_CUSTOMER_EXPERIENCE_CONFIG: CustomerExperienceConfig = {
     isPublished: false,
   },
   ux: {
+    presetId: "FULL_SERVICE_ASSURANCE",
     menuDiscovery: "HERO_FIRST",
     ordering: "BOTTOM_SHEET_FAST",
     review: "SHEET_REVIEW",
     checkout: "ONE_PAGE",
     engagement: "ALL_IN_ONE",
+    orderSafetyMode: "STANDARD",
+    checkoutSafetyMode: "STANDARD",
+    socialProofMode: "OFF",
+    tipPresetStrategy: "BALANCED",
     showProgressAnchors: true,
     emphasizeSocialProof: false,
     trustMicrocopy: "BALANCED",
@@ -88,10 +161,15 @@ export const SALES_DEMO_CUSTOMER_EXPERIENCE_CONFIG: CustomerExperienceConfig = {
   },
   ux: {
     ...DEFAULT_CUSTOMER_EXPERIENCE_CONFIG.ux,
+    presetId: "FAST_CASUAL_TRUSTED",
     menuDiscovery: "SECTION_FIRST",
     ordering: "GUIDED_CONFIGURATOR",
     checkout: "EXPRESS_FIRST",
     engagement: "TASK_TABS",
+    orderSafetyMode: "STANDARD",
+    checkoutSafetyMode: "STANDARD",
+    socialProofMode: "VERIFIED_USAGE",
+    tipPresetStrategy: "BALANCED",
     emphasizeSocialProof: true,
     trustMicrocopy: "HIGH_ASSURANCE",
     defaultTipPercent: 12.5,
@@ -230,6 +308,68 @@ function sanitizeTrustMicrocopyLevel(
   return fallback
 }
 
+function sanitizePresetId(
+  value: unknown,
+  fallback: CustomerExperiencePresetId
+) {
+  if (
+    value === "FAST_CASUAL_TRUSTED" ||
+    value === "FULL_SERVICE_ASSURANCE" ||
+    value === "BAR_LOUNGE_SAFE_EXPRESS"
+  ) {
+    return value
+  }
+  return fallback
+}
+
+function sanitizeOrderSafetyMode(
+  value: unknown,
+  fallback: CustomerOrderSafetyMode
+) {
+  if (value === "STANDARD" || value === "STRICT") {
+    return value
+  }
+  return fallback
+}
+
+function sanitizeCheckoutSafetyMode(
+  value: unknown,
+  fallback: CustomerCheckoutSafetyMode
+) {
+  if (value === "STANDARD" || value === "STRICT") {
+    return value
+  }
+  return fallback
+}
+
+function sanitizeSocialProofMode(
+  value: unknown,
+  fallback: CustomerSocialProofMode
+) {
+  if (
+    value === "OFF" ||
+    value === "VERIFIED_REVIEWS" ||
+    value === "VERIFIED_USAGE"
+  ) {
+    return value
+  }
+  return fallback
+}
+
+function sanitizeTipPresetStrategy(
+  value: unknown,
+  fallback: CustomerTipPresetStrategy
+) {
+  if (
+    value === "CONSERVATIVE" ||
+    value === "BALANCED" ||
+    value === "PREMIUM"
+  ) {
+    return value
+  }
+  return fallback
+}
+
 function sanitizeNumber(
   value: unknown,
   fallback: number,
@@ -239,6 +379,52 @@ function sanitizeNumber(
   const parsed = Number(value)
   if (!Number.isFinite(parsed)) return fallback
   return Math.max(min, Math.min(max, Number(parsed.toFixed(2))))
+}
+
+export function tipPresetsForStrategy(input: {
+  strategy: CustomerTipPresetStrategy
+  defaultTipPercent: number
+}) {
+  const defaultsByStrategy: Record<CustomerTipPresetStrategy, number[]> = {
+    CONSERVATIVE: [0, input.defaultTipPercent, 10, 12.5],
+    BALANCED: [0, input.defaultTipPercent, 12.5, 15],
+    PREMIUM: [input.defaultTipPercent, 12.5, 15, 18],
+  }
+  return Array.from(
+    new Set(
+      defaultsByStrategy[input.strategy]
+        .map(value => Number(value.toFixed(2)))
+        .filter(value => value >= 0 && value <= 30)
+    )
+  )
+}
+
+export function applyCustomerExperiencePreset(
+  config: CustomerExperienceConfig,
+  presetId: CustomerExperiencePresetId
+): CustomerExperienceConfig {
+  const preset = CUSTOMER_EXPERIENCE_PRESETS[presetId]
+  const socialProofMode = preset.socialProofMode
+  return {
+    ...config,
+    ux: {
+      ...config.ux,
+      presetId,
+      menuDiscovery: preset.menuDiscovery,
+      ordering: preset.ordering,
+      review: preset.review,
+      checkout: preset.checkout,
+      engagement: preset.engagement,
+      orderSafetyMode: preset.orderSafetyMode,
+      checkoutSafetyMode: preset.checkoutSafetyMode,
+      socialProofMode,
+      tipPresetStrategy: preset.tipPresetStrategy,
+      showProgressAnchors: preset.showProgressAnchors,
+      trustMicrocopy: preset.trustMicrocopy,
+      defaultTipPercent: preset.defaultTipPercent,
+      emphasizeSocialProof: socialProofMode !== "OFF",
+    },
+  }
 }
 
 export function cloneCustomerExperienceConfig(
@@ -270,6 +456,12 @@ export function customerExperienceDefaultsForRestaurant(input: {
   if (input.isDemo && isSalesDemoSlug(input.slug)) {
     return cloneCustomerExperienceConfig(
       SALES_DEMO_CUSTOMER_EXPERIENCE_CONFIG
+    )
+  }
+  if (!input.isDemo) {
+    return applyCustomerExperiencePreset(
+      cloneCustomerExperienceConfig(DEFAULT_CUSTOMER_EXPERIENCE_CONFIG),
+      "FULL_SERVICE_ASSURANCE"
     )
   }
   return cloneCustomerExperienceConfig(DEFAULT_CUSTOMER_EXPERIENCE_CONFIG)
@@ -419,6 +611,10 @@ export function sanitizeCustomerExperienceConfig(
       ),
     },
     ux: {
+      presetId: sanitizePresetId(
+        ux.presetId,
+        defaults.ux.presetId
+      ),
       menuDiscovery: sanitizeMenuDiscoveryFlow(
         ux.menuDiscovery,
         defaults.ux.menuDiscovery
@@ -439,14 +635,48 @@ export function sanitizeCustomerExperienceConfig(
         ux.engagement,
         defaults.ux.engagement
       ),
+      orderSafetyMode: sanitizeOrderSafetyMode(
+        ux.orderSafetyMode,
+        defaults.ux.orderSafetyMode
+      ),
+      checkoutSafetyMode: sanitizeCheckoutSafetyMode(
+        ux.checkoutSafetyMode,
+        defaults.ux.checkoutSafetyMode
+      ),
+      socialProofMode: (() => {
+        const fallbackFromLegacy = sanitizeBoolean(
+          ux.emphasizeSocialProof,
+          defaults.ux.emphasizeSocialProof
+        )
+          ? defaults.ux.socialProofMode === "OFF"
+            ? "VERIFIED_USAGE"
+            : defaults.ux.socialProofMode
+          : "OFF"
+        return sanitizeSocialProofMode(
+          ux.socialProofMode,
+          fallbackFromLegacy
+        )
+      })(),
+      tipPresetStrategy: sanitizeTipPresetStrategy(
+        ux.tipPresetStrategy,
+        defaults.ux.tipPresetStrategy
+      ),
       showProgressAnchors: sanitizeBoolean(
         ux.showProgressAnchors,
         defaults.ux.showProgressAnchors
       ),
-      emphasizeSocialProof: sanitizeBoolean(
-        ux.emphasizeSocialProof,
-        defaults.ux.emphasizeSocialProof
-      ),
+      emphasizeSocialProof:
+        sanitizeSocialProofMode(
+          ux.socialProofMode,
+          sanitizeBoolean(
+            ux.emphasizeSocialProof,
+            defaults.ux.emphasizeSocialProof
+          )
+            ? defaults.ux.socialProofMode === "OFF"
+              ? "VERIFIED_USAGE"
+              : defaults.ux.socialProofMode
+            : "OFF"
+        ) !== "OFF",
       trustMicrocopy: sanitizeTrustMicrocopyLevel(
         ux.trustMicrocopy,
         defaults.ux.trustMicrocopy

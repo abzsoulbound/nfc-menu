@@ -11,7 +11,9 @@ import { getMenuItemIdFromCartLineId } from "@/lib/cartLine"
 import { toCustomerErrorMessage } from "@/lib/customerCopy"
 import { fetchJson } from "@/lib/fetchJson"
 import { calculateCartTotals } from "@/lib/pricing"
+import { trackUxFunnelEventClient } from "@/lib/uxClient"
 import { OrderSubmissionItemDTO } from "@/lib/types"
+import { useUxFunnelTracking } from "@/lib/useUxFunnelTracking"
 import { useCartStore } from "@/store/useCartStore"
 import { useRestaurantStore } from "@/store/useRestaurantStore"
 import { useSessionStore } from "@/store/useSessionStore"
@@ -67,6 +69,11 @@ export default function PerUserReviewPage({
     s => s.experienceConfig.review
   )
   const uxConfig = useRestaurantStore(s => s.experienceConfig.ux)
+  const uxTracking = useUxFunnelTracking({
+    page: "order_review",
+    step: "review",
+  })
+  const strictOrderSafety = uxConfig.orderSafetyMode === "STRICT"
 
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -74,6 +81,8 @@ export default function PerUserReviewPage({
   const [idempotencyKey, setIdempotencyKey] = useState<
     string | null
   >(null)
+  const [checkItemsConfirmed, setCheckItemsConfirmed] = useState(false)
+  const [editsConfirmed, setEditsConfirmed] = useState(false)
 
   useEffect(() => {
     if (!sessionId) return
@@ -95,6 +104,10 @@ export default function PerUserReviewPage({
 
   async function submit() {
     if (!sessionId || items.length === 0) return
+    if (strictOrderSafety && (!checkItemsConfirmed || !editsConfirmed)) {
+      setError("Please confirm the review checklist before placing the order.")
+      return
+    }
 
     const requestKey =
       idempotencyKey ??
@@ -134,9 +147,30 @@ export default function PerUserReviewPage({
 
       clearSubmittedItems()
       setIdempotencyKey(null)
+      void trackUxFunnelEventClient({
+        sessionId: sessionId ?? `review-${tagId}`,
+        eventName: "review_submit_success",
+        page: "order_review",
+        step: "submit",
+        experimentKey: uxTracking.experimentKey ?? undefined,
+        variantKey: uxTracking.variantKey ?? undefined,
+        metadata: {
+          takeaway,
+          totalQuantity,
+          totalValue: totals.total,
+        },
+      })
       router.push(`/order/${tagId}`)
     } catch (e) {
       setError(toCustomerErrorMessage(e))
+      void trackUxFunnelEventClient({
+        sessionId: sessionId ?? `review-${tagId}`,
+        eventName: "review_submit_error",
+        page: "order_review",
+        step: "submit",
+        experimentKey: uxTracking.experimentKey ?? undefined,
+        variantKey: uxTracking.variantKey ?? undefined,
+      })
     } finally {
       setSubmitting(false)
       setShowConfirm(false)
@@ -231,13 +265,15 @@ export default function PerUserReviewPage({
             </div>
           )}
 
-          {uxConfig.emphasizeSocialProof && (
+          {uxConfig.socialProofMode !== "OFF" && (
             <div className="mt-3 flex flex-wrap gap-2 text-xs">
               <span className="status-chip status-chip-success">
-                Trusted ordering flow
+                {uxConfig.socialProofMode === "VERIFIED_REVIEWS"
+                  ? "Verified guest reviews"
+                  : "Verified guest usage"}
               </span>
               <span className="status-chip status-chip-success">
-                Used by repeat guests
+                Evidence-based trust cues
               </span>
             </div>
           )}
@@ -246,6 +282,34 @@ export default function PerUserReviewPage({
               Experience: {uxConfig.ordering.toLowerCase().replace(/_/g, " ")}
             </span>
           </div>
+
+          {strictOrderSafety && (
+            <div className="mt-3 space-y-2 rounded-xl border border-[var(--border)] bg-[rgba(255,255,255,0.6)] px-3 py-3 text-xs text-secondary">
+              <div className="font-semibold text-[var(--text-primary)]">
+                Strict review checklist
+              </div>
+              <label className="flex items-start gap-2">
+                <input
+                  type="checkbox"
+                  checked={checkItemsConfirmed}
+                  onChange={event =>
+                    setCheckItemsConfirmed(event.target.checked)
+                  }
+                />
+                I checked item quantities and names.
+              </label>
+              <label className="flex items-start gap-2">
+                <input
+                  type="checkbox"
+                  checked={editsConfirmed}
+                  onChange={event =>
+                    setEditsConfirmed(event.target.checked)
+                  }
+                />
+                I reviewed edits/allergens and want to submit now.
+              </label>
+            </div>
+          )}
         </Card>
 
         <div className="menu-reveal menu-delay-1 space-y-3">
@@ -329,7 +393,12 @@ export default function PerUserReviewPage({
               </Button>
               <Button
                 onClick={() => setShowConfirm(true)}
-                disabled={submitting || !sessionId}
+                disabled={
+                  submitting ||
+                  !sessionId ||
+                  (strictOrderSafety &&
+                    (!checkItemsConfirmed || !editsConfirmed))
+                }
               >
                 {reviewConfig.placeOrderLabel}
               </Button>

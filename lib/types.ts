@@ -114,12 +114,35 @@ export type CustomerTrustMicrocopyLevel =
   | "BALANCED"
   | "HIGH_ASSURANCE"
 
+export type CustomerExperiencePresetId =
+  | "FAST_CASUAL_TRUSTED"
+  | "FULL_SERVICE_ASSURANCE"
+  | "BAR_LOUNGE_SAFE_EXPRESS"
+
+export type CustomerOrderSafetyMode = "STANDARD" | "STRICT"
+export type CustomerCheckoutSafetyMode = "STANDARD" | "STRICT"
+
+export type CustomerSocialProofMode =
+  | "OFF"
+  | "VERIFIED_REVIEWS"
+  | "VERIFIED_USAGE"
+
+export type CustomerTipPresetStrategy =
+  | "CONSERVATIVE"
+  | "BALANCED"
+  | "PREMIUM"
+
 export type CustomerUxConfig = {
+  presetId: CustomerExperiencePresetId
   menuDiscovery: CustomerMenuDiscoveryFlow
   ordering: CustomerOrderingFlow
   review: CustomerReviewFlow
   checkout: CustomerCheckoutFlow
   engagement: CustomerEngagementFlow
+  orderSafetyMode: CustomerOrderSafetyMode
+  checkoutSafetyMode: CustomerCheckoutSafetyMode
+  socialProofMode: CustomerSocialProofMode
+  tipPresetStrategy: CustomerTipPresetStrategy
   showProgressAnchors: boolean
   emphasizeSocialProof: boolean
   trustMicrocopy: CustomerTrustMicrocopyLevel
@@ -516,6 +539,66 @@ export type FeatureSummaryDTO = {
   notifications: number
   loyaltyMembers: number
   deliveryOrders: number
+}
+
+export type UxExperimentStatus =
+  | "DRAFT"
+  | "LIVE"
+  | "PAUSED"
+  | "ARCHIVED"
+
+export type UxExperimentVariant = {
+  key: string
+  label: string
+  weight: number
+  uxPatch?: Partial<CustomerUxConfig>
+}
+
+export type UxExperimentDTO = {
+  id: string
+  key: string
+  name: string
+  description: string | null
+  status: UxExperimentStatus
+  trafficPercent: number
+  variants: UxExperimentVariant[]
+  createdAt: string
+  updatedAt: string
+}
+
+export type UxExperimentAssignmentDTO = {
+  experimentKey: string
+  variantKey: string
+  sessionId: string
+  assignedAt: string
+}
+
+export type UxFunnelEventDTO = {
+  id: string
+  experimentKey: string | null
+  variantKey: string | null
+  sessionId: string
+  eventName: string
+  page: string
+  step: string
+  value: number | null
+  metadata: Record<string, unknown> | null
+  occurredAt: string
+}
+
+export type UxInsightsVariantSummary = {
+  variantKey: string
+  sessions: number
+  eventCounts: Record<string, number>
+}
+
+export type UxInsightsDTO = {
+  experimentKey: string
+  since: string
+  until: string
+  totalSessions: number
+  totalEvents: number
+  variants: UxInsightsVariantSummary[]
 }
 
 export type TenantScopedEntity = {

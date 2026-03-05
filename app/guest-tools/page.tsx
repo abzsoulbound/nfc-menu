@@ -5,12 +5,14 @@ import Link from "next/link"
 import { Button } from "@/components/ui/Button"
 import { Card } from "@/components/ui/Card"
 import { fetchJson } from "@/lib/fetchJson"
+import { trackUxFunnelEventClient } from "@/lib/uxClient"
 import {
   LoyaltyAccountDTO,
   PromoCodeDTO,
   ReservationDTO,
   WaitlistEntryDTO,
 } from "@/lib/types"
+import { useUxFunnelTracking } from "@/lib/useUxFunnelTracking"
 import { useRestaurantStore } from "@/store/useRestaurantStore"
 
 type NotificationDTO = {
@@ -30,6 +32,10 @@ type GuestToolsTab =
   | "notifications"
 
 export default function GuestToolsPage() {
+  const uxTracking = useUxFunnelTracking({
+    page: "guest_tools",
+    step: "engage",
+  })
   const [promos, setPromos] = useState<PromoCodeDTO[]>([])
   const [customerId, setCustomerId] = useState("")
   const [name, setName] = useState("")
@@ -120,6 +126,14 @@ export default function GuestToolsPage() {
         cache: "no-store",
       })
       setLoyalty(loyaltyResponse.loyalty)
+      void trackUxFunnelEventClient({
+        sessionId: uxTracking.sessionId || "guest-tools",
+        eventName: "guest_tools_account_saved",
+        page: "guest_tools",
+        step: "account",
+        experimentKey: uxTracking.experimentKey ?? undefined,
+        variantKey: uxTracking.variantKey ?? undefined,
+      })
     } catch (err) {
       setError((err as Error).message)
     } finally {
@@ -143,6 +157,14 @@ export default function GuestToolsPage() {
         }),
       })
       setReservation(created)
+      void trackUxFunnelEventClient({
+        sessionId: uxTracking.sessionId || "guest-tools",
+        eventName: "guest_tools_reservation_submitted",
+        page: "guest_tools",
+        step: "reservation",
+        experimentKey: uxTracking.experimentKey ?? undefined,
+        variantKey: uxTracking.variantKey ?? undefined,
+      })
     } catch (err) {
       setError((err as Error).message)
     } finally {
@@ -165,6 +187,14 @@ export default function GuestToolsPage() {
         }),
       })
       setWaitlistEntry(created)
+      void trackUxFunnelEventClient({
+        sessionId: uxTracking.sessionId || "guest-tools",
+        eventName: "guest_tools_waitlist_submitted",
+        page: "guest_tools",
+        step: "waitlist",
+        experimentKey: uxTracking.experimentKey ?? undefined,
+        variantKey: uxTracking.variantKey ?? undefined,
+      })
     } catch (err) {
       setError((err as Error).message)
     } finally {
@@ -188,6 +218,14 @@ export default function GuestToolsPage() {
       })
       setFeedbackSent(true)
       setFeedbackComment("")
+      void trackUxFunnelEventClient({
+        sessionId: uxTracking.sessionId || "guest-tools",
+        eventName: "guest_tools_feedback_submitted",
+        page: "guest_tools",
+        step: "feedback",
+        experimentKey: uxTracking.experimentKey ?? undefined,
+        variantKey: uxTracking.variantKey ?? undefined,
+      })
     } catch (err) {
       setError((err as Error).message)
     } finally {
@@ -315,7 +353,7 @@ export default function GuestToolsPage() {
             <input className="w-full rounded-[var(--radius-control)] border border-[var(--border)] bg-transparent px-3 py-2 text-sm" value={email} onChange={e => setEmail(e.target.value)} placeholder="Email" />
             <label className="flex items-center gap-2 text-sm">
               <input type="checkbox" checked={marketingOptIn} onChange={e => setMarketingOptIn(e.target.checked)} />
-              Receive offers
+              Optional: receive offers and updates
             </label>
             <Button disabled={busy} onClick={upsertAccount}>Save account</Button>
             {loyalty && (

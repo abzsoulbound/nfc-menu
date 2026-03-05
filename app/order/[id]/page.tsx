@@ -13,6 +13,7 @@ import {
   showCustomerDebugLabels,
 } from "@/lib/customerMode"
 import { fetchJson } from "@/lib/fetchJson"
+import { trackUxFunnelEventClient } from "@/lib/uxClient"
 import {
   buildCartLineId,
   getMenuItemIdFromCartLineId,
@@ -32,6 +33,7 @@ import { useCartStore } from "@/store/useCartStore"
 import { useOrderMenuUiStore } from "@/store/useOrderMenuUiStore"
 import { useRestaurantStore } from "@/store/useRestaurantStore"
 import { useSessionStore } from "@/store/useSessionStore"
+import { useUxFunnelTracking } from "@/lib/useUxFunnelTracking"
 
 type TableState = {
   tableId: string | null
@@ -169,6 +171,10 @@ export default function TagOrderingPage({
     s => s.experienceConfig.review
   )
   const uxConfig = useRestaurantStore(s => s.experienceConfig.ux)
+  const uxTracking = useUxFunnelTracking({
+    page: "order",
+    step: "select",
+  })
 
   const refreshTableAndProgress = useCallback(async () => {
     if (!sessionReady) return
@@ -461,6 +467,7 @@ export default function TagOrderingPage({
   const serviceStatusLabel = viewOnly
     ? "Ordering paused"
     : "Ordering open"
+  const strictOrderSafety = uxConfig.orderSafetyMode === "STRICT"
   const orderingHelpText =
     uxConfig.ordering === "INLINE_STEPPER"
       ? "Use quick add for simple items, customize only when needed."
@@ -561,13 +568,48 @@ export default function TagOrderingPage({
       vatRate: item.vatRate,
       station: item.station,
     })
+
+    void trackUxFunnelEventClient({
+      sessionId: uxTracking.sessionId || `order-${tagId}`,
+      eventName: "item_add",
+      page: "order",
+      step: "select",
+      experimentKey: uxTracking.experimentKey ?? undefined,
+      variantKey: uxTracking.variantKey ?? undefined,
+      metadata: {
+        source: "quick_add",
+        itemId: item.id,
+      },
+    })
   }
 
   function openReviewExperience() {
     if (uxConfig.review === "PAGE_REVIEW") {
+      void trackUxFunnelEventClient({
+        sessionId: uxTracking.sessionId || `order-${tagId}`,
+        eventName: "open_review",
+        page: "order",
+        step: "review_transition",
+        experimentKey: uxTracking.experimentKey ?? undefined,
+        variantKey: uxTracking.variantKey ?? undefined,
+        metadata: {
+          mode: "page",
+        },
+      })
       router.push(`/order/review/${tagId}`)
       return
     }
+    void trackUxFunnelEventClient({
+      sessionId: uxTracking.sessionId || `order-${tagId}`,
+      eventName: "open_review",
+      page: "order",
+      step: "review_transition",
+      experimentKey: uxTracking.experimentKey ?? undefined,
+      variantKey: uxTracking.variantKey ?? undefined,
+      metadata: {
+        mode: "sheet",
+      },
+    })
     openReview()
   }
 
@@ -675,6 +717,20 @@ export default function TagOrderingPage({
       })
     }
 
+    void trackUxFunnelEventClient({
+      sessionId: uxTracking.sessionId || `order-${tagId}`,
+      eventName: "item_add",
+      page: "order",
+      step: "configure",
+      experimentKey: uxTracking.experimentKey ?? undefined,
+      variantKey: uxTracking.variantKey ?? undefined,
+      metadata: {
+        source: editingLineId ? "edit_existing" : "configurator",
+        itemId: configItem.id,
+        quantity: configQuantity,
+      },
+    })
+
     resetConfiguratorState()
   }
 
@@ -748,6 +804,17 @@ export default function TagOrderingPage({
                 ? "Full review page"
                 : "Quick review sheet"}
             </span>
+            <span
+              className={`status-chip ${
+                strictOrderSafety
+                  ? "status-chip-warning"
+                  : "status-chip-neutral"
+              }`}
+            >
+              {strictOrderSafety
+                ? "Strict order safety checks"
+                : "Standard order safety checks"}
+            </span>
             {orderProgress.length > 0 && (
               <>
                 <span className="status-chip status-chip-neutral">
@@ -759,6 +826,13 @@ export default function TagOrderingPage({
               </>
             )}
           </div>
+
+          {strictOrderSafety && (
+            <div className="mt-3 rounded-xl border border-[var(--border)] bg-[rgba(255,255,255,0.58)] px-3 py-2 text-xs text-secondary">
+              Double-check item choices before reviewing. Need help? Ask a
+              staff member at your table.
+            </div>
+          )}
         </Card>
 
         {menuSections.length > 0 && (

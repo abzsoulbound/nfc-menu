@@ -1,19 +1,10 @@
 import Link from "next/link"
+import nextDynamic from "next/dynamic"
 import { notFound } from "next/navigation"
 import { Card } from "@/components/ui/Card"
-import { DemoSimulatorPanel } from "@/components/demo/DemoSimulatorPanel"
+import { DemoFeedQueryBootstrap } from "@/components/demo/DemoFeedQueryBootstrap"
+import { DemoGuidedLaunchPanel } from "@/components/demo/DemoGuidedLaunchPanel"
 import { getRestaurantForCurrentRequest } from "@/lib/restaurants"
-import {
-  getDemoSimulatorStatus,
-  runDemoSimulatorTick,
-  startDemoSimulator,
-} from "@/lib/demoSimulator"
-import {
-  hydrateRuntimeStateFromDb,
-  persistRuntimeStateToDb,
-} from "@/lib/runtimePersistence"
-import { publishRuntimeEvent } from "@/lib/realtime"
-import { withRestaurantContext } from "@/lib/tenantContext"
 import { restaurantEntryPathForSlug } from "@/lib/tenant"
 import { isDemoToolsEnabled } from "@/lib/env"
 
@@ -27,6 +18,33 @@ export const metadata = {
 
 export const dynamic = "force-dynamic"
 
+const DemoSimulatorPanel = nextDynamic(
+  () =>
+    import("@/components/demo/DemoSimulatorPanel").then(
+      module => module.DemoSimulatorPanel
+    ),
+  {
+    loading: () => (
+      <Card variant="accent" className="space-y-3">
+        <h2 className="text-base font-semibold tracking-tight">
+          Live Simulator
+        </h2>
+        <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
+          {Array.from({ length: 4 }).map((_, index) => (
+            <div
+              key={index}
+              className="rounded-xl border border-[var(--border)] surface-secondary px-3 py-2"
+            >
+              <div className="h-3 w-20 rounded bg-[rgba(255,255,255,0.08)]" />
+              <div className="mt-2 h-5 w-10 rounded bg-[rgba(255,255,255,0.12)]" />
+            </div>
+          ))}
+        </div>
+      </Card>
+    ),
+  }
+)
+
 type DemoLink = {
   label: string
   nextPath: string
@@ -37,6 +55,12 @@ type DemoStep = {
   title: string
   route: string
   outcome: string
+}
+
+type CustomerWalkthroughStep = {
+  title: string
+  nextPath: string
+  objective: string
 }
 
 function firstPasscode(list: string | undefined) {
@@ -170,6 +194,39 @@ const demoScript: DemoStep[] = [
   },
 ]
 
+const customerWalkthrough: CustomerWalkthroughStep[] = [
+  {
+    title: "Entry from table tap",
+    nextPath: "/menu",
+    objective:
+      "Show how guests land directly in a branded menu with no app install.",
+  },
+  {
+    title: "Build basket quickly",
+    nextPath: "/order/takeaway",
+    objective:
+      "Demonstrate selection, edits, quantity, and low-friction add-to-order behavior.",
+  },
+  {
+    title: "Review before commit",
+    nextPath: "/order/review/demo-tag",
+    objective:
+      "Show transparent order review and customer confidence before submission.",
+  },
+  {
+    title: "Need help / support path",
+    nextPath: "/guest-tools",
+    objective:
+      "Prove guests can self-serve support requests without leaving the ordering flow.",
+  },
+  {
+    title: "Checkout completion",
+    nextPath: "/pay/1",
+    objective:
+      "Close the story with split/tip/payment options and clear completion outcome.",
+  },
+]
+
 function LinkGrid({
   title,
   links,
@@ -183,21 +240,24 @@ function LinkGrid({
     <Card className="space-y-3">
       <h2 className="text-base font-semibold tracking-tight">{title}</h2>
       <div className="grid gap-2 md:grid-cols-2">
-        {links.map(link => (
-          <Link
-            key={link.nextPath}
-            href={resolveHref(link.nextPath)}
-            className="focus-ring rounded-xl border border-[var(--border)] surface-accent px-3 py-3 transition-all duration-150 hover:-translate-y-px"
-          >
-            <div className="text-sm font-semibold text-[var(--text-primary)]">
-              {link.label}
-            </div>
-            <div className="mt-1 text-xs text-secondary">{link.detail}</div>
-            <div className="mt-2 text-xs text-muted mono-font">
-              {resolveHref(link.nextPath)}
-            </div>
-          </Link>
-        ))}
+        {links.map(link => {
+          const href = resolveHref(link.nextPath)
+          return (
+            <Link
+              key={link.nextPath}
+              href={href}
+              className="focus-ring rounded-xl border border-[var(--border)] surface-accent px-3 py-3 transition-all duration-150 hover:-translate-y-px"
+            >
+              <div className="text-sm font-semibold text-[var(--text-primary)]">
+                {link.label}
+              </div>
+              <div className="mt-1 text-xs text-secondary">{link.detail}</div>
+              <div className="mt-2 text-xs text-muted mono-font">
+                {href}
+              </div>
+            </Link>
+          )
+        })}
       </div>
     </Card>
   )
@@ -211,28 +271,12 @@ export default async function DemoPage() {
   const restaurant = await getRestaurantForCurrentRequest()
   const resolveHref = (nextPath: string) =>
     restaurantEntryPathForSlug(restaurant.slug, nextPath)
-  const tick = await withRestaurantContext(
-    restaurant.slug,
-    async () => {
-      await hydrateRuntimeStateFromDb()
-      const before = getDemoSimulatorStatus()
-      startDemoSimulator()
-      const nextTick = runDemoSimulatorTick()
-      const shouldPersist = !before.enabled || nextTick.changed
-      if (shouldPersist) {
-        await persistRuntimeStateToDb()
-        publishRuntimeEvent("demo.simulator", {
-          enabled: true,
-          lastTickAt: nextTick.status.lastTickAt,
-          kitchenQueue: nextTick.status.queue.kitchen,
-          barQueue: nextTick.status.queue.bar,
-          readyQueue: nextTick.status.queue.ready,
-          activeDemoSessions: nextTick.status.activeDemoSessions,
-        })
-      }
-      return nextTick
-    }
-  )
+
+  const commandBase = `npm run demo:open -- --base-url <YOUR_BASE_URL> --tenant-slug ${restaurant.slug}`
+  const commandFirstRun = `${commandBase} --profile first-run`
+  const commandRushHour = `${commandBase} --profile rush-hour`
+  const commandFull = `${commandBase} --profile full`
+  const commandAuto = "npm run demo:auto"
 
   const passcodes = [
     {
@@ -260,6 +304,8 @@ export default async function DemoPage() {
   return (
     <div className="px-4 py-6 md:px-8 md:py-10">
       <div className="mx-auto max-w-[1120px] space-y-4">
+        <DemoFeedQueryBootstrap />
+
         <Card variant="elevated" className="space-y-3">
           <div className="text-[11px] uppercase tracking-[0.32em] text-muted">
             Buyer Demo Hub
@@ -280,6 +326,81 @@ export default async function DemoPage() {
         </Card>
 
         <DemoSimulatorPanel />
+        <DemoGuidedLaunchPanel />
+
+        <Card className="space-y-3">
+          <h2 className="text-base font-semibold tracking-tight">
+            Terminal Launch Commands
+          </h2>
+          <p className="text-sm text-secondary">
+            Open the full demo flow in your default browser using one command.
+            Replace {"<YOUR_BASE_URL>"} with your live URL.
+          </p>
+          <div className="space-y-2 rounded-xl border border-[var(--border)] surface-secondary p-3">
+            <div className="text-[11px] uppercase tracking-[0.18em] text-muted">
+              First customer walkthrough
+            </div>
+            <div className="mono-font text-xs text-[var(--text-primary)]">
+              {commandFirstRun}
+            </div>
+            <div className="text-[11px] uppercase tracking-[0.18em] text-muted">
+              Rush-hour operations
+            </div>
+            <div className="mono-font text-xs text-[var(--text-primary)]">
+              {commandRushHour}
+            </div>
+            <div className="text-[11px] uppercase tracking-[0.18em] text-muted">
+              Full all-pages launch
+            </div>
+            <div className="mono-font text-xs text-[var(--text-primary)]">
+              {commandFull}
+            </div>
+            <div className="text-[11px] uppercase tracking-[0.18em] text-muted">
+              Zero-arg autopilot
+            </div>
+            <div className="mono-font text-xs text-[var(--text-primary)]">
+              {commandAuto}
+            </div>
+          </div>
+        </Card>
+
+        <Card className="space-y-3">
+          <h2 className="text-base font-semibold tracking-tight">
+            Customer Journey Walkthrough
+          </h2>
+          <div className="space-y-2">
+            {customerWalkthrough.map((step, index) => {
+              const href = resolveHref(step.nextPath)
+              return (
+                <div
+                  key={step.title}
+                  className="rounded-xl border border-[var(--border)] surface-accent px-3 py-3"
+                >
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <span className="status-chip status-chip-neutral">
+                        Step {index + 1}
+                      </span>
+                      <span className="text-sm font-semibold">{step.title}</span>
+                    </div>
+                    <Link
+                      href={href}
+                      className="focus-ring rounded-[var(--radius-control)] border border-[var(--border)] surface-secondary px-3 py-1 text-xs font-semibold text-[var(--text-primary)]"
+                    >
+                      Open
+                    </Link>
+                  </div>
+                  <div className="mt-1 text-xs text-muted mono-font">
+                    {href}
+                  </div>
+                  <div className="mt-1 text-sm text-secondary">
+                    {step.objective}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </Card>
 
         <Card className="space-y-3">
           <h2 className="text-base font-semibold tracking-tight">
