@@ -8,6 +8,7 @@ import {
 import { Providers } from "@/app/providers"
 import { AppShell } from "@/components/layout/AppShell"
 import { validateRequiredEnv } from "@/lib/env"
+import { Analytics } from "@vercel/analytics/next"
 
 const uiFont = Manrope({
   subsets: ["latin"],
@@ -45,6 +46,7 @@ export default function RootLayout({
             {children}
           </AppShell>
         </Providers>
+        <Analytics />
       </body>
     </html>
   )
