@@ -174,11 +174,11 @@ export function DemoSetupPageClient() {
     <div className="relative overflow-hidden px-4 py-8 md:px-8 md:py-12">
       <div
         aria-hidden="true"
-        className="pointer-events-none absolute inset-0 -z-10 bg-[radial-gradient(circle_at_14%_8%,rgba(0,18,88,0.85),transparent_40%),radial-gradient(circle_at_88%_12%,rgba(229,170,20,0.12),transparent_48%),linear-gradient(180deg,#000a30_0%,#001258_42%,#001a6e_100%)]"
+        className="pointer-events-none absolute inset-0 -z-10 bg-[radial-gradient(circle_at_14%_8%,rgba(0,18,88,0.85),transparent_40%),radial-gradient(circle_at_88%_12%,rgba(229,170,20,0.12),transparent_48%),linear-gradient(180deg,rgba(0,8,36,1)_0%,rgba(0,14,58,1)_42%,rgba(0,18,88,1)_100%)]"
       />
 
       <div className="mx-auto max-w-[1380px] space-y-5">
-        <Card className="border-[rgba(229,170,20,0.24)] bg-[linear-gradient(130deg,rgba(0,10,44,0.94),rgba(0,18,88,0.9),rgba(0,24,96,0.86))] text-white">
+        <Card className="border-[rgba(229,170,20,0.3)] bg-[linear-gradient(160deg,rgba(0,8,36,0.96),rgba(0,18,88,0.93))] text-white">
           <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-end">
             <div className="space-y-2">
               <div className="text-[10px] uppercase tracking-[0.18em] text-[rgba(229,170,20,0.72)]">
@@ -212,7 +212,7 @@ export function DemoSetupPageClient() {
 
         <div className="grid gap-4 xl:grid-cols-[minmax(0,1.2fr)_minmax(360px,0.8fr)]">
           <div className="space-y-4">
-            <Card className="space-y-4 border-[rgba(255,255,255,0.14)] bg-[rgba(0,14,66,0.62)] text-white">
+            <Card className="space-y-4 border-[rgba(232,220,198,0.18)] bg-[rgba(6,12,24,0.55)] text-white">
               <div className="space-y-1">
                 <div className="text-[10px] uppercase tracking-[0.16em] text-[rgba(229,170,20,0.72)]">
                   Buyer Frame
@@ -249,7 +249,7 @@ export function DemoSetupPageClient() {
               </div>
             </Card>
 
-            <Card className="space-y-4 border-[rgba(255,255,255,0.14)] bg-[rgba(0,14,66,0.62)] text-white">
+            <Card className="space-y-4 border-[rgba(232,220,198,0.18)] bg-[rgba(6,12,24,0.55)] text-white">
               <div className="space-y-1">
                 <div className="text-[10px] uppercase tracking-[0.16em] text-[rgba(229,170,20,0.72)]">
                   Demo Hub Copy
@@ -291,7 +291,7 @@ export function DemoSetupPageClient() {
               </div>
             </Card>
 
-            <Card className="space-y-4 border-[rgba(255,255,255,0.14)] bg-[rgba(0,14,66,0.62)] text-white">
+            <Card className="space-y-4 border-[rgba(232,220,198,0.18)] bg-[rgba(6,12,24,0.55)] text-white">
               <div className="space-y-1">
                 <div className="text-[10px] uppercase tracking-[0.16em] text-[rgba(229,170,20,0.72)]">
                   Talking Points
@@ -326,7 +326,7 @@ export function DemoSetupPageClient() {
               </div>
             </Card>
 
-            <Card className="space-y-4 border-[rgba(255,255,255,0.14)] bg-[rgba(0,14,66,0.62)] text-white">
+            <Card className="space-y-4 border-[rgba(232,220,198,0.18)] bg-[rgba(6,12,24,0.55)] text-white">
               <div className="space-y-1">
                 <div className="text-[10px] uppercase tracking-[0.16em] text-[rgba(229,170,20,0.72)]">
                   Section Labels
@@ -377,7 +377,7 @@ export function DemoSetupPageClient() {
               </div>
             </Card>
 
-            <Card className="space-y-4 border-[rgba(255,255,255,0.14)] bg-[rgba(0,14,66,0.62)] text-white">
+            <Card className="space-y-4 border-[rgba(232,220,198,0.18)] bg-[rgba(6,12,24,0.55)] text-white">
               <div className="space-y-1">
                 <div className="text-[10px] uppercase tracking-[0.16em] text-[rgba(229,170,20,0.72)]">
                   Customer Route Copy
@@ -400,7 +400,7 @@ export function DemoSetupPageClient() {
               </div>
             </Card>
 
-            <Card className="space-y-4 border-[rgba(255,255,255,0.14)] bg-[rgba(0,14,66,0.62)] text-white">
+            <Card className="space-y-4 border-[rgba(232,220,198,0.18)] bg-[rgba(6,12,24,0.55)] text-white">
               <div className="space-y-1">
                 <div className="text-[10px] uppercase tracking-[0.16em] text-[rgba(229,170,20,0.72)]">
                   Staff Route Copy
@@ -425,7 +425,7 @@ export function DemoSetupPageClient() {
           </div>
 
           <div className="space-y-4 xl:sticky xl:top-5 xl:self-start">
-            <Card className="space-y-4 border-[rgba(229,170,20,0.22)] bg-[rgba(0,14,66,0.74)] text-white">
+            <Card className="space-y-4 border-[rgba(229,170,20,0.3)] bg-[rgba(6,12,24,0.55)] text-white">
               <div className="space-y-1">
                 <div className="text-[10px] uppercase tracking-[0.16em] text-[rgba(229,170,20,0.72)]">
                   Live Preview
@@ -437,7 +437,7 @@ export function DemoSetupPageClient() {
 
               <div className="rounded-2xl border border-[rgba(255,255,255,0.12)] bg-[rgba(255,255,255,0.04)] p-4">
                 <div className="flex flex-wrap gap-2">
-                  <span className="rounded-full border border-[rgba(229,170,20,0.34)] bg-[rgba(229,170,20,0.1)] px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-[#f5d27c]">
+                  <span className="rounded-full border border-[rgba(229,170,20,0.34)] bg-[rgba(229,170,20,0.1)] px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-[#e5aa14]">
                     {preview.companyName}
                   </span>
                   <span className="rounded-full border border-[rgba(255,255,255,0.16)] px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-[rgba(255,255,255,0.72)]">
