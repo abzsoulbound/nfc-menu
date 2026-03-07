@@ -3,7 +3,6 @@
 import Link from "next/link"
 import { useEffect, useState } from "react"
 import { Button } from "@/components/ui/Button"
-import { Card } from "@/components/ui/Card"
 import { FormInput } from "@/components/ui/FormField"
 import {
   cloneDemoSetupConfig,
@@ -69,12 +68,12 @@ function RouteCopyEditor<TKey extends string>({
   ) => void
 }) {
   return (
-    <div className="rounded-[var(--radius-card)] border border-[var(--border)] surface-accent p-4">
+    <div className="rounded-[16px] border border-[rgba(232,220,198,0.18)] bg-[rgba(6,12,24,0.55)] p-4">
       <div className="flex items-center justify-between gap-2">
-        <div className="text-sm font-semibold text-[var(--text-primary)]">
+        <div className="text-sm font-semibold text-white">
           {title}
         </div>
-        <div className="mono-font text-[11px] uppercase tracking-[0.14em] text-muted">
+        <div className="mono-font text-[11px] uppercase tracking-[0.14em] text-[rgba(255,255,255,0.5)]">
           {routeKey}
         </div>
       </div>
@@ -178,7 +177,7 @@ export function DemoSetupPageClient() {
       />
 
       <div className="mx-auto max-w-[1380px] space-y-5">
-        <Card className="border-[rgba(229,170,20,0.3)] bg-[linear-gradient(160deg,rgba(0,8,36,0.96),rgba(0,18,88,0.93))] text-white">
+        <div className="rounded-[24px] border border-[rgba(229,170,20,0.3)] bg-[linear-gradient(160deg,rgba(0,8,36,0.96),rgba(0,18,88,0.93))] p-6 text-white">
           <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-end">
             <div className="space-y-2">
               <div className="text-[10px] uppercase tracking-[0.18em] text-[rgba(229,170,20,0.72)]">
@@ -208,11 +207,11 @@ export function DemoSetupPageClient() {
               </Button>
             </div>
           </div>
-        </Card>
+        </div>
 
         <div className="grid gap-4 xl:grid-cols-[minmax(0,1.2fr)_minmax(360px,0.8fr)]">
           <div className="space-y-4">
-            <Card className="space-y-4 border-[rgba(232,220,198,0.18)] bg-[rgba(6,12,24,0.55)] text-white">
+            <div className="space-y-4 rounded-[24px] border border-[rgba(232,220,198,0.18)] bg-[rgba(6,12,24,0.55)] p-6 text-white">
               <div className="space-y-1">
                 <div className="text-[10px] uppercase tracking-[0.16em] text-[rgba(229,170,20,0.72)]">
                   Buyer Frame
@@ -247,9 +246,9 @@ export function DemoSetupPageClient() {
                   />
                 </div>
               </div>
-            </Card>
+            </div>
 
-            <Card className="space-y-4 border-[rgba(232,220,198,0.18)] bg-[rgba(6,12,24,0.55)] text-white">
+            <div className="space-y-4 rounded-[24px] border border-[rgba(232,220,198,0.18)] bg-[rgba(6,12,24,0.55)] p-6 text-white">
               <div className="space-y-1">
                 <div className="text-[10px] uppercase tracking-[0.16em] text-[rgba(229,170,20,0.72)]">
                   Demo Hub Copy
@@ -289,9 +288,9 @@ export function DemoSetupPageClient() {
                   }
                 />
               </div>
-            </Card>
+            </div>
 
-            <Card className="space-y-4 border-[rgba(232,220,198,0.18)] bg-[rgba(6,12,24,0.55)] text-white">
+            <div className="space-y-4 rounded-[24px] border border-[rgba(232,220,198,0.18)] bg-[rgba(6,12,24,0.55)] p-6 text-white">
               <div className="space-y-1">
                 <div className="text-[10px] uppercase tracking-[0.16em] text-[rgba(229,170,20,0.72)]">
                   Talking Points
@@ -324,9 +323,9 @@ export function DemoSetupPageClient() {
                   }
                 />
               </div>
-            </Card>
+            </div>
 
-            <Card className="space-y-4 border-[rgba(232,220,198,0.18)] bg-[rgba(6,12,24,0.55)] text-white">
+            <div className="space-y-4 rounded-[24px] border border-[rgba(232,220,198,0.18)] bg-[rgba(6,12,24,0.55)] p-6 text-white">
               <div className="space-y-1">
                 <div className="text-[10px] uppercase tracking-[0.16em] text-[rgba(229,170,20,0.72)]">
                   Section Labels
@@ -375,9 +374,9 @@ export function DemoSetupPageClient() {
                   }
                 />
               </div>
-            </Card>
+            </div>
 
-            <Card className="space-y-4 border-[rgba(232,220,198,0.18)] bg-[rgba(6,12,24,0.55)] text-white">
+            <div className="space-y-4 rounded-[24px] border border-[rgba(232,220,198,0.18)] bg-[rgba(6,12,24,0.55)] p-6 text-white">
               <div className="space-y-1">
                 <div className="text-[10px] uppercase tracking-[0.16em] text-[rgba(229,170,20,0.72)]">
                   Customer Route Copy
@@ -398,9 +397,9 @@ export function DemoSetupPageClient() {
                   />
                 ))}
               </div>
-            </Card>
+            </div>
 
-            <Card className="space-y-4 border-[rgba(232,220,198,0.18)] bg-[rgba(6,12,24,0.55)] text-white">
+            <div className="space-y-4 rounded-[24px] border border-[rgba(232,220,198,0.18)] bg-[rgba(6,12,24,0.55)] p-6 text-white">
               <div className="space-y-1">
                 <div className="text-[10px] uppercase tracking-[0.16em] text-[rgba(229,170,20,0.72)]">
                   Staff Route Copy
@@ -421,11 +420,11 @@ export function DemoSetupPageClient() {
                   />
                 ))}
               </div>
-            </Card>
+            </div>
           </div>
 
           <div className="space-y-4 xl:sticky xl:top-5 xl:self-start">
-            <Card className="space-y-4 border-[rgba(229,170,20,0.3)] bg-[rgba(6,12,24,0.55)] text-white">
+            <div className="space-y-4 rounded-[24px] border border-[rgba(229,170,20,0.3)] bg-[rgba(6,12,24,0.55)] p-6 text-white">
               <div className="space-y-1">
                 <div className="text-[10px] uppercase tracking-[0.16em] text-[rgba(229,170,20,0.72)]">
                   Live Preview
@@ -498,7 +497,7 @@ export function DemoSetupPageClient() {
                   Preview demo
                 </Link>
               </div>
-            </Card>
+            </div>
           </div>
         </div>
       </div>
