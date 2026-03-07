@@ -170,7 +170,7 @@ export function DemoSetupPageClient() {
   const preview = sanitizeDemoSetupConfig(draft)
 
   return (
-    <div className="relative overflow-hidden px-4 py-8 md:px-8 md:py-12">
+    <div className="relative min-h-screen overflow-hidden px-4 py-8 md:px-8 md:py-12">
       <div
         aria-hidden="true"
         className="pointer-events-none absolute inset-0 -z-10 bg-[radial-gradient(circle_at_14%_8%,rgba(0,18,88,0.85),transparent_40%),radial-gradient(circle_at_88%_12%,rgba(229,170,20,0.12),transparent_48%),linear-gradient(180deg,rgba(0,8,36,1)_0%,rgba(0,14,58,1)_42%,rgba(0,18,88,1)_100%)]"
