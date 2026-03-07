@@ -125,21 +125,6 @@ const projects: Project[] = [
     ctaLabel: "View on GitHub",
     external: true,
   },
-  {
-    title: "Ozdemir Orders — Family Restaurant System",
-    tagline: "A dedicated ordering system — coming soon.",
-    description:
-      "A purpose-built ordering and management platform for the family restaurant business. Currently in early planning — repo scaffolded and ready for development.",
-    stack: ["TBD"],
-    highlights: [
-      "Dedicated restaurant ordering workflow",
-      "Built for a real family-run venue",
-    ],
-    status: "Coming Soon",
-    href: "https://github.com/abzsoulbound/Ozdemir-Orders",
-    ctaLabel: "View on GitHub",
-    external: true,
-  },
 ]
 
 /* ------------------------------------------------------------------ */
