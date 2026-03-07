@@ -1,6 +1,7 @@
 export const PUBLIC_SITE_LINKS = [
-  { href: "/", label: "Company" },
-  { href: "/sales-demo", label: "Live Demo" },
+  { href: "/", label: "Home" },
+  { href: "/#projects", label: "Projects" },
+  { href: "/demo", label: "NFC Menu Demo" },
   { href: "/contact", label: "Contact" },
   { href: "/pricing", label: "Pricing" },
   { href: "/refunds", label: "Refunds" },
@@ -27,19 +28,21 @@ export const PUBLIC_SITE_SUPPORT_HOURS =
   process.env.NEXT_PUBLIC_SUPPORT_HOURS?.trim() || "Mon-Fri, 09:00-17:00 GMT"
 
 export const PUBLIC_SITE_SUMMARY =
-  "Soulbound Studio builds branded digital products, tactile guest journeys, and operational systems for hospitality-led businesses."
+  "Soulbound Studio is a creative technology studio that designs and ships full-stack software — from hospitality platforms and operational tools to consumer-facing products."
 
 export const PUBLIC_SITE_HEADER_HINT =
-  "Creative technology for hospitality, guest experience, and operations."
+  "Creative technology studio — building products people actually use."
 
 export const PUBLIC_SITE_AUDIENCE =
-  "Built for founders, operators, and venue teams that need software with a stronger point of view."
+  "Built for anyone who wants to see what we're working on — founders, collaborators, and the curious."
 
-export const PUBLIC_SITE_LAST_UPDATED = "4 March 2026"
+export const PUBLIC_SITE_LAST_UPDATED = "7 March 2026"
 
 const PUBLIC_SITE_PATHS = new Set([
   "/",
   "/company",
+  "/demo",
+  "/demo-setup",
   "/sales-demo",
   "/contact",
   "/pricing",
