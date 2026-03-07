@@ -101,6 +101,31 @@ const projects: Project[] = [
     external: true,
   },
   {
+    title: "Hinton FC — Club Management App",
+    tagline: "One app for fixtures, availability, comms, and payments.",
+    description:
+      "A Flutter mobile app (iOS + Android) for Hinton Football Club in Enfield. Replaces fragmented chat groups and spreadsheets with a single club-focused system — covering team structure, fixtures, availability, attendance, communications, matchday transport, and fee tracking. Firebase-backed with role-based access for admins, coaches, players, parents, and volunteers.",
+    stack: [
+      "Flutter / Dart",
+      "Firebase Auth",
+      "Cloud Firestore",
+      "Firebase Cloud Messaging",
+      "Cloud Functions",
+      "Firebase Storage",
+    ],
+    highlights: [
+      "Role-based access: admin, coach, player, parent, volunteer",
+      "Fixtures & training calendar with RSVP and lineup preview",
+      "Matchday transport: ride offers, seat booking, auto-lock",
+      "Parent mode with safeguarding links for youth players",
+      "Push notifications for payment reminders & announcements",
+    ],
+    status: "In Development",
+    href: "https://github.com/abzsoulbound/hinton-fc",
+    ctaLabel: "View on GitHub",
+    external: true,
+  },
+  {
     title: "Ozdemir Orders — Family Restaurant System",
     tagline: "A dedicated ordering system — coming soon.",
     description:
