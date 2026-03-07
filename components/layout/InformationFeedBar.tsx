@@ -4,6 +4,7 @@ import Link from "next/link"
 import { useMemo, useState } from "react"
 import { usePathname } from "next/navigation"
 import { resolveInformationFeed } from "@/lib/informationFeed"
+import { isPublicSitePath } from "@/lib/publicSite"
 import { restaurantEntryPathForSlug } from "@/lib/tenant"
 import { useRestaurantStore } from "@/store/useRestaurantStore"
 
@@ -28,6 +29,11 @@ export function InformationFeedBar() {
   const restaurantSlug = useRestaurantStore(s => s.slug)
   const restaurantName = useRestaurantStore(s => s.name)
   const ux = useRestaurantStore(s => s.experienceConfig.ux)
+  const hideFeed =
+    isPublicSitePath(pathname) ||
+    pathname === "/demo" ||
+    pathname === "/demo-setup" ||
+    pathname === "/sales-demo"
 
   const feed = useMemo(
     () =>
@@ -50,6 +56,10 @@ export function InformationFeedBar() {
       })),
     [feed.actions, restaurantSlug]
   )
+
+  if (hideFeed) {
+    return null
+  }
 
   return (
     <section className="border-b border-[var(--border)] surface-secondary">
@@ -77,24 +87,24 @@ export function InformationFeedBar() {
 
         {!collapsed ? (
           <div className="mt-3 grid gap-2 lg:grid-cols-3">
-            <div className="rounded-xl border border-[var(--border)] surface-accent p-3">
-              <div className="text-[10px] uppercase tracking-[0.16em] text-muted">
+            <div className="rounded-xl border border-[var(--border-subtle)] surface-accent p-3">
+              <div className="text-[11px] uppercase tracking-[0.14em] text-muted">
                 Do This Now
               </div>
               <div className="mt-1 text-sm text-[var(--text-primary)]">
                 {feed.now}
               </div>
             </div>
-            <div className="rounded-xl border border-[var(--border)] surface-accent p-3">
-              <div className="text-[10px] uppercase tracking-[0.16em] text-muted">
+            <div className="rounded-xl border border-[var(--border-subtle)] surface-accent p-3">
+              <div className="text-[11px] uppercase tracking-[0.14em] text-muted">
                 Next Step
               </div>
               <div className="mt-1 text-sm text-[var(--text-primary)]">
                 {feed.next}
               </div>
             </div>
-            <div className="rounded-xl border border-[var(--border)] surface-accent p-3">
-              <div className="text-[10px] uppercase tracking-[0.16em] text-muted">
+            <div className="rounded-xl border border-[var(--border-subtle)] surface-accent p-3">
+              <div className="text-[11px] uppercase tracking-[0.14em] text-muted">
                 Verify
               </div>
               <div className="mt-1 space-y-1">
