@@ -32,6 +32,7 @@ describe("readiness route", () => {
         env: { ok: boolean }
         database: { ok: boolean }
         tenants: { ok: boolean }
+        runtimePersistence: { ok: boolean }
       }
       runtime: {
         paymentMode: "SIMULATED" | "EXTERNAL"
@@ -45,6 +46,9 @@ describe("readiness route", () => {
     expect(typeof payload.checks.env.ok).toBe("boolean")
     expect(typeof payload.checks.database.ok).toBe("boolean")
     expect(typeof payload.checks.tenants.ok).toBe("boolean")
+    expect(typeof payload.checks.runtimePersistence.ok).toBe(
+      "boolean"
+    )
     expect(res.headers.get("cache-control")).toBe("no-store")
     expect(["SIMULATED", "EXTERNAL"]).toContain(
       payload.runtime.paymentMode

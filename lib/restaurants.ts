@@ -946,6 +946,52 @@ export async function updateRestaurantBrandingAndExperience(input: {
   })
 }
 
+async function assertStripeAccountIdIsUnclaimed(input: {
+  slug: string
+  stripeAccountId: string
+}) {
+  const conflict = await prisma.restaurant.findFirst({
+    where: {
+      active: true,
+      slug: {
+        not: input.slug,
+      },
+      stripeAccountId: input.stripeAccountId,
+    },
+    select: {
+      slug: true,
+    },
+  })
+  if (conflict) {
+    throw new Error(
+      "Stripe account is already linked to another restaurant"
+    )
+  }
+}
+
+async function assertStripeCustomerIdIsUnclaimed(input: {
+  slug: string
+  stripeCustomerId: string
+}) {
+  const conflict = await prisma.restaurant.findFirst({
+    where: {
+      active: true,
+      slug: {
+        not: input.slug,
+      },
+      stripeCustomerId: input.stripeCustomerId,
+    },
+    select: {
+      slug: true,
+    },
+  })
+  if (conflict) {
+    throw new Error(
+      "Stripe customer is already linked to another restaurant"
+    )
+  }
+}
+
 export async function updateRestaurantStripeConnection(input: {
   slug: string
   stripeAccountId: string
@@ -960,11 +1006,19 @@ export async function updateRestaurantStripeConnection(input: {
 
   const slug =
     normalizeRestaurantSlug(input.slug) ?? getDefaultRestaurantSlug()
+  const stripeAccountId = input.stripeAccountId.trim()
+  if (!stripeAccountId) {
+    throw new Error("Stripe account id is required")
+  }
+  await assertStripeAccountIdIsUnclaimed({
+    slug,
+    stripeAccountId,
+  })
 
   const updated = await prisma.restaurant.update({
     where: { slug },
     data: {
-      stripeAccountId: input.stripeAccountId,
+      stripeAccountId,
       stripeAccountStatus: input.stripeAccountStatus,
       stripeChargesEnabled: input.stripeChargesEnabled,
       stripePayoutsEnabled: input.stripePayoutsEnabled,
@@ -1024,12 +1078,23 @@ export async function upsertRestaurantStripeCustomer(input: {
     throw new Error("Database is required for Stripe customer updates")
   }
 
+  const slug =
+    normalizeRestaurantSlug(input.slug) ?? getDefaultRestaurantSlug()
+  const stripeCustomerId = input.stripeCustomerId.trim()
+  if (!stripeCustomerId) {
+    throw new Error("Stripe customer id is required")
+  }
+  await assertStripeCustomerIdIsUnclaimed({
+    slug,
+    stripeCustomerId,
+  })
+
   await prisma.restaurant.update({
     where: {
-      slug: normalizeRestaurantSlug(input.slug) ?? getDefaultRestaurantSlug(),
+      slug,
     },
     data: {
-      stripeCustomerId: input.stripeCustomerId,
+      stripeCustomerId,
     },
   })
 }
@@ -1046,14 +1111,26 @@ export async function updateRestaurantSubscriptionState(input: {
 
   const slug =
     normalizeRestaurantSlug(input.slug) ?? getDefaultRestaurantSlug()
+  const stripeCustomerId =
+    input.stripeCustomerId === undefined
+      ? undefined
+      : input.stripeCustomerId === null
+        ? null
+        : input.stripeCustomerId.trim()
+  if (typeof stripeCustomerId === "string" && !stripeCustomerId) {
+    throw new Error("Stripe customer id is required")
+  }
+  if (typeof stripeCustomerId === "string") {
+    await assertStripeCustomerIdIsUnclaimed({
+      slug,
+      stripeCustomerId,
+    })
+  }
 
   const updated = await prisma.restaurant.update({
     where: { slug },
     data: {
-      stripeCustomerId:
-        input.stripeCustomerId === undefined
-          ? undefined
-          : input.stripeCustomerId,
+      stripeCustomerId,
       stripeSubscriptionId:
         input.stripeSubscriptionId === undefined
           ? undefined
@@ -1305,7 +1382,7 @@ export async function findRestaurantSlugByStripeCustomerId(
   if (!canReadRestaurantDb()) return null
 
   try {
-    const row = await prisma.restaurant.findFirst({
+    const rows = await prisma.restaurant.findMany({
       where: {
         stripeCustomerId: normalizedCustomerId,
         active: true,
@@ -1313,9 +1390,13 @@ export async function findRestaurantSlugByStripeCustomerId(
       select: {
         slug: true,
       },
+      take: 2,
     })
 
-    return row?.slug ?? null
+    if (rows.length !== 1) {
+      return null
+    }
+    return rows[0]?.slug ?? null
   } catch {
     markRestaurantDbFailure()
     return null
@@ -1330,7 +1411,7 @@ export async function findRestaurantSlugByStripeAccountId(
   if (!canReadRestaurantDb()) return null
 
   try {
-    const row = await prisma.restaurant.findFirst({
+    const rows = await prisma.restaurant.findMany({
       where: {
         stripeAccountId: normalizedAccountId,
         active: true,
@@ -1338,9 +1419,13 @@ export async function findRestaurantSlugByStripeAccountId(
       select: {
         slug: true,
       },
+      take: 2,
     })
 
-    return row?.slug ?? null
+    if (rows.length !== 1) {
+      return null
+    }
+    return rows[0]?.slug ?? null
   } catch {
     markRestaurantDbFailure()
     return null

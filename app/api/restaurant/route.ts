@@ -57,35 +57,45 @@ async function resolveLaunchReadiness(restaurant: {
 
 export async function GET(req: Request) {
   return withRestaurantRequestContext(req, async ({ restaurant }) => {
-    const launchReadiness = await resolveLaunchReadiness(restaurant)
-    const response = ok({
-      slug: restaurant.slug,
-      name: restaurant.name,
-      monogram: restaurant.monogram,
-      location: restaurant.location,
-      assets: restaurant.assets,
-      experienceConfig: restaurant.experienceConfig,
-      payment: {
-        ...restaurant.payment,
-        platformFeePercent: Number(
-          (restaurant.payment.platformFeeBps / 100).toFixed(2)
-        ),
-      },
-      subscription: restaurant.subscription,
-      isDemo: restaurant.isDemo,
-      planTier: restaurant.planTier,
-      billingStatus: restaurant.billingStatus,
-      launchReadiness,
-      links: buildRestaurantScopedLinks(restaurant.slug),
-    }, undefined, req)
-    response.cookies.set(RESTAURANT_COOKIE_NAME, restaurant.slug, {
-      httpOnly: false,
-      sameSite: "lax",
-      secure: process.env.NODE_ENV === "production",
-      path: "/",
-      maxAge: 60 * 60 * 24 * 30,
-    })
-    return response
+    try {
+      requireRole(["MANAGER", "ADMIN"], req)
+      const launchReadiness = await resolveLaunchReadiness(restaurant)
+      const response = ok({
+        slug: restaurant.slug,
+        name: restaurant.name,
+        monogram: restaurant.monogram,
+        location: restaurant.location,
+        assets: restaurant.assets,
+        experienceConfig: restaurant.experienceConfig,
+        payment: {
+          ...restaurant.payment,
+          platformFeePercent: Number(
+            (restaurant.payment.platformFeeBps / 100).toFixed(2)
+          ),
+        },
+        subscription: restaurant.subscription,
+        isDemo: restaurant.isDemo,
+        planTier: restaurant.planTier,
+        billingStatus: restaurant.billingStatus,
+        launchReadiness,
+        links: buildRestaurantScopedLinks(restaurant.slug),
+      }, undefined, req)
+      response.cookies.set(RESTAURANT_COOKIE_NAME, restaurant.slug, {
+        httpOnly: false,
+        sameSite: "lax",
+        secure: process.env.NODE_ENV === "production",
+        path: "/",
+        maxAge: 60 * 60 * 24 * 30,
+      })
+      return response
+    } catch (error) {
+      const message = (error as Error).message
+      const status = message.startsWith("Unauthorized") ? 401 : 400
+      return badRequest(message, status, {
+        code: status === 401 ? "UNAUTHORIZED" : "RESTAURANT_READ_FAILED",
+        req,
+      })
+    }
   })
 }
 

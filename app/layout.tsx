@@ -6,8 +6,6 @@ import {
   JetBrains_Mono,
   Manrope,
 } from "next/font/google"
-import { Providers } from "@/app/providers"
-import { AppShell } from "@/components/layout/AppShell"
 import { validateRequiredEnv } from "@/lib/env"
 import { PUBLIC_SITE_NAME, PUBLIC_SITE_SUMMARY } from "@/lib/publicSite"
 
@@ -57,11 +55,7 @@ export default async function RootLayout({
       className={`${uiFont.variable} ${displayFont.variable} ${monoFont.variable}`}
     >
       <body>
-        <Providers>
-          <AppShell>
-            {children}
-          </AppShell>
-        </Providers>
+        {children}
       </body>
     </html>
   )

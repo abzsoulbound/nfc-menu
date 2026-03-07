@@ -103,11 +103,11 @@ export const DEFAULT_CUSTOMER_EXPERIENCE_CONFIG: CustomerExperienceConfig = {
   theme: {
     fontPreset: "SANS",
     radiusPreset: "SOFT",
-    customerPrimary: "#7d5a2a",
-    customerSurface: "#f7efde",
-    customerText: "#2c2418",
-    customerFocus: "#8f6a3a",
-    staffPrimary: "#4d7ff4",
+    customerPrimary: "#001258",
+    customerSurface: "#faf6ef",
+    customerText: "#001258",
+    customerFocus: "#e5aa14",
+    staffPrimary: "#001258",
   },
   launch: {
     isPublished: false,

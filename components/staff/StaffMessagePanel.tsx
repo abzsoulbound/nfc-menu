@@ -3,6 +3,7 @@
 import { useState } from "react"
 import { Button } from "@/components/ui/Button"
 import { Card } from "@/components/ui/Card"
+import { FormField, FormSelect } from "@/components/ui/FormField"
 import { fetchJson } from "@/lib/fetchJson"
 import { Station } from "@/lib/types"
 
@@ -33,19 +34,27 @@ export function StaffMessagePanel({
   return (
     <Card>
       <div className="space-y-2">
-        <select
+        <FormSelect
+          label="Target station"
           value={target}
           onChange={e => setTarget(e.target.value as Station)}
         >
           <option value="KITCHEN">Kitchen</option>
           <option value="BAR">Bar</option>
-        </select>
+        </FormSelect>
 
-        <textarea
-          value={message}
-          onChange={e => setMessage(e.target.value)}
-          placeholder="Message for station"
-        />
+        <FormField label="Message for station">
+          {fieldProps => (
+            <textarea
+              {...fieldProps}
+              rows={4}
+              value={message}
+              onChange={e => setMessage(e.target.value)}
+              placeholder="Message for station"
+              className="w-full rounded-[var(--radius-control)] border border-[var(--border)] bg-transparent px-3 py-2 text-sm"
+            />
+          )}
+        </FormField>
 
         <Button onClick={() => send().catch(() => {})}>
           Send

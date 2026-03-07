@@ -33,7 +33,7 @@ function SoulboundStudioGlyph({
       <defs>
         <linearGradient id={gradientId} x1="0%" y1="0%" x2="100%" y2="100%">
           <stop offset="0%" stopColor="#f0d898" />
-          <stop offset="55%" stopColor="#c9a96e" />
+          <stop offset="55%" stopColor="#e5aa14" />
           <stop offset="100%" stopColor="#9a7030" />
         </linearGradient>
         <filter id={glowId} x="-40%" y="-40%" width="180%" height="180%">
@@ -85,7 +85,7 @@ function SoulboundStudioGlyph({
         strokeLinejoin="miter"
         opacity="0.45"
       />
-      <circle cx="48" cy="30" r="3.2" fill="#c9a96e" filter={`url(#${glowId})`} />
+      <circle cx="48" cy="30" r="3.2" fill="#e5aa14" filter={`url(#${glowId})`} />
     </svg>
   )
 }

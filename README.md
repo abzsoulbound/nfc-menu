@@ -63,6 +63,7 @@ Development:
    - macOS/Linux: run `bash run-demo.sh` (optional profile arg: `first-run`, `rush-hour`, `full`)
 
 Quality checks:
+- `npm run qa:secrets` (fails if tracked env files contain live-looking Stripe secrets)
 - `npm run typecheck`
 - `npm run lint`
 - `npm run test`
@@ -77,6 +78,7 @@ Payment mode:
 - `PAYMENT_MODE=EXTERNAL` requires `PAYMENT_PROVIDER` and `PAYMENT_PROVIDER_SECRET`.
 - Use `Idempotency-Key` on `POST /api/customer/checkout` to prevent duplicate charge attempts.
 - In production non-demo tenant checkout, `Idempotency-Key` is required.
+- Keep real payment secrets out of tracked `.env.*` files. Store live values only in your deploy platform secret manager.
 
 Staff session security:
 - Login now issues signed `staff_auth` session tokens (instead of storing raw passcodes in cookies).
@@ -111,6 +113,7 @@ Launch handoff docs:
 - Owner-required external tasks: `docs/LAUNCH_OWNER_TASKS.md`
 - Copy/paste prompt for ChatGPT-guided execution: `docs/CHATGPT_LAUNCH_EXECUTION_PROMPT.md`
 - UX/UI psychology playbook (page-by-page): `docs/UX_UI_PSYCHOLOGY_PLAYBOOK.md`
+- Atlas launch checklist + blockers: `docs/ATLAS_LAUNCH_HANDOFF.md`
 
 Remote checkout smoke:
 - Example:

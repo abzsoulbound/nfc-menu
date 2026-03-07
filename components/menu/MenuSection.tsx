@@ -27,12 +27,12 @@ export function MenuSection({
   return (
     <section
       id={id}
-      className="scroll-mt-28 rounded-2xl border border-[var(--border)] surface-secondary p-4 md:p-6"
+      className="scroll-mt-28 rounded-2xl border border-[var(--border-subtle)] surface-secondary p-5 md:p-8"
     >
-      <div className="flex flex-wrap items-end justify-between gap-3">
+      <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
           {index !== undefined && (
-            <div className="text-[10px] uppercase tracking-[0.28em] text-muted">
+            <div className="text-[11px] uppercase tracking-[0.28em] text-muted">
               Section {String(index).padStart(2, "0")}
             </div>
           )}
@@ -50,13 +50,13 @@ export function MenuSection({
 
       <div
         aria-label={`${title} section image`}
-        className="mt-4 h-32 w-full rounded-xl border border-[var(--border)] bg-cover bg-center"
+        className="mt-5 h-36 w-full rounded-xl border border-[var(--border-subtle)] bg-cover bg-center shadow-[var(--shadow-soft)]"
         style={{ backgroundImage: `url("${resolvedImageUrl}")` }}
       />
 
       <Divider />
 
-      <div className="space-y-3 md:space-y-4">
+      <div className="space-y-4 md:space-y-5">
         {children}
       </div>
     </section>

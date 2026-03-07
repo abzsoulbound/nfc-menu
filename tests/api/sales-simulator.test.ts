@@ -222,7 +222,7 @@ describe("sales simulator api", () => {
     expect(res.status).toBe(400)
   })
 
-  it("rejects non-sales demo tenants", async () => {
+  it("allows other demo tenants, not just the sales-demo slug", async () => {
     const res = await GET(
       demoRequest(
         "http://localhost:3000/api/sales/simulator",
@@ -230,6 +230,6 @@ describe("sales simulator api", () => {
         { slug: "demo-template" }
       )
     )
-    expect(res.status).toBe(403)
+    expect(res.status).toBe(200)
   })
 })

@@ -1,10 +1,7 @@
 // @vitest-environment node
 import { beforeEach, describe, expect, it } from "vitest"
 import { GET } from "@/app/api/stream/route"
-import {
-  createOrResumeSession,
-  resetRuntimeStateForTests,
-} from "@/lib/runtimeStore"
+import { resetRuntimeStateForTests } from "@/lib/runtimeStore"
 
 describe("stream route auth", () => {
   beforeEach(() => {
@@ -20,14 +17,13 @@ describe("stream route auth", () => {
     await res.body?.cancel()
   })
 
-  it("allows customer stream for known session id", async () => {
-    const session = createOrResumeSession({
-      origin: "CUSTOMER",
-    })
+  it("allows staff stream access", async () => {
     const res = await GET(
-      new Request(
-        `http://localhost/api/stream?sessionId=${encodeURIComponent(session.id)}`
-      )
+      new Request("http://localhost/api/stream", {
+        headers: {
+          "x-staff-auth": "1111",
+        },
+      })
     )
     expect(res.status).toBe(200)
     expect(res.headers.get("content-type")).toBe("text/event-stream")

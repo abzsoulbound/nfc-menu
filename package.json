@@ -19,6 +19,7 @@
     "playwright:install": "playwright install chromium",
     "test:qa": "vitest run tests/qa",
     "qa:prod:env": "node scripts/production-env-preflight.mjs",
+    "qa:secrets": "node scripts/no-live-secrets-in-repo.mjs",
     "qa:prod:schema:compat": "node scripts/prod-schema-compat.mjs",
     "qa:smoke:remote": "node scripts/remote-checkout-smoke.mjs",
     "qa:routes": "node scripts/qa-route-smoke.mjs",

@@ -9,6 +9,15 @@ const STAFF_PREFIXES = [
   "/admin",
 ]
 
+const CUSTOMER_PREFIXES = [
+  "/menu",
+  "/order",
+  "/pay",
+  "/guest-tools",
+  "/t/",
+  "/table/",
+]
+
 export function resolveUiMode(pathname: string): UiMode {
   if (STAFF_PREFIXES.some(prefix => pathname.startsWith(prefix))) {
     return "staff"
@@ -42,6 +51,14 @@ export function isOrderMenuPath(pathname: string) {
   }
 
   return false
+}
+
+export function isCustomerPath(pathname: string) {
+  const path = pathname.split("?")[0]
+  if (path === "/") return true
+  return CUSTOMER_PREFIXES.some(prefix =>
+    path.startsWith(prefix)
+  )
 }
 
 export function queueUrgencyFromMinutes(ageMinutes: number): QueueUrgency {

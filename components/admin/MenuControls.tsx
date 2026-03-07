@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react"
 import { Badge } from "@/components/ui/Badge"
 import { Button } from "@/components/ui/Button"
 import { Card } from "@/components/ui/Card"
+import { FormInput, FormSelect } from "@/components/ui/FormField"
 import { Modal } from "@/components/ui/Modal"
 import { fetchJson } from "@/lib/fetchJson"
 import { MenuSection, Station } from "@/lib/types"
@@ -209,7 +210,8 @@ export function MenuControls() {
           {menu.map(section => (
             <Card key={section.id} variant="accent" className="space-y-3">
               <div className="flex flex-wrap items-center gap-2">
-                <input
+                <FormInput
+                  label="Section name"
                   value={sectionDrafts[section.id] ?? section.name}
                   onChange={event =>
                     setSectionDrafts(prev => ({
@@ -217,7 +219,7 @@ export function MenuControls() {
                       [section.id]: event.target.value,
                     }))
                   }
-                  className="min-h-[42px] flex-1 rounded-[var(--radius-control)] border border-[var(--border)] bg-transparent px-3 py-2 text-sm"
+                  className="flex-1"
                 />
                 <Button
                   variant="secondary"
@@ -237,7 +239,8 @@ export function MenuControls() {
                   return (
                     <Card key={item.id} className="space-y-2">
                       <div className="grid gap-2 md:grid-cols-2">
-                        <input
+                        <FormInput
+                          label="Item name"
                           value={draft.name}
                           onChange={event =>
                             setItemDrafts(prev => ({
@@ -248,11 +251,11 @@ export function MenuControls() {
                               },
                             }))
                           }
-                          className="min-h-[40px] rounded-[var(--radius-control)] border border-[var(--border)] bg-transparent px-3 py-2 text-sm"
                           placeholder="Item name"
                         />
 
-                        <input
+                        <FormInput
+                          label="Description"
                           value={draft.description}
                           onChange={event =>
                             setItemDrafts(prev => ({
@@ -263,56 +266,54 @@ export function MenuControls() {
                               },
                             }))
                           }
-                          className="min-h-[40px] rounded-[var(--radius-control)] border border-[var(--border)] bg-transparent px-3 py-2 text-sm"
                           placeholder="Description"
                         />
                       </div>
 
                       <div className="grid gap-2 md:grid-cols-5">
-                        <label className="flex items-center gap-2 rounded-[var(--radius-control)] border border-[var(--border)] px-3 py-2 text-sm">
-                          <span>£</span>
-                          <input
-                            type="number"
-                            min={0}
-                            step="0.01"
-                            value={Number.isFinite(draft.basePrice) ? draft.basePrice : 0}
-                            onChange={event =>
-                              setItemDrafts(prev => ({
-                                ...prev,
-                                [item.id]: {
-                                  ...prev[item.id],
-                                  basePrice: Number(event.target.value),
-                                },
-                              }))
-                            }
-                            className="w-full bg-transparent outline-none"
-                          />
-                        </label>
+                        <FormInput
+                          label="Price (GBP)"
+                          type="number"
+                          min={0}
+                          step="0.01"
+                          value={
+                            Number.isFinite(draft.basePrice)
+                              ? draft.basePrice
+                              : 0
+                          }
+                          onChange={event =>
+                            setItemDrafts(prev => ({
+                              ...prev,
+                              [item.id]: {
+                                ...prev[item.id],
+                                basePrice: Number(event.target.value),
+                              },
+                            }))
+                          }
+                        />
 
-                        <label className="flex items-center gap-2 rounded-[var(--radius-control)] border border-[var(--border)] px-3 py-2 text-sm">
-                          <span>Stock</span>
-                          <input
-                            type="number"
-                            min={0}
-                            value={draft.stockCount ?? ""}
-                            onChange={event =>
-                              setItemDrafts(prev => ({
-                                ...prev,
-                                [item.id]: {
-                                  ...prev[item.id],
-                                  stockCount:
-                                    event.target.value === ""
-                                      ? null
-                                      : Number(event.target.value),
-                                },
-                              }))
-                            }
-                            className="w-full bg-transparent outline-none"
-                            placeholder="unlimited"
-                          />
-                        </label>
+                        <FormInput
+                          label="Stock"
+                          type="number"
+                          min={0}
+                          value={draft.stockCount ?? ""}
+                          onChange={event =>
+                            setItemDrafts(prev => ({
+                              ...prev,
+                              [item.id]: {
+                                ...prev[item.id],
+                                stockCount:
+                                  event.target.value === ""
+                                    ? null
+                                    : Number(event.target.value),
+                              },
+                            }))
+                          }
+                          placeholder="unlimited"
+                        />
 
-                        <select
+                        <FormSelect
+                          label="Station"
                           value={draft.station}
                           onChange={event =>
                             setItemDrafts(prev => ({
@@ -323,11 +324,10 @@ export function MenuControls() {
                               },
                             }))
                           }
-                          className="min-h-[40px] rounded-[var(--radius-control)] border border-[var(--border)] bg-transparent px-3 py-2 text-sm"
                         >
                           <option value="KITCHEN">KITCHEN</option>
                           <option value="BAR">BAR</option>
-                        </select>
+                        </FormSelect>
 
                         <Button
                           variant={draft.active ? "quiet" : "danger"}

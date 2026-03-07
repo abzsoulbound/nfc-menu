@@ -1,0 +1,68 @@
+name: Quality Gates
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      run_remote_smoke:
+        description: "Run remote checkout smoke"
+        required: true
+        default: "false"
+      smoke_base_url:
+        description: "Remote base URL for smoke run (https://...)"
+        required: false
+      smoke_tenant_slug:
+        description: "Tenant slug for smoke run"
+        required: false
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+      - run: npm run qa:secrets
+      - run: npm run qa:prod:env -- --env-file .env.ci.production --skip-db-check
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm run test
+
+  remote-smoke:
+    if: >
+      github.event_name == 'workflow_dispatch' &&
+      github.event.inputs.run_remote_smoke == 'true'
+    runs-on: ubuntu-latest
+    needs: quality
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+
+      - name: Run remote checkout smoke
+        env:
+          SMOKE_BASE_URL: ${{ github.event.inputs.smoke_base_url }}
+          SMOKE_TENANT_SLUG: ${{ github.event.inputs.smoke_tenant_slug }}
+          SMOKE_ADMIN_PASSCODE: ${{ secrets.SMOKE_ADMIN_PASSCODE }}
+        run: |
+          if [ -z "$SMOKE_BASE_URL" ] || [ -z "$SMOKE_TENANT_SLUG" ] || [ -z "$SMOKE_ADMIN_PASSCODE" ]; then
+            echo "Missing smoke input or secret. Provide smoke_base_url, smoke_tenant_slug, and SMOKE_ADMIN_PASSCODE."
+            exit 1
+          fi
+          npm run qa:smoke:remote -- \
+            --base-url "$SMOKE_BASE_URL" \
+            --tenant-slug "$SMOKE_TENANT_SLUG" \
+            --admin-passcode "$SMOKE_ADMIN_PASSCODE"

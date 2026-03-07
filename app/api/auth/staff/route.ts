@@ -43,9 +43,11 @@ function getAttemptMap() {
 }
 
 function readClientIp(req: Request) {
-  const forwardedFor = req.headers.get("x-forwarded-for")
-  if (forwardedFor) {
-    const firstIp = forwardedFor.split(",")[0]?.trim()
+  const trustedForwardedFor = req.headers.get(
+    "x-vercel-forwarded-for"
+  )
+  if (trustedForwardedFor) {
+    const firstIp = trustedForwardedFor.split(",")[0]?.trim()
     if (firstIp) return firstIp
   }
   const realIp = req.headers.get("x-real-ip")
@@ -53,9 +55,13 @@ function readClientIp(req: Request) {
   return "unknown"
 }
 
-function getAttemptKey(req: Request, restaurantSlug: string) {
-  const userAgent = req.headers.get("user-agent") ?? "unknown"
-  return `${restaurantSlug}|${readClientIp(req)}|${userAgent.slice(0, 120)}`
+function getAttemptKeys(req: Request, restaurantSlug: string) {
+  const keys = [`tenant:${restaurantSlug}`]
+  const clientIp = readClientIp(req)
+  if (clientIp !== "unknown") {
+    keys.push(`tenant-ip:${restaurantSlug}:${clientIp}`)
+  }
+  return keys
 }
 
 function getLockSecondsRemaining(record: AttemptRecord) {
@@ -85,6 +91,18 @@ function clearAttempts(key: string) {
   getAttemptMap().delete(key)
 }
 
+function getLockedAttempt(keys: string[]) {
+  const attempts = getAttemptMap()
+  const now = Date.now()
+  for (const key of keys) {
+    const record = attempts.get(key)
+    if (record && record.lockedUntil > now) {
+      return { key, record }
+    }
+  }
+  return null
+}
+
 function shouldUseSecureCookie(req: Request) {
   if (process.env.NODE_ENV !== "production") {
     return false
@@ -110,26 +128,22 @@ export async function POST(req: Request) {
     const restaurant = await requireRestaurantForSlug(requestedSlug)
     const restaurantSlug = restaurant.slug
     const enforceLockout = !restaurant.isDemo
-    const attemptKey = getAttemptKey(req, restaurantSlug)
-    const existingAttempt = enforceLockout
-      ? getAttemptMap().get(attemptKey)
+    const attemptKeys = getAttemptKeys(req, restaurantSlug)
+    const lockedAttempt = enforceLockout
+      ? getLockedAttempt(attemptKeys)
       : null
-    if (
-      enforceLockout &&
-      existingAttempt &&
-      existingAttempt.lockedUntil > Date.now()
-    ) {
+    if (enforceLockout && lockedAttempt) {
       logApi("WARN", "auth.staff.locked", {
         requestId,
         route: "/api/auth/staff",
         statusCode: 429,
       }, {
-        attemptKey,
-        failedCount: existingAttempt.failedCount,
+        attemptKey: lockedAttempt.key,
+        failedCount: lockedAttempt.record.failedCount,
       })
       return badRequest(
         `Too many failed attempts. Try again in ${getLockSecondsRemaining(
-          existingAttempt
+          lockedAttempt.record
         )}s`,
         429,
         {
@@ -180,20 +194,24 @@ export async function POST(req: Request) {
 
     if (!role) {
       if (enforceLockout) {
-        recordFailedAttempt(attemptKey)
+        for (const key of attemptKeys) {
+          recordFailedAttempt(key)
+        }
       }
-      const after = enforceLockout
-        ? getAttemptMap().get(attemptKey)
-        : null
+      const attempts = getAttemptMap()
+      const failedCounts = enforceLockout
+        ? attemptKeys.map(key => attempts.get(key)?.failedCount ?? 0)
+        : [0]
+      const failedCount = Math.max(...failedCounts)
       logApi("WARN", "auth.staff.failed", {
         requestId,
         restaurantSlug,
         route: "/api/auth/staff",
         statusCode: 401,
       }, {
-        attemptKey,
+        attemptKey: attemptKeys.join(","),
         username: username || null,
-        failedCount: after?.failedCount ?? 0,
+        failedCount,
       })
       return badRequest("Invalid passcode", 401, {
         headers: NO_STORE_HEADERS,
@@ -201,7 +219,9 @@ export async function POST(req: Request) {
     }
 
     if (enforceLockout) {
-      clearAttempts(attemptKey)
+      for (const key of attemptKeys) {
+        clearAttempts(key)
+      }
     }
 
     const staffSessionToken = issueStaffSessionToken(

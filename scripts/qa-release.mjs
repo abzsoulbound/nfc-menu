@@ -107,6 +107,7 @@ async function main() {
   }
 
   const releaseSteps = [
+    { script: "qa:secrets", env: baseEnv, required: true },
     { script: "prisma:generate", env: baseEnv, required: true },
     {
       script: "prisma:migrate:status",

@@ -14,6 +14,9 @@ function usage() {
       "",
       "Options:",
       "  --env-file  Load launch env values before building and route checks.",
+      "",
+      "Environment flags:",
+      "  QA_REQUIRE_READY=true  Fail if /api/ops/readiness is not 200.",
     ].join("\n")
   )
 }
@@ -360,6 +363,44 @@ async function main() {
     await waitUntilReady()
 
     const failures = []
+    const strictReadiness =
+      String(process.env.QA_REQUIRE_READY ?? "")
+        .trim()
+        .toLowerCase() === "true"
+
+    const readinessRes = await fetch(`${BASE_URL}/api/ops/readiness`, {
+      redirect: "manual",
+    })
+    const readinessText = await readinessRes.text()
+    let readinessJson = null
+    try {
+      readinessJson = readinessText ? JSON.parse(readinessText) : null
+    } catch {
+      readinessJson = null
+    }
+    const readinessOk = readinessRes.status === 200
+    if (!readinessOk) {
+      const detail = readinessJson?.checks ?? readinessText
+      const reason = strictReadiness
+        ? "Readiness endpoint must be 200 in strict mode"
+        : "Readiness endpoint is degraded (warning mode)"
+      const record = {
+        route: "/api/ops/readiness",
+        status: readinessRes.status,
+        location: null,
+        reason: `${reason}: ${JSON.stringify(detail).slice(0, 360)}`,
+      }
+      if (strictReadiness) {
+        failures.push(record)
+      } else {
+        console.warn(`[warn] ${record.reason}`)
+      }
+    }
+    console.log(
+      `[readiness] /api/ops/readiness -> ${readinessRes.status}${
+        strictReadiness ? " (strict)" : " (warning)"
+      }`
+    )
 
     for (const route of publicRoutes) {
       const result = await checkRoute(route)

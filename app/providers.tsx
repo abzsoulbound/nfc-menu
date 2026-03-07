@@ -14,7 +14,7 @@ import { fetchJson } from "@/lib/fetchJson"
 /*
 APPLICATION-WIDE PROVIDERS
 
-This file is mounted exactly once by app/layout.tsx.
+This file is mounted by route-group layouts for public/customer/staff segments.
 It establishes all client-side state containers and global UI services.
 
 Key invariant:

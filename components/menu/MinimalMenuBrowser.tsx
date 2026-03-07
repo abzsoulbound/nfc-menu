@@ -135,8 +135,8 @@ export function MinimalMenuBrowser({
   }
 
   return (
-    <div className="space-y-4">
-      <div className="rounded-2xl border border-[var(--border)] bg-[linear-gradient(152deg,rgba(255,251,242,0.96),rgba(246,234,212,0.92))] p-3">
+    <div className="space-y-8">
+      <div className="rounded-2xl border border-[var(--border-subtle)] bg-[linear-gradient(152deg,rgba(250,246,239,0.96),rgba(229,170,20,0.06))] p-5 md:p-6">
         {showProgressAnchors && (
           <div className="mb-3 flex flex-wrap gap-2">
             <span className="status-chip status-chip-neutral inline-flex">
@@ -152,15 +152,15 @@ export function MinimalMenuBrowser({
         )}
 
         {discoveryFlow === "SEARCH_FIRST" && (
-          <div className="mb-3 grid gap-2 md:grid-cols-[minmax(0,1fr)_auto] md:items-center">
-            <label className="space-y-1 text-xs uppercase tracking-[0.12em] text-muted">
+          <div className="mb-4 grid gap-3 md:grid-cols-[minmax(0,1fr)_auto] md:items-center">
+            <label className="space-y-1.5 text-xs uppercase tracking-[0.12em] text-muted">
               Search whole menu
               <input
                 type="text"
                 value={searchTerm}
                 onChange={event => setSearchTerm(event.target.value)}
                 placeholder="Try burger, vegan, spicy, lager..."
-                className="w-full rounded-[var(--radius-control)] border border-[var(--border)] bg-[rgba(255,255,255,0.72)] px-3 py-2 text-sm text-[var(--text-primary)]"
+                className="input-premium w-full rounded-[var(--radius-control)] border border-[var(--border)] bg-[rgba(255,255,255,0.72)] px-4 py-2.5 text-base text-[var(--text-primary)]"
               />
             </label>
             <div className="status-chip status-chip-neutral inline-flex">
@@ -169,7 +169,7 @@ export function MinimalMenuBrowser({
           </div>
         )}
 
-        <div className="flex gap-2 overflow-x-auto pb-2">
+        <div className="scroll-fade-x flex gap-2.5 overflow-x-auto pb-2">
           {menu.map(section => {
             const active = section.id === selectedSection.id
             return (
@@ -177,10 +177,10 @@ export function MinimalMenuBrowser({
                 key={section.id}
                 type="button"
                 onClick={() => setSelectedSectionId(section.id)}
-                className={`focus-ring shrink-0 whitespace-nowrap rounded-full border px-3 py-1.5 text-xs font-semibold transition-all duration-150 ${
+                className={`focus-ring shrink-0 whitespace-nowrap rounded-full border px-4 py-2 text-sm font-semibold transition-all duration-200 ${
                   active
                     ? "border-transparent bg-[var(--accent-action)] text-white shadow-[var(--shadow-soft)]"
-                    : "border-[var(--border)] bg-[rgba(255,255,255,0.58)] text-[var(--text-primary)]"
+                    : "border-[var(--border-subtle)] bg-[rgba(255,255,255,0.58)] text-[var(--text-primary)] hover:shadow-[var(--shadow-soft)]"
                 }`}
               >
                 {section.name}
@@ -190,15 +190,15 @@ export function MinimalMenuBrowser({
         </div>
 
         {discoveryFlow !== "SEARCH_FIRST" && (
-          <div className="grid gap-2 md:grid-cols-[minmax(0,1fr)_auto] md:items-center">
-            <label className="space-y-1 text-xs uppercase tracking-[0.12em] text-muted">
+          <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_auto] md:items-center">
+            <label className="space-y-1.5 text-xs uppercase tracking-[0.12em] text-muted">
               Search this section
               <input
                 type="text"
                 value={searchTerm}
                 onChange={event => setSearchTerm(event.target.value)}
                 placeholder="Search dishes, drinks, or allergens"
-                className="w-full rounded-[var(--radius-control)] border border-[var(--border)] bg-[rgba(255,255,255,0.72)] px-3 py-2 text-sm text-[var(--text-primary)]"
+                className="input-premium w-full rounded-[var(--radius-control)] border border-[var(--border)] bg-[rgba(255,255,255,0.72)] px-4 py-2.5 text-base text-[var(--text-primary)]"
               />
             </label>
             <div className="status-chip status-chip-neutral inline-flex">
@@ -224,9 +224,9 @@ export function MinimalMenuBrowser({
               showItemCount={showItemCount}
               imageUrl={result.imageUrl}
             >
-              {result.items.map(item => (
+              {result.items.map((item, idx) => (
+                <div key={item.id} className={`stagger-item stagger-${Math.min(idx + 1, 12)}`}>
                 <MenuItemCard
-                  key={item.id}
                   name={item.name}
                   description={item.description}
                   image={item.image}
@@ -238,6 +238,7 @@ export function MinimalMenuBrowser({
                   variant="menu"
                   readOnly
                 />
+                </div>
               ))}
             </MenuSection>
           ))}
@@ -258,9 +259,9 @@ export function MinimalMenuBrowser({
           </div>
         )}
 
-        {filteredItems.map(item => (
+        {filteredItems.map((item, idx) => (
+          <div key={item.id} className={`stagger-item stagger-${Math.min(idx + 1, 12)}`}>
           <MenuItemCard
-            key={item.id}
             name={item.name}
             description={item.description}
             image={item.image}
@@ -272,6 +273,7 @@ export function MinimalMenuBrowser({
             variant="menu"
             readOnly
           />
+          </div>
         ))}
       </MenuSection>
       )}

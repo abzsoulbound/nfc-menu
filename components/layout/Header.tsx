@@ -13,6 +13,7 @@ import {
 } from "@/lib/publicSite"
 import {
   contextLabelForPath,
+  isCustomerPath,
   isOrderMenuPath,
   resolveUiMode,
 } from "@/lib/ui"
@@ -60,6 +61,64 @@ function HeaderLogo({
     <div className={`flex ${sizeClass} items-center justify-center rounded-full border border-[var(--border)] bg-[var(--surface-accent)] text-sm font-semibold tracking-[0.08em]`}>
       {monogram}
     </div>
+  )
+}
+
+function resolveHeaderCartHref(pathname: string, scopeKey: string | null) {
+  const segments = pathname.split("/").filter(Boolean)
+  if (segments[0] === "order" && segments[1] === "review" && segments[2]) {
+    return `/order/review/${encodeURIComponent(segments[2])}`
+  }
+  if (segments[0] === "order" && segments[1] && segments[1] !== "review") {
+    return `/order/review/${encodeURIComponent(segments[1])}`
+  }
+  const scopeMatch = scopeKey?.match(/^customer:([^:]+):/)
+  if (scopeMatch?.[1]) {
+    return `/order/review/${encodeURIComponent(scopeMatch[1])}`
+  }
+  return "/order/takeaway"
+}
+
+function HeaderCartBadge() {
+  const path = usePathname()
+  const items = useCartStore(s => s.items)
+  const scopeKey = useCartStore(s => s.scopeKey)
+  const totalQuantity = useMemo(() => {
+    return items.reduce((sum, item) => sum + item.quantity, 0)
+  }, [items])
+
+  if (totalQuantity <= 0) {
+    return null
+  }
+
+  const href = resolveHeaderCartHref(path, scopeKey)
+
+  return (
+    <Link
+      href={href}
+      className="focus-ring relative inline-flex min-h-[40px] min-w-[40px] items-center justify-center rounded-[var(--radius-control)] border border-[var(--border)] bg-[var(--surface-elevated)] px-2 py-2 text-[var(--text-primary)] transition-opacity hover:opacity-90"
+      aria-label={`Open cart, ${totalQuantity} item${totalQuantity === 1 ? "" : "s"}`}
+      title="Open cart"
+    >
+      <svg
+        viewBox="0 0 24 24"
+        className="h-5 w-5"
+        fill="none"
+        xmlns="http://www.w3.org/2000/svg"
+        aria-hidden="true"
+      >
+        <path
+          d="M3 4h2l2.4 10.2a1 1 0 0 0 1 .8h8.8a1 1 0 0 0 1-.8L20 7H8"
+          stroke="currentColor"
+          strokeWidth="1.8"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      </svg>
+      <span className="absolute -right-2 -top-2 inline-flex min-h-[20px] min-w-[20px] items-center justify-center rounded-full bg-[var(--accent-action)] px-1 text-[10px] font-semibold text-white cart-bounce">
+        {totalQuantity}
+      </span>
+    </Link>
   )
 }
 
@@ -148,7 +207,7 @@ function HeaderOrderCartControl() {
         )}
       </span>
       {hasItems && (
-        <span className="absolute -right-2 -top-2 inline-flex min-h-[24px] min-w-[24px] items-center justify-center rounded-full bg-[var(--accent-action)] px-1 text-xs font-semibold text-white">
+        <span className="absolute -right-2 -top-2 inline-flex min-h-[24px] min-w-[24px] items-center justify-center rounded-full bg-[var(--accent-action)] px-1 text-xs font-semibold text-white cart-bounce">
           {totalQuantity}
         </span>
       )}
@@ -162,6 +221,11 @@ export function Header() {
   const uiMode = resolveUiMode(path)
   const context = contextLabelForPath(path)
   const showOrderMenuCart = !publicSite && isOrderMenuPath(path)
+  const showHeaderCartBadge =
+    !publicSite &&
+    isCustomerPath(path) &&
+    !path.startsWith("/order/") &&
+    !path.startsWith("/pay/")
   const desktopOps = path.startsWith("/manager") || path.startsWith("/admin")
   const restaurantName = useRestaurantStore(s => s.name)
   const restaurantLocation = useRestaurantStore(s => s.location)
@@ -181,7 +245,7 @@ export function Header() {
   const brandLogoUrl = publicSite ? undefined : restaurantLogoUrl
 
   const headerClass = publicSite
-    ? "sticky top-0 z-40 border-b border-[rgba(201,169,110,0.34)] bg-[linear-gradient(110deg,#050a14,#0d1a31_44%,#122647)] text-[#efe3cd] backdrop-blur"
+    ? "sticky top-0 z-40 border-b border-[rgba(229,170,20,0.34)] bg-[linear-gradient(110deg,#000a30,#001258_44%,#001a6e)] text-white backdrop-blur"
     : "sticky top-0 z-40 border-b border-[var(--border)] surface-primary backdrop-blur"
 
   return (
@@ -195,7 +259,7 @@ export function Header() {
           {publicSite ? (
             <div className="space-y-1">
               <SoulboundStudioLogo compact tone="light" />
-              <div className="max-w-[540px] text-xs text-[rgba(233,219,190,0.72)]">
+              <div className="max-w-[540px] text-xs text-[rgba(240,242,250,0.72)]">
                 {contextHint}
               </div>
             </div>
@@ -222,17 +286,19 @@ export function Header() {
 
         {showOrderMenuCart ? (
           <HeaderOrderCartControl />
+        ) : showHeaderCartBadge ? (
+          <HeaderCartBadge />
         ) : publicSite ? (
           <div className="flex items-center gap-2">
             <Link
               href="/pricing"
-              className="focus-ring inline-flex min-h-[36px] items-center rounded-[var(--radius-control)] border border-[rgba(201,169,110,0.44)] bg-[rgba(12,22,42,0.58)] px-3 text-xs font-semibold text-[#f2e8d3] transition-colors hover:bg-[rgba(26,41,72,0.72)]"
+              className="focus-ring inline-flex min-h-[36px] items-center rounded-[var(--radius-control)] border border-[rgba(229,170,20,0.44)] bg-[rgba(0,12,48,0.58)] px-3 text-xs font-semibold text-[#f0f2fa] transition-colors hover:bg-[rgba(0,18,88,0.72)]"
             >
               Pricing
             </Link>
             <Link
               href="/contact"
-              className="focus-ring inline-flex min-h-[36px] items-center rounded-[var(--radius-control)] border border-[rgba(201,169,110,0.66)] bg-[linear-gradient(135deg,#f0d898,#c9a96e)] px-3 text-xs font-semibold text-[#1b2135] transition-[filter,transform] hover:brightness-[1.05]"
+              className="focus-ring inline-flex min-h-[36px] items-center rounded-[var(--radius-control)] border border-[rgba(229,170,20,0.66)] bg-[linear-gradient(135deg,#f0c040,#e5aa14)] px-3 text-xs font-semibold text-[#001258] transition-[filter,transform] hover:brightness-[1.05]"
             >
               Contact
             </Link>

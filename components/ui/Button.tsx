@@ -23,7 +23,7 @@ export function Button({
   className?: string
 }) {
   const base =
-    "focus-ring inline-flex min-h-[44px] items-center justify-center rounded-[var(--radius-control)] border px-4 py-2 text-sm font-semibold transition-all duration-150"
+    "focus-ring btn-press inline-flex min-h-[44px] items-center justify-center rounded-[var(--radius-control)] border px-4 py-2.5 text-sm font-semibold transition-all duration-150"
 
   const variants: Record<ButtonVariant, string> = {
     primary:

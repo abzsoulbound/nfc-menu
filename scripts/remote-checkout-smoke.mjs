@@ -16,6 +16,8 @@ function usage() {
       "Environment variable fallbacks:",
       "  SMOKE_BASE_URL, SMOKE_TENANT_SLUG, SMOKE_ADMIN_PASSCODE,",
       "  SMOKE_TABLE_NUMBER, SMOKE_EMAIL",
+      "",
+      "The smoke run now requires /api/ops/readiness to return 200 before checkout.",
     ].join("\n")
   )
 }
@@ -150,6 +152,18 @@ async function main() {
 
   console.log(`[smoke] Base URL: ${baseUrl}`)
   console.log(`[smoke] Tenant: ${tenantSlug}`)
+
+  const readiness = await request(baseUrl, "/api/ops/readiness")
+  if (readiness.status !== 200) {
+    const detail =
+      readiness.json?.checks ??
+      readiness.json?.message ??
+      readiness.text ??
+      `HTTP ${readiness.status}`
+    throw new Error(
+      `Readiness check failed before smoke run: ${JSON.stringify(detail)}`
+    )
+  }
 
   const tenantSeed = await request(
     baseUrl,

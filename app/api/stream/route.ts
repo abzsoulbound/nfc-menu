@@ -3,7 +3,6 @@ import { badRequest } from "@/lib/http"
 import { requireRole } from "@/lib/auth"
 import { withRestaurantRequestContext } from "@/lib/restaurantRequest"
 import { hydrateRuntimeStateFromDb } from "@/lib/runtimePersistence"
-import { getSessionById } from "@/lib/runtimeStore"
 
 export const dynamic = "force-dynamic"
 
@@ -21,6 +20,9 @@ export async function GET(req: Request) {
     req,
     async ({ restaurantSlug, restaurant }) => {
       await hydrateRuntimeStateFromDb()
+      const hasStaffAccess = hasStaffStreamAccess(req)
+
+      // Demo tenants intentionally expose open streams for fast operator demos.
       if (restaurant.isDemo) {
         const stream = createRuntimeEventStream(restaurantSlug)
         return new Response(stream, {
@@ -31,17 +33,12 @@ export async function GET(req: Request) {
           },
         })
       }
-      const url = new URL(req.url)
-      const sessionId = url.searchParams.get("sessionId")?.trim() ?? ""
-      const hasStaffAccess = hasStaffStreamAccess(req)
 
       if (!hasStaffAccess) {
-        if (!sessionId || !getSessionById(sessionId)) {
-          return badRequest("Unauthorized: stream access denied", 401, {
-            code: "UNAUTHORIZED",
-            req,
-          })
-        }
+        return badRequest("Unauthorized: stream access denied", 401, {
+          code: "UNAUTHORIZED",
+          req,
+        })
       }
 
       const stream = createRuntimeEventStream(restaurantSlug)

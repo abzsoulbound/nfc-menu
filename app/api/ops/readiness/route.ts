@@ -2,15 +2,20 @@ import { ok } from "@/lib/http"
 import { prisma } from "@/lib/prisma"
 import { checkCoreTenantConsistency } from "@/lib/restaurants"
 import {
+  getDefaultRestaurantSlug,
+  getSalesDemoSlug,
+} from "@/lib/tenant"
+import {
   getPaymentMode,
   getRuntimeFeatureFlags,
   validateRequiredEnv,
 } from "@/lib/env"
+import { getRuntimePersistenceHealth } from "@/lib/runtimePersistence"
 
 export const dynamic = "force-dynamic"
 
 function publicError(
-  kind: "env" | "database" | "tenants",
+  kind: "env" | "database" | "tenants" | "runtimePersistence",
   message: string | null
 ) {
   if (!message) return null
@@ -22,6 +27,9 @@ function publicError(
   }
   if (kind === "database") {
     return "Database check failed"
+  }
+  if (kind === "runtimePersistence") {
+    return "Runtime persistence check failed"
   }
   return "Tenant consistency check failed"
 }
@@ -80,8 +88,25 @@ export async function GET(req: Request) {
     tenantsError = "Database is unavailable for tenant consistency checks"
   }
 
+  const persistenceChecks = [
+    getRuntimePersistenceHealth(getDefaultRestaurantSlug()),
+    getRuntimePersistenceHealth(getSalesDemoSlug()),
+  ]
+  const runtimePersistenceOk = persistenceChecks.every(
+    check => !check.durableRequired || check.canAttempt
+  )
+  const runtimePersistenceError = runtimePersistenceOk
+    ? null
+    : "Durable runtime is enabled, but at least one core tenant is unable to hydrate/persist state."
+  const runtimePersistenceDetails =
+    runtimePersistenceOk || process.env.NODE_ENV !== "production"
+      ? persistenceChecks
+      : null
+
   const status =
-    envOk && databaseOk && tenantsOk ? "ok" : "degraded"
+    envOk && databaseOk && tenantsOk && runtimePersistenceOk
+      ? "ok"
+      : "degraded"
 
   return ok(
     {
@@ -100,6 +125,14 @@ export async function GET(req: Request) {
           ok: tenantsOk,
           error: publicError("tenants", tenantsError),
           details: tenantsDetails,
+        },
+        runtimePersistence: {
+          ok: runtimePersistenceOk,
+          error: publicError(
+            "runtimePersistence",
+            runtimePersistenceError
+          ),
+          details: runtimePersistenceDetails,
         },
       },
       runtime: {

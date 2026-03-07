@@ -25,6 +25,7 @@ Set production secrets (never `changeme`):
 
 Before launch, run:
 ```bash
+npm run qa:secrets
 npm run qa:prod:env -- .env.neoncheck.production
 ```
 
@@ -41,8 +42,13 @@ You must:
 2. Configure webhook endpoints and signing secret.
 3. Set:
 - `PAYMENT_MODE=EXTERNAL`
-- `PAYMENT_PROVIDER=<provider_name>`
-- `PAYMENT_PROVIDER_SECRET=<live_secret>`
+- `PAYMENT_PROVIDER=STRIPE_CONNECT` (or your Stripe Connect alias)
+- `PAYMENT_PROVIDER_SECRET=<sk_live_... or rk_live_...>`
+- `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=<pk_live_...>`
+- `STRIPE_CONNECT_CLIENT_ID=<ca_...>`
+- `STRIPE_CONNECT_OAUTH_REDIRECT_URI=https://<YOUR_DOMAIN>/api/stripe/connect/callback`
+- `STRIPE_WEBHOOK_SECRET=<whsec_...>`
+- `STRIPE_PLATFORM_SUBSCRIPTION_PRICE_ID=<price_...>`
 4. Run real card test + refund test in production-like environment.
 
 ## 4) Domain, SSL, DNS, and Email/SMS
@@ -80,6 +86,7 @@ npm run qa:smoke:remote -- \
   --tenant-slug <YOUR_LIVE_TENANT_SLUG> \
   --admin-passcode <ADMIN_PASSCODE>
 ```
+The smoke now hard-fails if `/api/ops/readiness` is not `200` before checkout.
 
 ## 8) First Customer Onboarding (Fable demo preserved)
 1. Generate setup link:

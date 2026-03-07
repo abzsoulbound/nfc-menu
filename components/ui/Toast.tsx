@@ -20,7 +20,11 @@ export function ToastProvider({
     <ToastContext.Provider value={{ setMessage }}>
       {children}
       {message && (
-        <div className="fixed bottom-4 left-1/2 z-50 -translate-x-1/2 rounded-[var(--radius-control)] border border-[var(--border)] surface-elevated px-4 py-2 text-sm shadow-[var(--shadow-hard)]">
+        <div
+          role="alert"
+          aria-live="polite"
+          className="fixed bottom-4 left-1/2 z-50 -translate-x-1/2 rounded-[var(--radius-control)] border border-[var(--border)] surface-elevated px-4 py-2 text-sm shadow-[var(--shadow-hard)]"
+        >
           {message}
         </div>
       )}
@@ -34,7 +38,11 @@ export function Toast({
   children: ReactNode
 }) {
   return (
-    <div className="rounded-[var(--radius-control)] border border-[var(--border)] surface-elevated px-3 py-2 text-sm">
+    <div
+      role="alert"
+      aria-live="polite"
+      className="rounded-[var(--radius-control)] border border-[var(--border)] surface-elevated px-3 py-2 text-sm"
+    >
       {children}
     </div>
   )

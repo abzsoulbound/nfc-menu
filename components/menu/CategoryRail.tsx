@@ -76,10 +76,10 @@ export function CategoryRail({
 
   return (
     <nav
-      className={`overflow-hidden rounded-2xl border border-[var(--border)] surface-secondary p-3 backdrop-blur ${className}`}
+      className={`overflow-hidden rounded-2xl border border-[var(--border-subtle)] surface-secondary p-3 backdrop-blur ${className}`}
       aria-label="Menu sections"
     >
-      <div className="flex gap-2 overflow-x-auto pb-1">
+      <div className="scroll-fade-x flex gap-2.5 overflow-x-auto pb-1">
         {sections.map(section => {
           const active = section.id === activeId
 
@@ -88,10 +88,10 @@ export function CategoryRail({
               key={section.id}
               href={`#${section.id}`}
               onClick={() => setActiveId(section.id)}
-              className={`whitespace-nowrap rounded-full border px-3 py-1.5 text-xs font-semibold transition-all duration-150 ${
+              className={`whitespace-nowrap rounded-full border px-4 py-2 text-sm font-semibold transition-all duration-200 ${
                 active
-                  ? "border-transparent bg-[var(--accent-action)] text-white"
-                  : "border-[var(--border)] surface-accent text-[var(--text-primary)] hover:-translate-y-px"
+                  ? "border-transparent bg-[var(--accent-action)] text-white shadow-[var(--shadow-soft)]"
+                  : "border-[var(--border-subtle)] surface-accent text-[var(--text-primary)] hover:-translate-y-px hover:shadow-[var(--shadow-soft)]"
               }`}
             >
               {section.label}

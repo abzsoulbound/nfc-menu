@@ -17,7 +17,10 @@ export default function GlobalError({
   }, [error])
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-6">
+    <div
+      role="alert"
+      className="min-h-screen flex items-center justify-center p-6"
+    >
       <Card className="max-w-md w-full space-y-4">
         <div className="text-lg font-semibold">
           Something went wrong

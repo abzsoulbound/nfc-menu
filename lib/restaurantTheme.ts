@@ -98,6 +98,10 @@ export function buildThemeVars(input: {
     vars["--accent-action-strong"] = shift(theme.customerPrimary, -24)
     vars["--focus"] = theme.customerFocus
     vars["--border"] = mixHex(theme.customerPrimary, theme.customerSurface, 0.6)
+    vars["--border-subtle"] = `rgba(${parseHex(theme.customerPrimary).r}, ${parseHex(theme.customerPrimary).g}, ${parseHex(theme.customerPrimary).b}, 0.2)`
+    vars["--text-heading"] = theme.customerText
+    vars["--accent-metal"] = mixHex(theme.customerPrimary, "#E8D5A8", 0.5)
+    vars["--accent-metal-subtle"] = `rgba(${parseHex(theme.customerPrimary).r}, ${parseHex(theme.customerPrimary).g}, ${parseHex(theme.customerPrimary).b}, 0.18)`
   } else {
     vars["--accent-action"] = theme.staffPrimary
     vars["--accent-action-strong"] = shift(theme.staffPrimary, -18)

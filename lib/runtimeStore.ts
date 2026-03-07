@@ -222,7 +222,9 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
 }
 
 function escapeCsvCell(value: unknown) {
-  const text = String(value ?? "")
+  const baseText = String(value ?? "")
+  const text =
+    /^[\t ]*[=+\-@]/.test(baseText) ? `'${baseText}` : baseText
   if (text.includes(",") || text.includes('"') || text.includes("\n")) {
     return `"${text.replace(/"/g, '""')}"`
   }

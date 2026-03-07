@@ -4,6 +4,7 @@ import Link from "next/link"
 import { useState } from "react"
 import { Button } from "@/components/ui/Button"
 import { Card } from "@/components/ui/Card"
+import { FormInput } from "@/components/ui/FormField"
 import { Modal } from "@/components/ui/Modal"
 import { fetchJson } from "@/lib/fetchJson"
 
@@ -152,33 +153,24 @@ export function AdminSystemControls() {
         )}
 
         <div className="grid grid-cols-1 gap-2 md:grid-cols-3">
-          <label className="space-y-1 text-sm">
-            <span className="font-medium">Expires (hours)</span>
-            <input
-              className="w-full rounded-[var(--radius-control)] border border-[var(--border)] bg-transparent px-3 py-2 text-sm"
-              value={setupExpiresHours}
-              onChange={event => setSetupExpiresHours(event.target.value)}
-              placeholder="72"
-            />
-          </label>
-          <label className="space-y-1 text-sm">
-            <span className="font-medium">Preferred slug</span>
-            <input
-              className="w-full rounded-[var(--radius-control)] border border-[var(--border)] bg-transparent px-3 py-2 text-sm"
-              value={setupPreferredSlug}
-              onChange={event => setSetupPreferredSlug(event.target.value)}
-              placeholder="acme-bistro"
-            />
-          </label>
-          <label className="space-y-1 text-sm">
-            <span className="font-medium">Location</span>
-            <input
-              className="w-full rounded-[var(--radius-control)] border border-[var(--border)] bg-transparent px-3 py-2 text-sm"
-              value={setupLocation}
-              onChange={event => setSetupLocation(event.target.value)}
-              placeholder="Leicester"
-            />
-          </label>
+          <FormInput
+            label="Expires (hours)"
+            value={setupExpiresHours}
+            onChange={event => setSetupExpiresHours(event.target.value)}
+            placeholder="72"
+          />
+          <FormInput
+            label="Preferred slug"
+            value={setupPreferredSlug}
+            onChange={event => setSetupPreferredSlug(event.target.value)}
+            placeholder="acme-bistro"
+          />
+          <FormInput
+            label="Location"
+            value={setupLocation}
+            onChange={event => setSetupLocation(event.target.value)}
+            placeholder="Leicester"
+          />
         </div>
 
         <div className="flex flex-wrap gap-2">

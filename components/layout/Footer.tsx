@@ -35,7 +35,7 @@ export function Footer() {
         : "Editorial warm"
 
   const footerClass = publicSite
-    ? "border-t border-[rgba(201,169,110,0.32)] bg-[linear-gradient(110deg,#081325,#0d1d36_44%,#112849)] text-[rgba(236,226,205,0.82)]"
+    ? "border-t border-[rgba(229,170,20,0.32)] bg-[linear-gradient(110deg,#000a30,#001258_44%,#001a6e)] text-[rgba(240,242,250,0.82)]"
     : "border-t border-[var(--border)] surface-primary"
   const supportEmail = PUBLIC_SITE_SUPPORT_EMAIL.trim()
   const supportPhone = PUBLIC_SITE_SUPPORT_PHONE.trim()
@@ -49,11 +49,11 @@ export function Footer() {
 
   return (
     <footer className={footerClass}>
-      <div className={`mx-auto grid w-full max-w-[var(--shell-max-width)] gap-3 px-4 py-4 text-xs md:grid-cols-[1fr_auto_1fr] md:items-center md:px-6 ${publicSite ? "text-[rgba(236,226,205,0.78)]" : "text-muted"}`}>
+      <div className={`mx-auto grid w-full max-w-[var(--shell-max-width)] gap-3 px-4 py-4 text-xs md:grid-cols-[1fr_auto_1fr] md:items-center md:px-6 ${publicSite ? "text-[rgba(240,242,250,0.78)]" : "text-muted"}`}>
         <div className="space-y-1">
           <Link
             href="/"
-            className={`focus-ring inline-flex rounded-[var(--radius-control)] font-semibold ${publicSite ? "text-[#f4e6cb]" : "text-[var(--text-primary)]"}`}
+            className={`focus-ring inline-flex rounded-[var(--radius-control)] font-semibold ${publicSite ? "text-white" : "text-[var(--text-primary)]"}`}
           >
             {footerLabel}
           </Link>
@@ -69,7 +69,7 @@ export function Footer() {
             <Link
               key={link.href}
               href={link.href}
-              className={`focus-ring font-medium underline decoration-transparent underline-offset-4 transition-colors ${publicSite ? "hover:text-[#f4dfb3] hover:decoration-[#c9a96e]" : "hover:decoration-current"}`}
+              className={`focus-ring font-medium underline decoration-transparent underline-offset-4 transition-colors ${publicSite ? "hover:text-[#e5aa14] hover:decoration-[#e5aa14]" : "hover:decoration-current"}`}
             >
               {link.label}
             </Link>
@@ -81,7 +81,7 @@ export function Footer() {
             {supportEmailHref ? (
               <a
                 href={supportEmailHref}
-                className={`focus-ring underline decoration-transparent underline-offset-4 transition-colors ${publicSite ? "hover:text-[#f4dfb3] hover:decoration-[#c9a96e]" : "hover:decoration-current"}`}
+                className={`focus-ring underline decoration-transparent underline-offset-4 transition-colors ${publicSite ? "hover:text-[#e5aa14] hover:decoration-[#e5aa14]" : "hover:decoration-current"}`}
               >
                 {supportEmail}
               </a>
@@ -93,7 +93,7 @@ export function Footer() {
             {supportPhoneHref ? (
               <a
                 href={supportPhoneHref}
-                className={`focus-ring underline decoration-transparent underline-offset-4 transition-colors ${publicSite ? "hover:text-[#f4dfb3] hover:decoration-[#c9a96e]" : "hover:decoration-current"}`}
+                className={`focus-ring underline decoration-transparent underline-offset-4 transition-colors ${publicSite ? "hover:text-[#e5aa14] hover:decoration-[#e5aa14]" : "hover:decoration-current"}`}
               >
                 {supportPhone}
               </a>

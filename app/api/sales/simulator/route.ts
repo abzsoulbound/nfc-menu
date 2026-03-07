@@ -26,9 +26,11 @@ import {
 } from "@/lib/runtimePersistence"
 import { publishRuntimeEvent } from "@/lib/realtime"
 import { withRestaurantRequestContext } from "@/lib/restaurantRequest"
-import { isSalesDemoSlug } from "@/lib/tenant"
 
 export const dynamic = "force-dynamic"
+
+const SALES_SIMULATOR_DEMO_ONLY_ERROR =
+  "Sales simulator is available only on demo tenants."
 
 type SalesSimulatorAction =
   | "START"
@@ -116,10 +118,8 @@ async function persistAndBroadcast() {
 }
 
 function ensureDemoTenant(input: { isDemo: boolean; slug: string }) {
-  if (!input.isDemo || !isSalesDemoSlug(input.slug)) {
-    throw new Error(
-      "Sales simulator is available only on the dedicated sales demo tenant."
-    )
+  if (!input.isDemo) {
+    throw new Error(SALES_SIMULATOR_DEMO_ONLY_ERROR)
   }
 }
 
@@ -195,8 +195,7 @@ export async function GET(req: Request) {
     } catch (error) {
       const message = (error as Error).message
       const status =
-        message ===
-        "Sales simulator is available only on the dedicated sales demo tenant."
+        message === SALES_SIMULATOR_DEMO_ONLY_ERROR
           ? 403
           : 400
       return badRequest(message, status)
@@ -321,8 +320,7 @@ export async function POST(req: Request) {
     } catch (error) {
       const message = (error as Error).message
       const status =
-        message ===
-        "Sales simulator is available only on the dedicated sales demo tenant."
+        message === SALES_SIMULATOR_DEMO_ONLY_ERROR
           ? 403
           : 400
       return badRequest(message, status)

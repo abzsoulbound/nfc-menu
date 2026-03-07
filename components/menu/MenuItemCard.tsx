@@ -72,7 +72,7 @@ export function MenuItemCard({
     : "status-chip status-chip-success"
 
   const variantCardClass: Record<"menu" | "order" | "staff", string> = {
-    menu: "surface-elevated shadow-[var(--shadow-soft)]",
+    menu: "surface-elevated shadow-[var(--shadow-elevated)] card-gradient",
     order: "surface-secondary",
     staff: "surface-secondary",
   }
@@ -114,12 +114,12 @@ export function MenuItemCard({
 
   return (
     <Card className={variantCardClass[variant]}>
-      <div className="space-y-2">
-        <div className="flex flex-col gap-3 sm:flex-row sm:justify-between">
-          <div className="flex gap-3">
+      <div className="space-y-4">
+        <div className="flex flex-col gap-4 sm:flex-row sm:justify-between">
+          <div className="flex gap-4">
             <div
               aria-label={`${name} image`}
-              className="relative mt-0.5 h-14 w-14 overflow-hidden rounded-lg border border-[var(--border)] bg-cover bg-center"
+              className="relative mt-0.5 h-16 w-16 overflow-hidden rounded-xl border border-[var(--border-subtle)] bg-cover bg-center shadow-[0_1px_4px_rgba(66,44,20,0.1)]"
               style={{ backgroundImage }}
             >
               {showAiBadge && (
@@ -129,28 +129,28 @@ export function MenuItemCard({
               )}
             </div>
 
-            <div className="space-y-1">
+            <div className="space-y-1.5">
               <div className="flex flex-wrap items-center gap-2">
-                <div className="text-base font-semibold text-[var(--text-primary)]">
+                <div className="item-name-font text-xl text-[var(--text-heading)]">
                   {name}
                 </div>
 
                 {showStationBadge && station && (
-                  <span className={`${stationTone} text-[10px] uppercase tracking-[0.2em]`}>
+                  <span className={`${stationTone} text-[11px] uppercase tracking-[0.2em]`}>
                     {station}
                   </span>
                 )}
               </div>
 
-              <div className="text-sm leading-relaxed text-secondary">
+              <div className="text-base leading-relaxed text-secondary">
                 {description}
               </div>
             </div>
           </div>
 
           <div className="flex gap-2 sm:flex-col sm:items-end">
-            <div className={`h-fit rounded-xl border border-[var(--border)] px-3 py-1.5 text-right ${variantPriceClass[variant]}`}>
-              <div className="text-sm font-semibold text-[var(--text-primary)]">
+            <div className={`h-fit rounded-xl border border-[var(--border-subtle)] px-3 py-1.5 text-right ${variantPriceClass[variant]}`}>
+              <div className="text-base font-semibold accent-metal">
                 £{price.toFixed(2)}
               </div>
               {showVatDetails && (
@@ -174,8 +174,8 @@ export function MenuItemCard({
         />
 
         {showOptionLines && (
-          <div className="rounded-lg border border-[var(--border)] surface-accent px-3 py-2">
-            <div className="text-[10px] uppercase tracking-[0.2em] text-muted">
+          <div className="rounded-lg border border-[var(--border-subtle)] surface-accent px-3 py-2">
+            <div className="text-[11px] uppercase tracking-[0.18em] text-muted">
               Options
             </div>
             <div className="mt-1 space-y-0.5 text-xs text-secondary">
