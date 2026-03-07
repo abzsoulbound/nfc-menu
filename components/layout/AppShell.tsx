@@ -26,9 +26,13 @@ export function AppShell({ children }: { children: ReactNode }) {
     [theme, uiMode]
   )
 
+  const shellBg = isPublicSite
+    ? "bg-[#000a2e]"
+    : "bg-[var(--bg-primary)]"
+
   return (
     <div
-      className={`app-shell min-h-screen flex flex-col bg-[var(--bg-primary)] text-[var(--text-primary)] ui-${uiMode}`}
+      className={`app-shell min-h-screen flex flex-col ${shellBg} text-[var(--text-primary)] ui-${uiMode}`}
       style={dynamicThemeVars}
     >
       <Header />
