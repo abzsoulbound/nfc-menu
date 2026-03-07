@@ -278,11 +278,8 @@ export function CompanyPage() {
           className="company-reveal company-delay-2 scroll-mt-6 space-y-4"
         >
           <div className="rounded-[24px] border border-[rgba(229,170,20,0.32)] bg-[linear-gradient(158deg,rgba(0,8,36,0.97),rgba(0,18,88,0.94))] p-5 md:p-6">
-            <div className="text-xs font-semibold uppercase tracking-[0.2em] text-[#e5aa14]">
+            <h2 className="text-xs font-semibold uppercase tracking-[0.2em] text-[#e5aa14]">
               Projects
-            </div>
-            <h2 className="mt-2 font-[family:var(--font-display)] text-4xl leading-tight text-white">
-              Things we&apos;ve built and shipped.
             </h2>
           </div>
 
