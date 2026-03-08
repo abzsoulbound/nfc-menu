@@ -19,7 +19,6 @@ function SoulboundStudioGlyph({
 }) {
   const rawId = useId()
   const token = rawId.replace(/[^a-zA-Z0-9_-]/g, "")
-  const gradientId = `sb-gold-${token}`
   const glowId = `sb-glow-${token}`
 
   return (
@@ -31,11 +30,6 @@ function SoulboundStudioGlyph({
       aria-hidden="true"
     >
       <defs>
-        <linearGradient id={gradientId} x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" stopColor="#f0d898" />
-          <stop offset="55%" stopColor="#e5aa14" />
-          <stop offset="100%" stopColor="#9a7030" />
-        </linearGradient>
         <filter id={glowId} x="-40%" y="-40%" width="180%" height="180%">
           <feGaussianBlur stdDeviation="2.5" result="b" />
           <feMerge>
@@ -51,8 +45,8 @@ function SoulboundStudioGlyph({
         width="68"
         height="68"
         rx="4"
-        fill="#0c1020"
-        stroke={`url(#${gradientId})`}
+        fill="#001258"
+        stroke="#d9ae3f"
         strokeWidth="2.2"
         transform="rotate(45 48 48)"
       />
@@ -63,7 +57,7 @@ function SoulboundStudioGlyph({
         height="52"
         rx="2"
         fill="none"
-        stroke={`url(#${gradientId})`}
+        stroke="#d9ae3f"
         strokeWidth="0.7"
         opacity="0.2"
         transform="rotate(45 48 48)"
@@ -71,7 +65,7 @@ function SoulboundStudioGlyph({
       <polyline
         points="26,58 48,30 70,58"
         fill="none"
-        stroke={`url(#${gradientId})`}
+        stroke="#d9ae3f"
         strokeWidth="4"
         strokeLinecap="square"
         strokeLinejoin="miter"
@@ -79,13 +73,13 @@ function SoulboundStudioGlyph({
       <polyline
         points="32,68 48,50 64,68"
         fill="none"
-        stroke={`url(#${gradientId})`}
+        stroke="#d9ae3f"
         strokeWidth="2"
         strokeLinecap="square"
         strokeLinejoin="miter"
         opacity="0.45"
       />
-      <circle cx="48" cy="30" r="3.2" fill="#e5aa14" filter={`url(#${glowId})`} />
+      <circle cx="48" cy="30" r="3.2" fill="#d9ae3f" filter={`url(#${glowId})`} />
     </svg>
   )
 }
@@ -96,7 +90,7 @@ export function SoulboundStudioLogo({
   tone = "default",
 }: SoulboundStudioLogoProps) {
   const nameToneClass = tone === "light"
-    ? "text-[#e7ddcc]"
+    ? "text-white"
     : "text-[var(--text-primary)]"
 
   if (compact) {

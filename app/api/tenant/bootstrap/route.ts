@@ -20,6 +20,7 @@ export async function GET(req: Request) {
     return ok(
       {
         restaurant,
+        resolvedFeatures: restaurant.resolvedFeatures,
         links: buildRestaurantScopedLinks(restaurant.slug),
         features: getRuntimeFeatureFlags(),
         payment: {

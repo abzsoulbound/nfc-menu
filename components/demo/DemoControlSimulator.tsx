@@ -263,18 +263,18 @@ export function DemoControlSimulator({
     <section className="space-y-5">
       {/* Section header */}
       <div className="flex items-center gap-3">
-        <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[rgba(229,170,20,0.7)]">
+        <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-white/80">
           {sectionLabel}
         </span>
-        <span className="h-px flex-1 bg-[rgba(229,170,20,0.2)]" />
+        <span className="h-px flex-1 bg-[rgba(217,174,63,0.2)]" />
         {snapshot?.status.enabled && (
           <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[11px] font-semibold tracking-wide ${
             snapshot.status.autoMode
-              ? "bg-[rgba(109,200,130,0.15)] text-[#6dc882]"
-              : "bg-[rgba(229,170,20,0.15)] text-[#e5aa14]"
+              ? "bg-[rgba(0,18,88,0.72)] text-white"
+              : "bg-[rgba(217,174,63,0.35)] text-black"
           }`}>
             <span className={`inline-block h-1.5 w-1.5 rounded-full ${
-              snapshot.status.autoMode ? "bg-[#6dc882] animate-pulse" : "bg-[#e5aa14]"
+              snapshot.status.autoMode ? "bg-white animate-pulse" : "bg-black"
             }`} />
             {snapshot.status.autoMode ? "Auto-running" : "Running"}
           </span>
@@ -295,13 +295,13 @@ export function DemoControlSimulator({
         ].map(stat => (
           <div
             key={stat.label}
-            className="rounded-[16px] border border-[rgba(232,220,198,0.18)] bg-[rgba(6,12,24,0.55)] px-3 py-3 text-center transition-colors duration-200 hover:border-[rgba(229,170,20,0.35)]"
+            className="rounded-[16px] border border-[rgba(232,220,198,0.18)] bg-[rgba(6,12,24,0.55)] px-3 py-3 text-center transition-colors duration-200 hover:border-[rgba(217,174,63,0.35)]"
           >
-            <div className="text-[10px] font-medium uppercase tracking-[0.16em] text-[rgba(229,170,20,0.55)]">
+            <div className="text-[10px] font-medium uppercase tracking-[0.16em] text-white/75">
               {stat.label}
             </div>
             <div className={`mono-font mt-1 text-lg font-semibold tabular-nums ${
-              stat.accent ? "text-[#e5aa14]" : "text-white"
+              "text-white"
             }`}>
               {stat.value}
             </div>
@@ -311,7 +311,7 @@ export function DemoControlSimulator({
 
       {/* ── Scenario presets ── */}
       <div className="space-y-2">
-        <div className="text-[10px] font-medium uppercase tracking-[0.16em] text-[rgba(229,170,20,0.55)]">
+        <div className="text-[10px] font-medium uppercase tracking-[0.16em] text-white/75">
           Scenario Presets
         </div>
         <div className="grid grid-cols-3 gap-2.5">
@@ -319,35 +319,35 @@ export function DemoControlSimulator({
             type="button"
             disabled={busy || loading}
             onClick={() => presetFirst().catch(() => {})}
-            className="focus-ring group flex flex-col items-center gap-0.5 rounded-[16px] border border-[rgba(232,220,198,0.18)] bg-[rgba(6,12,24,0.55)] px-4 py-3 transition-all duration-200 hover:border-[rgba(229,170,20,0.44)] hover:bg-[rgba(6,12,24,0.7)] disabled:cursor-not-allowed disabled:opacity-50"
+            className="focus-ring action-surface action-card action-card-center group gap-0.5 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            <span className="text-sm font-semibold text-white">First Orders</span>
-            <span className="text-[10px] text-[rgba(229,170,20,0.55)]">Open + 1 tick</span>
+            <span className="text-sm font-semibold">First Orders</span>
+            <span className="action-subtle-text text-[10px]">Open + 1 tick</span>
           </button>
           <button
             type="button"
             disabled={busy || loading}
             onClick={() => presetRush().catch(() => {})}
-            className="focus-ring group flex flex-col items-center gap-0.5 rounded-[16px] border border-[rgba(232,220,198,0.18)] bg-[rgba(6,12,24,0.55)] px-4 py-3 transition-all duration-200 hover:border-[rgba(229,170,20,0.44)] hover:bg-[rgba(6,12,24,0.7)] disabled:cursor-not-allowed disabled:opacity-50"
+            className="focus-ring action-surface action-card action-card-center group gap-0.5 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            <span className="text-sm font-semibold text-white">Rush Hour</span>
-            <span className="text-[10px] text-[rgba(229,170,20,0.55)]">11am burst</span>
+            <span className="text-sm font-semibold">Rush Hour</span>
+            <span className="action-subtle-text text-[10px]">11am burst</span>
           </button>
           <button
             type="button"
             disabled={busy || loading}
             onClick={() => presetFull().catch(() => {})}
-            className="focus-ring group flex flex-col items-center gap-0.5 rounded-[16px] border border-[rgba(232,220,198,0.18)] bg-[rgba(6,12,24,0.55)] px-4 py-3 transition-all duration-200 hover:border-[rgba(229,170,20,0.44)] hover:bg-[rgba(6,12,24,0.7)] disabled:cursor-not-allowed disabled:opacity-50"
+            className="focus-ring action-surface action-card action-card-center group gap-0.5 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            <span className="text-sm font-semibold text-white">Full Day</span>
-            <span className="text-[10px] text-[rgba(229,170,20,0.55)]">Auto entire day</span>
+            <span className="text-sm font-semibold">Full Day</span>
+            <span className="action-subtle-text text-[10px]">Auto entire day</span>
           </button>
         </div>
       </div>
 
       {/* ── Playback controls ── */}
       <div className="space-y-2">
-        <div className="text-[10px] font-medium uppercase tracking-[0.16em] text-[rgba(229,170,20,0.55)]">
+        <div className="text-[10px] font-medium uppercase tracking-[0.16em] text-white/75">
           Playback
         </div>
         <div className="grid grid-cols-2 gap-2.5 md:grid-cols-5">
@@ -400,7 +400,7 @@ export function DemoControlSimulator({
       {/* ── Time jump & reset ── */}
       <div className="flex flex-wrap gap-2.5">
         <div className="space-y-2">
-          <div className="text-[10px] font-medium uppercase tracking-[0.16em] text-[rgba(229,170,20,0.55)]">
+          <div className="text-[10px] font-medium uppercase tracking-[0.16em] text-white/75">
             Jump to
           </div>
           <div className="flex flex-wrap gap-2">
@@ -418,7 +418,7 @@ export function DemoControlSimulator({
                     simulatedMinuteOfDay: t.min,
                   }).catch(() => {})
                 }
-                className="focus-ring mono-font rounded-lg border border-[rgba(232,220,198,0.18)] bg-[rgba(6,12,24,0.45)] px-3 py-1.5 text-xs font-medium tabular-nums text-[rgba(229,170,20,0.8)] transition-all duration-150 hover:border-[rgba(229,170,20,0.38)] hover:text-[#e5aa14] disabled:cursor-not-allowed disabled:opacity-50"
+                className="focus-ring action-surface action-button action-button-sm mono-font rounded-lg tabular-nums disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {t.label}
               </button>
@@ -427,7 +427,7 @@ export function DemoControlSimulator({
         </div>
 
         <div className="space-y-2">
-          <div className="text-[10px] font-medium uppercase tracking-[0.16em] text-[rgba(229,170,20,0.55)]">
+          <div className="text-[10px] font-medium uppercase tracking-[0.16em] text-white/75">
             Reset
           </div>
           <div className="flex flex-wrap gap-2">
@@ -435,7 +435,7 @@ export function DemoControlSimulator({
               type="button"
               disabled={busy || loading}
               onClick={() => runAction("RESET_DAY").catch(() => {})}
-              className="focus-ring rounded-lg border border-[rgba(220,120,120,0.22)] bg-[rgba(40,16,16,0.4)] px-3 py-1.5 text-xs font-medium text-[rgba(240,160,160,0.8)] transition-all duration-150 hover:border-[rgba(220,120,120,0.44)] hover:text-[#f0a0a0] disabled:cursor-not-allowed disabled:opacity-50"
+              className="focus-ring action-surface action-button action-button-sm rounded-lg disabled:cursor-not-allowed disabled:opacity-50"
             >
               Reset Day
             </button>
@@ -443,7 +443,7 @@ export function DemoControlSimulator({
               type="button"
               disabled={busy || loading}
               onClick={() => runAction("RESET").catch(() => {})}
-              className="focus-ring rounded-lg border border-[rgba(220,120,120,0.22)] bg-[rgba(40,16,16,0.4)] px-3 py-1.5 text-xs font-medium text-[rgba(240,160,160,0.8)] transition-all duration-150 hover:border-[rgba(220,120,120,0.44)] hover:text-[#f0a0a0] disabled:cursor-not-allowed disabled:opacity-50"
+              className="focus-ring action-surface action-button action-button-sm rounded-lg disabled:cursor-not-allowed disabled:opacity-50"
             >
               Reset All
             </button>

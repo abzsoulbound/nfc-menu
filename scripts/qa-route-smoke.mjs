@@ -109,7 +109,7 @@ function resolveEnvValue(key) {
 
 const PORT = Number(process.env.QA_ROUTE_PORT || 4317)
 const BASE_URL = `http://127.0.0.1:${PORT}`
-const NEXT_DIST_DIR = process.env.NEXT_DIST_DIR || ".next-build"
+const NEXT_DIST_DIR = process.env.NEXT_DIST_DIR || ".next"
 const NEXT_BIN = path.join(
   ROOT,
   "node_modules",

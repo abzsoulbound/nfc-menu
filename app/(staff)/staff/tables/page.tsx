@@ -324,27 +324,27 @@ export default function StaffTablesPage() {
     <div className="relative px-4 py-5 md:px-6 md:py-6">
       <div
         aria-hidden="true"
-        className="pointer-events-none absolute -left-12 top-16 h-44 w-44 rounded-full bg-[radial-gradient(circle,rgba(96,138,214,0.22),rgba(96,138,214,0))] blur-3xl"
+        className="pointer-events-none absolute -left-12 top-16 h-44 w-44 rounded-full bg-[radial-gradient(circle,rgba(0,18,88,0.22),rgba(0,18,88,0))] blur-3xl"
       />
       <div
         aria-hidden="true"
-        className="pointer-events-none absolute -right-10 top-52 h-48 w-48 rounded-full bg-[radial-gradient(circle,rgba(103,162,236,0.2),rgba(103,162,236,0))] blur-3xl"
+        className="pointer-events-none absolute -right-10 top-52 h-48 w-48 rounded-full bg-[radial-gradient(circle,rgba(0,18,88,0.2),rgba(0,18,88,0))] blur-3xl"
       />
 
       <div className="mx-auto max-w-[1440px] space-y-4">
         <Card
           variant="elevated"
-          className="border-[rgba(111,147,213,0.4)] bg-[linear-gradient(132deg,rgba(15,28,50,0.96),rgba(21,39,66,0.94),rgba(29,52,85,0.92))]"
+          className="border-[rgba(0,18,88,0.4)] bg-[linear-gradient(132deg,rgba(15,28,50,0.96),rgba(21,39,66,0.94),rgba(29,52,85,0.92))]"
         >
           <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
             <div className="space-y-2">
-              <div className="text-[10px] uppercase tracking-[0.18em] text-[rgba(184,205,244,0.82)]">
+              <div className="text-[10px] uppercase tracking-[0.18em] text-[rgba(255,255,255,0.82)]">
                 Table Operations
               </div>
-              <h1 className="text-3xl font-semibold tracking-tight text-[#eef4ff] md:text-4xl">
+              <h1 className="text-3xl font-semibold tracking-tight text-white md:text-4xl">
                 Live floor control
               </h1>
-              <p className="max-w-3xl text-sm leading-6 text-[rgba(197,214,244,0.86)]">
+              <p className="max-w-3xl text-sm leading-6 text-[rgba(255,255,255,0.86)]">
                 Manage table state, joins, billing, and line controls from a
                 single waiter command workspace.
               </p>
@@ -387,7 +387,7 @@ export default function StaffTablesPage() {
         )}
 
         <div className="grid gap-4 lg:grid-cols-[1fr_1.25fr]">
-          <Card className="space-y-3 border-[rgba(114,153,225,0.34)]">
+          <Card className="space-y-3 border-[rgba(0,18,88,0.34)]">
             <div className="space-y-2">
               <h2 className="text-lg font-semibold tracking-tight">
                 Tables
@@ -406,10 +406,10 @@ export default function StaffTablesPage() {
                   key={table.id}
                   type="button"
                   onClick={() => setActiveTableId(table.id)}
-                  className={`focus-ring w-full rounded-[var(--radius-control)] border border-[var(--border)] p-3 text-left transition-all ${
+                  className={`focus-ring action-surface action-card action-card-left w-full transition-all ${
                     activeTable?.id === table.id
-                      ? "surface-accent"
-                      : "surface-secondary"
+                      ? ""
+                      : "action-surface-muted"
                   }`}
                 >
                   <div className="flex items-center justify-between gap-2">
@@ -452,7 +452,7 @@ export default function StaffTablesPage() {
             </div>
           </Card>
 
-          <Card className="space-y-4 border-[rgba(114,153,225,0.34)]">
+          <Card className="space-y-4 border-[rgba(0,18,88,0.34)]">
             {!activeTable ? (
               <div className="py-10 text-center text-sm text-secondary">
                 No tables available.

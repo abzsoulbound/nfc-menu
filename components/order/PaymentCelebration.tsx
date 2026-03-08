@@ -2,6 +2,7 @@
 
 import { useEffect, useRef } from "react"
 import { haptic } from "@/lib/haptics"
+import { useFeature } from "@/store/useFeatureStore"
 
 export function PaymentCelebration({
   receiptId,
@@ -19,6 +20,7 @@ export function PaymentCelebration({
   onDismiss?: () => void
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
+  const tippingEnabled = useFeature("tipping")
 
   useEffect(() => {
     haptic("success")
@@ -46,7 +48,7 @@ export function PaymentCelebration({
       decay: number
     }[] = []
 
-    const colors = ["#e5aa14", "#f0c040", "#001258", "#f0d060", "#faf6ef", "#002080"]
+    const colors = ["#d9ae3f", "#f2d27a", "#001258", "#f0d060", "#faf6ef", "#002080"]
     const w = canvas.offsetWidth
     const h = canvas.offsetHeight
 
@@ -103,7 +105,7 @@ export function PaymentCelebration({
   }
 
   return (
-    <div className="celebrate-in warm-wash relative overflow-hidden rounded-[var(--radius-card)] border border-[var(--accent-metal)] bg-[linear-gradient(165deg,rgba(250,246,239,0.98),rgba(229,170,20,0.12))] px-6 py-10 text-center shadow-[var(--shadow-elevated)] md:px-10 md:py-14">
+    <div className="celebrate-in warm-wash relative overflow-hidden rounded-[var(--radius-card)] border border-[var(--accent-metal)] bg-[linear-gradient(165deg,rgba(250,246,239,0.98),rgba(217,174,63,0.12))] px-6 py-10 text-center shadow-[var(--shadow-elevated)] md:px-10 md:py-14">
       <canvas
         ref={canvasRef}
         className="pointer-events-none absolute inset-0 h-full w-full"
@@ -112,7 +114,7 @@ export function PaymentCelebration({
 
       <div className="relative space-y-7">
         {/* Gold checkmark */}
-        <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-[var(--accent-metal)] shadow-[0_0_40px_rgba(229,170,20,0.4)]">
+        <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-[var(--accent-metal)] shadow-[0_0_40px_rgba(217,174,63,0.4)]">
           <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
             <polyline points="20 6 9 17 4 12" />
           </svg>
@@ -133,10 +135,12 @@ export function PaymentCelebration({
             <span className="text-secondary">Amount charged</span>
             <span className="font-semibold tabular-nums">{money(totalCharged)}</span>
           </div>
-          <div className="flex justify-between text-base">
-            <span className="text-secondary">Tip included</span>
-            <span className="font-semibold accent-metal tabular-nums">{money(tipAmount)}</span>
-          </div>
+          {tippingEnabled && (
+            <div className="flex justify-between text-base">
+              <span className="text-secondary">Tip included</span>
+              <span className="font-semibold accent-metal tabular-nums">{money(tipAmount)}</span>
+            </div>
+          )}
           <div className="flex justify-between text-base">
             <span className="text-secondary">Method</span>
             <span className="font-semibold">{method.replace("_", " ")}</span>
@@ -155,7 +159,7 @@ export function PaymentCelebration({
           <button
             type="button"
             onClick={onDismiss}
-            className="btn-press focus-ring inline-flex min-h-[44px] items-center justify-center rounded-[var(--radius-control)] border border-[var(--accent-metal)] bg-[var(--accent-metal)] px-6 py-2 text-sm font-semibold text-white shadow-[var(--shadow-soft)] transition-colors hover:bg-[var(--accent-action-strong)]"
+            className="focus-ring action-surface action-button px-6"
           >
             Back to menu
           </button>

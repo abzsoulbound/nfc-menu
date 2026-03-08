@@ -36,8 +36,8 @@ function HeaderLogo({
 }) {
   const usingDefaultLogo = logoUrl?.startsWith("/brand/") ?? false
   const shellClass = uiMode === "staff"
-    ? "bg-[rgba(255,255,255,0.08)]"
-    : "bg-[rgba(255,255,255,0.72)]"
+    ? "bg-[var(--logo-shell-bg)]"
+    : "bg-[var(--logo-shell-bg)]"
   const sizeClass = desktopOps
     ? "h-16 w-16 md:h-20 md:w-20"
     : "h-14 w-14 md:h-16 md:w-16"
@@ -115,7 +115,7 @@ function HeaderCartBadge() {
           strokeLinejoin="round"
         />
       </svg>
-      <span className="absolute -right-2 -top-2 inline-flex min-h-[20px] min-w-[20px] items-center justify-center rounded-full bg-[var(--accent-action)] px-1 text-[10px] font-semibold text-white cart-bounce">
+      <span className="absolute -right-2 -top-2 inline-flex min-h-[20px] min-w-[20px] items-center justify-center rounded-full bg-[var(--accent-action)] px-1 text-[10px] font-semibold text-black cart-bounce">
         {totalQuantity}
       </span>
     </Link>
@@ -207,7 +207,7 @@ function HeaderOrderCartControl() {
         )}
       </span>
       {hasItems && (
-        <span className="absolute -right-2 -top-2 inline-flex min-h-[24px] min-w-[24px] items-center justify-center rounded-full bg-[var(--accent-action)] px-1 text-xs font-semibold text-white cart-bounce">
+        <span className="absolute -right-2 -top-2 inline-flex min-h-[24px] min-w-[24px] items-center justify-center rounded-full bg-[var(--accent-action)] px-1 text-xs font-semibold text-black cart-bounce">
           {totalQuantity}
         </span>
       )}
@@ -244,9 +244,7 @@ export function Header() {
   const brandMonogram = publicSite ? PUBLIC_SITE_MONOGRAM : restaurantMonogram
   const brandLogoUrl = publicSite ? undefined : restaurantLogoUrl
 
-  const headerClass = publicSite
-    ? "sticky top-0 z-40 border-b border-[rgba(229,170,20,0.34)] bg-[linear-gradient(110deg,#000a30,#001258_44%,#001a6e)] text-white backdrop-blur"
-    : "sticky top-0 z-40 border-b border-[var(--border)] surface-primary backdrop-blur"
+  const headerClass = "shell-header"
 
   return (
     <header className={headerClass}>
@@ -259,7 +257,7 @@ export function Header() {
           {publicSite ? (
             <div className="space-y-1">
               <SoulboundStudioLogo compact tone="light" />
-              <div className="max-w-[540px] text-xs text-[rgba(240,242,250,0.72)]">
+              <div className="max-w-[540px] text-xs text-[var(--page-text-muted)]">
                 {contextHint}
               </div>
             </div>
@@ -276,7 +274,7 @@ export function Header() {
                 <div className={`font-semibold tracking-tight ${desktopOps ? "text-lg" : ""}`}>
                   {brandName}
                 </div>
-                <div className="max-w-[540px] text-xs text-muted">
+                <div className="max-w-[540px] text-xs text-[var(--page-text-muted)]">
                   {contextHint}
                 </div>
               </div>
@@ -292,13 +290,13 @@ export function Header() {
           <div className="flex items-center gap-2">
             <Link
               href="/pricing"
-              className="focus-ring inline-flex min-h-[36px] items-center rounded-[var(--radius-control)] border border-[rgba(229,170,20,0.44)] bg-[rgba(0,12,48,0.58)] px-3 text-xs font-semibold text-[#f0f2fa] transition-colors hover:bg-[rgba(0,18,88,0.72)]"
+              className="focus-ring inline-flex min-h-[36px] items-center rounded-[var(--radius-control)] border border-[var(--border-subtle)] bg-[var(--surface-glass)] px-3 text-xs font-semibold text-[var(--page-text)] transition-colors hover:bg-[var(--surface-glass-strong)]"
             >
               Pricing
             </Link>
             <Link
               href="/contact"
-              className="focus-ring inline-flex min-h-[36px] items-center rounded-[var(--radius-control)] border border-[rgba(229,170,20,0.66)] bg-[linear-gradient(135deg,#f0c040,#e5aa14)] px-3 text-xs font-semibold text-[#001258] transition-[filter,transform] hover:brightness-[1.05]"
+              className="focus-ring action-surface action-button-sm"
             >
               Contact
             </Link>

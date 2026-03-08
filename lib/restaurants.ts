@@ -13,6 +13,12 @@ import {
   sanitizeCustomerExperienceConfig,
 } from "@/lib/customerExperience"
 import {
+  type FeatureKey,
+  type PlanTier,
+  type RestaurantFeatureConfig,
+  resolveFeatures,
+} from "@/lib/featureFlags"
+import {
   getDefaultRestaurantSlug,
   getSalesDemoSlug,
   inferRestaurantSlugFromHost,
@@ -54,6 +60,8 @@ export type RestaurantProfile = {
   isDemo: boolean
   planTier: string
   billingStatus: string
+  featureConfig: RestaurantFeatureConfig
+  resolvedFeatures: Record<FeatureKey, boolean>
 }
 
 export type NamedStaffAccount = {
@@ -118,6 +126,8 @@ const FALLBACK_PROFILE_BASE = {
   isDemo: true,
   planTier: "starter",
   billingStatus: "trial",
+  featureConfig: {} as RestaurantFeatureConfig,
+  resolvedFeatures: resolveFeatures(null, "starter"),
 }
 
 const globalForRestaurants = globalThis as unknown as {
@@ -388,6 +398,7 @@ function toProfile(input: {
   logoUrl: string | null
   heroUrl: string | null
   experienceConfig?: unknown
+  featureConfig?: unknown
   stripeAccountId?: string | null
   stripeAccountStatus?: string | null
   stripeChargesEnabled?: boolean
@@ -457,6 +468,11 @@ function toProfile(input: {
     isDemo: input.isDemo,
     planTier: input.planTier ?? "starter",
     billingStatus: input.billingStatus ?? "trial",
+    featureConfig: (input.featureConfig && typeof input.featureConfig === "object" ? input.featureConfig : {}) as RestaurantFeatureConfig,
+    resolvedFeatures: resolveFeatures(
+      (input.featureConfig && typeof input.featureConfig === "object" ? input.featureConfig : null) as RestaurantFeatureConfig | null,
+      (input.planTier ?? "starter") as PlanTier
+    ),
   }
 }
 
@@ -704,6 +720,7 @@ export async function getRestaurantBySlug(slug: string) {
         logoUrl: true,
         heroUrl: true,
         experienceConfig: true,
+        featureConfig: true,
         stripeAccountId: true,
         stripeAccountStatus: true,
         stripeChargesEnabled: true,
@@ -728,6 +745,7 @@ export async function getRestaurantBySlug(slug: string) {
       logoUrl: row.logoUrl,
       heroUrl: row.heroUrl,
       experienceConfig: row.experienceConfig,
+      featureConfig: row.featureConfig,
       stripeAccountId: row.stripeAccountId,
       stripeAccountStatus: row.stripeAccountStatus,
       stripeChargesEnabled: row.stripeChargesEnabled,
@@ -773,6 +791,7 @@ export async function updateRestaurantBrandingAndExperience(input: {
       logoUrl: true,
       heroUrl: true,
       experienceConfig: true,
+      featureConfig: true,
       stripeAccountId: true,
       stripeAccountStatus: true,
       stripeChargesEnabled: true,
@@ -882,6 +901,7 @@ export async function updateRestaurantBrandingAndExperience(input: {
       logoUrl: existing.logoUrl,
       heroUrl: existing.heroUrl,
       experienceConfig: existing.experienceConfig,
+      featureConfig: existing.featureConfig,
       stripeAccountId: existing.stripeAccountId,
       stripeAccountStatus: existing.stripeAccountStatus,
       stripeChargesEnabled: existing.stripeChargesEnabled,
@@ -908,6 +928,7 @@ export async function updateRestaurantBrandingAndExperience(input: {
       logoUrl: true,
       heroUrl: true,
       experienceConfig: true,
+      featureConfig: true,
       stripeAccountId: true,
       stripeAccountStatus: true,
       stripeChargesEnabled: true,
@@ -931,6 +952,114 @@ export async function updateRestaurantBrandingAndExperience(input: {
     logoUrl: updated.logoUrl,
     heroUrl: updated.heroUrl,
     experienceConfig: updated.experienceConfig,
+      featureConfig: updated.featureConfig,
+    stripeAccountId: updated.stripeAccountId,
+    stripeAccountStatus: updated.stripeAccountStatus,
+    stripeChargesEnabled: updated.stripeChargesEnabled,
+    stripePayoutsEnabled: updated.stripePayoutsEnabled,
+    stripeDetailsSubmitted: updated.stripeDetailsSubmitted,
+    platformFeeBps: updated.platformFeeBps,
+    stripeCustomerId: updated.stripeCustomerId,
+    stripeSubscriptionId: updated.stripeSubscriptionId,
+    subscriptionStatus: updated.subscriptionStatus,
+    isDemo: updated.isDemo,
+    planTier: updated.planTier,
+    billingStatus: updated.billingStatus,
+  })
+}
+
+export async function updateRestaurantFeatureConfig(input: {
+  slug: string
+  featureConfig: RestaurantFeatureConfig
+}) {
+  if (!canUseDatabase()) {
+    throw new Error("Database is required for feature config updates")
+  }
+
+  const slug =
+    normalizeRestaurantSlug(input.slug) ?? getDefaultRestaurantSlug()
+
+  const existing = await prisma.restaurant.findUnique({
+    where: { slug },
+    select: {
+      slug: true,
+      name: true,
+      monogram: true,
+      location: true,
+      logoUrl: true,
+      heroUrl: true,
+      experienceConfig: true,
+      featureConfig: true,
+      stripeAccountId: true,
+      stripeAccountStatus: true,
+      stripeChargesEnabled: true,
+      stripePayoutsEnabled: true,
+      stripeDetailsSubmitted: true,
+      platformFeeBps: true,
+      stripeCustomerId: true,
+      stripeSubscriptionId: true,
+      subscriptionStatus: true,
+      isDemo: true,
+      planTier: true,
+      billingStatus: true,
+      active: true,
+    },
+  })
+
+  if (!existing || !existing.active) {
+    throw new Error("Restaurant was not found")
+  }
+
+  // Merge: keep existing overrides, apply new ones
+  const currentOverrides =
+    existing.featureConfig &&
+    typeof existing.featureConfig === "object"
+      ? (existing.featureConfig as RestaurantFeatureConfig)
+      : {}
+
+  const merged: RestaurantFeatureConfig = { ...currentOverrides }
+  for (const [key, value] of Object.entries(input.featureConfig)) {
+    if (typeof value === "boolean") {
+      merged[key as FeatureKey] = value
+    }
+  }
+
+  const updated = await prisma.restaurant.update({
+    where: { slug },
+    data: { featureConfig: merged },
+    select: {
+      slug: true,
+      name: true,
+      monogram: true,
+      location: true,
+      logoUrl: true,
+      heroUrl: true,
+      experienceConfig: true,
+      featureConfig: true,
+      stripeAccountId: true,
+      stripeAccountStatus: true,
+      stripeChargesEnabled: true,
+      stripePayoutsEnabled: true,
+      stripeDetailsSubmitted: true,
+      platformFeeBps: true,
+      stripeCustomerId: true,
+      stripeSubscriptionId: true,
+      subscriptionStatus: true,
+      isDemo: true,
+      planTier: true,
+      billingStatus: true,
+    },
+  })
+
+  return toProfile({
+    slug: updated.slug,
+    name: updated.name,
+    monogram: updated.monogram,
+    location: updated.location,
+    logoUrl: updated.logoUrl,
+    heroUrl: updated.heroUrl,
+    experienceConfig: updated.experienceConfig,
+    featureConfig: updated.featureConfig,
     stripeAccountId: updated.stripeAccountId,
     stripeAccountStatus: updated.stripeAccountStatus,
     stripeChargesEnabled: updated.stripeChargesEnabled,
@@ -1032,6 +1161,7 @@ export async function updateRestaurantStripeConnection(input: {
       logoUrl: true,
       heroUrl: true,
       experienceConfig: true,
+      featureConfig: true,
       stripeAccountId: true,
       stripeAccountStatus: true,
       stripeChargesEnabled: true,
@@ -1055,6 +1185,7 @@ export async function updateRestaurantStripeConnection(input: {
     logoUrl: updated.logoUrl,
     heroUrl: updated.heroUrl,
     experienceConfig: updated.experienceConfig,
+      featureConfig: updated.featureConfig,
     stripeAccountId: updated.stripeAccountId,
     stripeAccountStatus: updated.stripeAccountStatus,
     stripeChargesEnabled: updated.stripeChargesEnabled,
@@ -1146,6 +1277,7 @@ export async function updateRestaurantSubscriptionState(input: {
       logoUrl: true,
       heroUrl: true,
       experienceConfig: true,
+      featureConfig: true,
       stripeAccountId: true,
       stripeAccountStatus: true,
       stripeChargesEnabled: true,
@@ -1169,6 +1301,7 @@ export async function updateRestaurantSubscriptionState(input: {
     logoUrl: updated.logoUrl,
     heroUrl: updated.heroUrl,
     experienceConfig: updated.experienceConfig,
+      featureConfig: updated.featureConfig,
     stripeAccountId: updated.stripeAccountId,
     stripeAccountStatus: updated.stripeAccountStatus,
     stripeChargesEnabled: updated.stripeChargesEnabled,
@@ -1255,6 +1388,7 @@ export async function listActiveRestaurants(limit = 200) {
         logoUrl: true,
         heroUrl: true,
         experienceConfig: true,
+        featureConfig: true,
         stripeAccountId: true,
         stripeAccountStatus: true,
         stripeChargesEnabled: true,
@@ -1283,6 +1417,7 @@ export async function listActiveRestaurants(limit = 200) {
         logoUrl: row.logoUrl,
         heroUrl: row.heroUrl,
         experienceConfig: row.experienceConfig,
+      featureConfig: row.featureConfig,
         stripeAccountId: row.stripeAccountId,
         stripeAccountStatus: row.stripeAccountStatus,
         stripeChargesEnabled: row.stripeChargesEnabled,
@@ -1670,6 +1805,7 @@ export async function getRestaurantSetupStatus(token: string): Promise<Restauran
           logoUrl: true,
           heroUrl: true,
           experienceConfig: true,
+          featureConfig: true,
           stripeAccountId: true,
           stripeAccountStatus: true,
           stripeChargesEnabled: true,
@@ -1721,6 +1857,7 @@ export async function getRestaurantSetupStatus(token: string): Promise<Restauran
           logoUrl: row.restaurant.logoUrl,
           heroUrl: row.restaurant.heroUrl,
           experienceConfig: row.restaurant.experienceConfig,
+          featureConfig: row.restaurant.featureConfig,
           stripeAccountId: row.restaurant.stripeAccountId,
           stripeAccountStatus: row.restaurant.stripeAccountStatus,
           stripeChargesEnabled: row.restaurant.stripeChargesEnabled,
@@ -1847,6 +1984,7 @@ export async function completeRestaurantSetup(input: {
         logoUrl: true,
         heroUrl: true,
         experienceConfig: true,
+        featureConfig: true,
         stripeAccountId: true,
         stripeAccountStatus: true,
         stripeChargesEnabled: true,

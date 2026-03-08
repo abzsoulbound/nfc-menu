@@ -1,6 +1,7 @@
 import { ReactNode } from "react"
 import { AllergenList } from "@/components/menu/AllergenList"
 import { Card } from "@/components/ui/Card"
+import { FeatureGate } from "@/components/ui/FeatureGate"
 import {
   getMenuItemAiImageUrl,
   getMenuItemPlaceholderUrl,
@@ -168,10 +169,12 @@ export function MenuItemCard({
           </div>
         </div>
 
-        <AllergenList
-          allergens={allergens}
-          collapsible={collapsibleAllergens}
-        />
+        <FeatureGate feature="allergenDisplay">
+          <AllergenList
+            allergens={allergens}
+            collapsible={collapsibleAllergens}
+          />
+        </FeatureGate>
 
         {showOptionLines && (
           <div className="rounded-lg border border-[var(--border-subtle)] surface-accent px-3 py-2">

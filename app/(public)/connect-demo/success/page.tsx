@@ -41,7 +41,7 @@ export default function ConnectDemoSuccessPage({
           </div>
           <Link
             href="/connect-demo"
-            className="focus-ring inline-flex min-h-[44px] items-center justify-center rounded-[var(--radius-control)] border border-[var(--border)] px-4 py-2 text-sm font-semibold"
+            className="focus-ring action-surface action-button"
           >
             Back to Connect demo
           </Link>

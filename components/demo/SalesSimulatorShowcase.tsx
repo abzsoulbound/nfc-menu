@@ -106,7 +106,7 @@ const SCENARIO_CONFIG: Record<
     stepMinutes: 10,
     cadenceMs: 2300,
     toneClass:
-      "border-[rgba(104,164,237,0.46)] bg-[rgba(29,53,90,0.58)] text-[#d9e7ff]",
+      "border-[rgba(217,174,63,0.3)] bg-[rgba(0,18,88,0.72)] text-white",
   },
   RUSH_HOUR_FOCUS: {
     label: "Rush Hour Focus",
@@ -114,7 +114,7 @@ const SCENARIO_CONFIG: Record<
     stepMinutes: 5,
     cadenceMs: 1300,
     toneClass:
-      "border-[rgba(219,184,118,0.54)] bg-[rgba(82,63,26,0.56)] text-[#f0dcae]",
+      "border-[rgba(217,174,63,0.62)] bg-[rgba(217,174,63,0.38)] text-black",
   },
   FULL_DAY_AUTOPILOT: {
     label: "Full Day Autopilot",
@@ -122,7 +122,7 @@ const SCENARIO_CONFIG: Record<
     stepMinutes: 15,
     cadenceMs: 900,
     toneClass:
-      "border-[rgba(230,128,120,0.52)] bg-[rgba(90,36,36,0.56)] text-[#ffd7d2]",
+      "border-[rgba(217,174,63,0.3)] bg-[rgba(0,18,88,0.84)] text-white",
   },
 }
 
@@ -469,17 +469,17 @@ export function SalesSimulatorShowcase() {
     <div className="space-y-4">
       <Card
         variant="elevated"
-        className="space-y-4 border-[rgba(121,166,239,0.42)] bg-[linear-gradient(130deg,rgba(8,15,30,0.96),rgba(15,28,52,0.95),rgba(22,40,69,0.93))]"
+        className="space-y-4 border-[rgba(0,18,88,0.42)] bg-[linear-gradient(130deg,rgba(8,15,30,0.96),rgba(15,28,52,0.95),rgba(22,40,69,0.93))]"
       >
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="space-y-1">
-            <div className="text-xs font-semibold uppercase tracking-[0.16em] text-[rgba(218,186,125,0.92)]">
+            <div className="text-xs font-semibold uppercase tracking-[0.16em] text-white">
               09:00 to 17:00 Simulated Day
             </div>
-            <h2 className="font-[family:var(--font-display)] text-3xl tracking-tight text-[#f4ecdc] md:text-5xl">
+            <h2 className="font-[family:var(--font-display)] text-3xl tracking-tight text-white md:text-5xl">
               Cafe Day Sales Simulator
             </h2>
-            <p className="max-w-3xl text-sm leading-6 text-[rgba(213,228,250,0.86)]">
+            <p className="max-w-3xl text-sm leading-6 text-white/85">
               Every click advances virtual time by X minutes. Rush windows are
               modeled at 11:00-12:00 and 14:00-15:00, with optional autopilot
               that walks the full day.
@@ -489,8 +489,8 @@ export function SalesSimulatorShowcase() {
             <span
               className={`inline-flex rounded-full border px-3 py-1 text-xs font-semibold uppercase tracking-[0.14em] ${
                 snapshot?.status.enabled
-                  ? "border-[rgba(119,199,147,0.54)] bg-[rgba(44,92,62,0.56)] text-[#d8f8e3]"
-                  : "border-[rgba(170,190,226,0.48)] bg-[rgba(43,58,84,0.54)] text-[#dce9ff]"
+                  ? "border-[rgba(217,174,63,0.3)] bg-[rgba(0,18,88,0.72)] text-white"
+                  : "border-[rgba(217,174,63,0.62)] bg-[rgba(217,174,63,0.38)] text-black"
               }`}
             >
               {snapshot?.status.enabled ? "Running" : "Paused"}
@@ -501,17 +501,17 @@ export function SalesSimulatorShowcase() {
               {activeScenarioConfig.label}
             </span>
             {snapshot?.status.isRushHour ? (
-              <span className="inline-flex rounded-full border border-[rgba(214,179,108,0.62)] bg-[rgba(95,69,28,0.58)] px-3 py-1 text-xs font-semibold uppercase tracking-[0.14em] text-[#f5ddb0]">
+              <span className="inline-flex rounded-full border border-[rgba(217,174,63,0.62)] bg-[rgba(217,174,63,0.4)] px-3 py-1 text-xs font-semibold uppercase tracking-[0.14em] text-black">
                 Rush Hour
               </span>
             ) : null}
           </div>
         </div>
 
-        <div className="space-y-2 rounded-xl border border-[rgba(121,166,239,0.34)] bg-[rgba(17,31,55,0.66)] px-3 py-3">
-          <div className="flex flex-wrap items-center justify-between gap-2 text-xs uppercase tracking-[0.16em] text-[rgba(189,210,244,0.78)]">
+        <div className="space-y-2 rounded-xl border border-[rgba(0,18,88,0.34)] bg-[rgba(17,31,55,0.66)] px-3 py-3">
+          <div className="flex flex-wrap items-center justify-between gap-2 text-xs uppercase tracking-[0.16em] text-white/80">
             <span>Simulated Timeline</span>
-            <span className="font-semibold text-[#edf4ff]">
+            <span className="font-semibold text-white">
               {snapshot?.status.simulatedTimeLabel ?? "09:00"}
             </span>
           </div>
@@ -540,13 +540,13 @@ export function SalesSimulatorShowcase() {
               )
             })}
             <div
-              className="absolute bottom-0 top-0 rounded-full bg-[linear-gradient(90deg,rgba(95,161,244,0.96),rgba(214,179,108,0.96))]"
+              className="absolute bottom-0 top-0 rounded-full bg-[linear-gradient(90deg,rgba(0,18,88,0.96),rgba(217,174,63,0.96))]"
               style={{
                 width: `${Math.max(2, dayProgress)}%`,
               }}
             />
           </div>
-          <div className="flex items-center justify-between text-[10px] uppercase tracking-[0.16em] text-[rgba(175,198,237,0.8)]">
+          <div className="flex items-center justify-between text-[10px] uppercase tracking-[0.16em] text-white/80">
             <span>
               {snapshot
                 ? formatMinuteLabel(snapshot.status.dayStartMinute)
@@ -626,13 +626,13 @@ export function SalesSimulatorShowcase() {
         </div>
 
         <div className="grid gap-2 md:grid-cols-[0.9fr_1fr_1fr]">
-          <label className="flex items-center gap-2 rounded-xl border border-[rgba(121,166,239,0.32)] bg-[rgba(22,39,66,0.62)] px-3 py-2 text-xs text-[rgba(208,224,248,0.88)]">
+          <label className="flex items-center gap-2 rounded-xl border border-[rgba(0,18,88,0.32)] bg-[rgba(22,39,66,0.62)] px-3 py-2 text-xs text-[rgba(255,255,255,0.88)]">
             <span className="uppercase tracking-[0.14em] text-[rgba(182,205,241,0.88)]">
               Step
             </span>
             <select
               value={stepMinutes}
-              className="min-h-[36px] flex-1 rounded-md border border-[rgba(126,170,240,0.42)] bg-[rgba(10,20,38,0.86)] px-2 text-sm text-[#eef4ff] focus:outline-none"
+              className="action-surface min-h-[36px] flex-1 rounded-md border px-2 text-sm focus:outline-none"
               onChange={event => {
                 const next = Number(event.target.value)
                 setStepMinutes(next)
@@ -690,9 +690,9 @@ export function SalesSimulatorShowcase() {
           ))}
         </div>
 
-        <div className="text-xs text-[rgba(198,216,245,0.78)]">
+        <div className="text-xs text-white/80">
           Scenario:{" "}
-          <span className="font-semibold text-[#eef4ff]">
+          <span className="font-semibold text-white">
             {activeScenarioConfig.label}
           </span>
           {` | ${activeScenarioConfig.note}`}
@@ -709,28 +709,28 @@ export function SalesSimulatorShowcase() {
       </Card>
 
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1.45fr)_minmax(0,1fr)]">
-        <Card className="space-y-3 border-[rgba(121,166,239,0.34)] bg-[rgba(11,22,42,0.76)]">
-          <div className="text-sm font-semibold uppercase tracking-[0.14em] text-[rgba(216,186,129,0.92)]">
+        <Card className="space-y-3 border-[rgba(0,18,88,0.34)] bg-[rgba(11,22,42,0.76)]">
+          <div className="text-sm font-semibold uppercase tracking-[0.14em] text-white">
             Live KPI Board
           </div>
           <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
             {summaryRows.map(row => (
               <div
                 key={row.label}
-                className="rounded-xl border border-[rgba(121,166,239,0.28)] bg-[rgba(22,39,66,0.62)] px-3 py-2"
+                className="rounded-xl border border-[rgba(0,18,88,0.28)] bg-[rgba(22,39,66,0.62)] px-3 py-2"
               >
-                <div className="text-[10px] uppercase tracking-[0.16em] text-[rgba(189,210,244,0.78)]">
+                <div className="text-[10px] uppercase tracking-[0.16em] text-white/80">
                   {row.label}
                 </div>
-                <div className="mt-1 text-base font-semibold text-[#eef4ff]">
+                <div className="mt-1 text-base font-semibold text-white">
                   {row.value}
                 </div>
               </div>
             ))}
           </div>
 
-          <div className="rounded-xl border border-[rgba(121,166,239,0.3)] bg-[rgba(17,31,55,0.66)] px-3 py-3">
-            <div className="text-xs font-semibold uppercase tracking-[0.16em] text-[rgba(189,210,244,0.78)]">
+          <div className="rounded-xl border border-[rgba(0,18,88,0.3)] bg-[rgba(17,31,55,0.66)] px-3 py-3">
+            <div className="text-xs font-semibold uppercase tracking-[0.16em] text-white/80">
               Station Pressure
             </div>
             <div className="mt-3 space-y-2">
@@ -740,15 +740,15 @@ export function SalesSimulatorShowcase() {
 
                 return (
                   <div key={row.label} className="space-y-1">
-                    <div className="flex items-center justify-between text-xs text-[rgba(204,220,246,0.86)]">
+                    <div className="flex items-center justify-between text-xs text-white/85">
                       <span>{row.label}</span>
-                      <span className="font-semibold text-[#edf4ff]">
+                      <span className="font-semibold text-white">
                         {row.value}
                       </span>
                     </div>
                     <div className="h-2 rounded-full bg-[rgba(13,24,42,0.9)]">
                       <div
-                        className="h-2 rounded-full bg-[linear-gradient(90deg,rgba(214,179,108,0.96),rgba(120,174,249,0.96))]"
+                        className="h-2 rounded-full bg-[linear-gradient(90deg,rgba(217,174,63,0.96),rgba(0,18,88,0.96))]"
                         style={{ width }}
                       />
                     </div>
@@ -758,65 +758,65 @@ export function SalesSimulatorShowcase() {
             </div>
           </div>
 
-          <div className="grid gap-2 text-xs text-[rgba(200,217,243,0.78)] md:grid-cols-2">
+          <div className="grid gap-2 text-xs text-white/80 md:grid-cols-2">
             <div>
               Last simulator tick:{" "}
-              <span className="font-semibold text-[#eef4ff]">
+              <span className="font-semibold text-white">
                 {snapshot?.status.lastTickAt ?? "Not yet"}
               </span>
             </div>
             <div>
               Shift generated:{" "}
-              <span className="font-semibold text-[#eef4ff]">
+              <span className="font-semibold text-white">
                 {snapshot?.shift.generatedAt ?? "Not yet"}
               </span>
             </div>
           </div>
         </Card>
 
-        <Card className="space-y-3 border-[rgba(121,166,239,0.34)] bg-[rgba(11,22,42,0.76)]">
-          <div className="text-sm font-semibold uppercase tracking-[0.14em] text-[rgba(216,186,129,0.92)]">
+        <Card className="space-y-3 border-[rgba(0,18,88,0.34)] bg-[rgba(11,22,42,0.76)]">
+          <div className="text-sm font-semibold uppercase tracking-[0.14em] text-white">
             Commercial Signals
           </div>
           <div className="grid grid-cols-2 gap-2">
             {growthRows.map(row => (
               <div
                 key={row.label}
-                className="rounded-xl border border-[rgba(121,166,239,0.28)] bg-[rgba(22,39,66,0.62)] px-3 py-2"
+                className="rounded-xl border border-[rgba(0,18,88,0.28)] bg-[rgba(22,39,66,0.62)] px-3 py-2"
               >
-                <div className="text-[10px] uppercase tracking-[0.16em] text-[rgba(189,210,244,0.78)]">
+                <div className="text-[10px] uppercase tracking-[0.16em] text-white/80">
                   {row.label}
                 </div>
-                <div className="mt-1 text-base font-semibold text-[#eef4ff]">
+                <div className="mt-1 text-base font-semibold text-white">
                   {row.value}
                 </div>
               </div>
             ))}
           </div>
 
-          <div className="rounded-xl border border-[rgba(121,166,239,0.28)] bg-[rgba(22,39,66,0.62)] px-3 py-3 text-xs text-[rgba(202,219,245,0.8)]">
+          <div className="rounded-xl border border-[rgba(0,18,88,0.28)] bg-[rgba(22,39,66,0.62)] px-3 py-3 text-xs text-white/80">
             <div className="grid gap-2">
               <div>
                 Demo sessions:{" "}
-                <span className="font-semibold text-[#eef4ff]">
+                <span className="font-semibold text-white">
                   {snapshot?.live.demoSessions ?? (loading ? "..." : 0)}
                 </span>
               </div>
               <div>
                 Open tables:{" "}
-                <span className="font-semibold text-[#eef4ff]">
+                <span className="font-semibold text-white">
                   {snapshot?.live.openTables ?? (loading ? "..." : 0)}
                 </span>
               </div>
               <div>
                 Locked tables:{" "}
-                <span className="font-semibold text-[#eef4ff]">
+                <span className="font-semibold text-white">
                   {snapshot?.live.lockedTables ?? (loading ? "..." : 0)}
                 </span>
               </div>
               <div>
                 Active sessions:{" "}
-                <span className="font-semibold text-[#eef4ff]">
+                <span className="font-semibold text-white">
                   {snapshot?.live.activeSessions ?? (loading ? "..." : 0)}
                 </span>
               </div>
@@ -825,8 +825,8 @@ export function SalesSimulatorShowcase() {
         </Card>
       </div>
 
-      <Card className="space-y-3 border-[rgba(121,166,239,0.34)] bg-[rgba(11,22,42,0.76)]">
-        <div className="text-sm font-semibold uppercase tracking-[0.14em] text-[rgba(216,186,129,0.92)]">
+      <Card className="space-y-3 border-[rgba(0,18,88,0.34)] bg-[rgba(11,22,42,0.76)]">
+        <div className="text-sm font-semibold uppercase tracking-[0.14em] text-white">
           Demo Flow Links
         </div>
         <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
@@ -834,15 +834,15 @@ export function SalesSimulatorShowcase() {
             <Link
               key={link.nextPath}
               href={resolveHref(link.nextPath)}
-              className="focus-ring rounded-xl border border-[rgba(121,166,239,0.28)] bg-[rgba(22,39,66,0.62)] px-3 py-3 transition-colors hover:bg-[rgba(31,52,84,0.84)]"
+              className="focus-ring action-surface action-card action-card-left rounded-xl px-3 py-3"
             >
-              <div className="text-sm font-semibold text-[#eef4ff]">
+              <div className="text-sm font-semibold">
                 {link.label}
               </div>
-              <div className="mt-1 text-xs text-[rgba(198,216,245,0.8)]">
+              <div className="action-subtle-text mt-1 text-xs">
                 {link.detail}
               </div>
-              <div className="mt-2 text-xs text-[rgba(165,189,229,0.8)] mono-font">
+              <div className="action-subtle-text mt-2 text-xs mono-font">
                 {resolveHref(link.nextPath)}
               </div>
             </Link>

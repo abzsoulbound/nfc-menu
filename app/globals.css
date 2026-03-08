@@ -198,21 +198,13 @@ select {
 }
 
 @keyframes shimmer {
-  0% { background-position: -200% 0; }
-  100% { background-position: 200% 0; }
+  0%, 100% { opacity: 0.72; }
+  50% { opacity: 1; }
 }
 
 .shimmer {
-  background: linear-gradient(
-    90deg,
-    var(--surface-accent) 0%,
-    var(--surface-elevated) 40%,
-    var(--accent-metal-subtle, rgba(201, 169, 110, 0.18)) 50%,
-    var(--surface-elevated) 60%,
-    var(--surface-accent) 100%
-  );
-  background-size: 200% 100%;
-  animation: shimmer 1.8s ease-in-out infinite;
+  background: var(--surface-accent);
+  animation: shimmer 1.4s ease-in-out infinite;
 }
 
 @keyframes celebrateIn {
@@ -269,17 +261,14 @@ select {
 @keyframes warmWash {
   from {
     opacity: 0;
-    background-position: 0% 50%;
   }
   to {
     opacity: 1;
-    background-position: 100% 50%;
   }
 }
 
 .warm-wash {
-  background: linear-gradient(135deg, rgba(229,170,20,0.08), rgba(250,246,239,0.3), rgba(229,170,20,0.06));
-  background-size: 200% 200%;
+  background: rgba(217,174,63,0.08);
   animation: warmWash 1.2s var(--ease-smooth) both;
 }
 

@@ -1,40 +1,48 @@
 :root {
-  --bg-primary: #f5f0e8;
-  --bg-secondary: #faf6ef;
-  --bg-accent: #ebe3d3;
+  /* ── Navy primary ── */
+  --bg-primary: #000e42;
+  --bg-secondary: #001258;
+  --bg-accent: #001a6e;
 
-  --surface-primary: #faf6ef;
-  --surface-secondary: #fdf9f3;
-  --surface-accent: #f0e8d8;
-  --surface-elevated: #fffcf6;
+  --surface-primary: #001258;
+  --surface-secondary: #001850;
+  --surface-accent: #002060;
+  --surface-elevated: #001e6e;
 
-  --text-primary: #001258;
-  --text-heading: #001258;
-  --text-secondary: #2a3a6b;
-  --text-muted: #5a6589;
+  /* ── White text on navy ── */
+  --text-primary: #ffffff;
+  --text-heading: #ffffff;
+  --text-secondary: rgba(255, 255, 255, 0.75);
+  --text-muted: rgba(255, 255, 255, 0.50);
 
-  --accent-action: #e5aa14;
-  --accent-action-strong: #c99410;
-  --accent-quiet: #faf3e0;
-  --accent-metal: #e5aa14;
-  --accent-metal-subtle: rgba(229, 170, 20, 0.18);
+  /* ── Gold secondary accents ── */
+  --accent-action: #d9ae3f;
+  --accent-action-strong: #c49a2a;
+  --button-accent: #d9ae3f;
+  --button-accent-strong: #c49a2a;
+  --accent-quiet: #0a1e5a;
+  --accent-metal: #d9ae3f;
+  --accent-metal-subtle: rgba(217, 174, 63, 0.18);
 
-  --success-bg: #e4f3e8;
-  --success-fg: #1a6b42;
-  --warning-bg: #fff4d9;
-  --warning-fg: #8a6115;
-  --danger-bg: #ffe3df;
-  --danger-fg: #8f2e2e;
-  --neutral-bg: #e8e2d6;
-  --neutral-fg: #3a3f54;
+  /* ── Semantic status ── */
+  --success-bg: #1a5c3a;
+  --success-fg: #ffffff;
+  --warning-bg: #d9ae3f;
+  --warning-fg: #000000;
+  --danger-bg: #8b2020;
+  --danger-fg: #ffffff;
+  --neutral-bg: #1a3080;
+  --neutral-fg: #ffffff;
 
-  --border: #c9bda6;
-  --border-subtle: rgba(229, 170, 20, 0.2);
-  --focus: #e5aa14;
+  /* ── Borders & focus ── */
+  --border: rgba(217, 174, 63, 0.20);
+  --border-subtle: rgba(217, 174, 63, 0.12);
+  --focus: #d9ae3f;
 
-  --shadow-soft: 0 1px 2px rgba(0, 18, 88, 0.06), 0 24px 60px -12px rgba(0, 18, 88, 0.12);
-  --shadow-hard: 0 1px 3px rgba(0, 18, 88, 0.1), 0 18px 36px -26px rgba(0, 18, 88, 0.6);
-  --shadow-elevated: 0 1px 2px rgba(0, 18, 88, 0.04), 0 4px 12px rgba(0, 18, 88, 0.06), 0 24px 60px -12px rgba(0, 18, 88, 0.12);
+  /* ── Shadows (dark enough for navy bg) ── */
+  --shadow-soft: 0 1px 3px rgba(0, 0, 0, 0.30), 0 14px 30px -22px rgba(0, 0, 0, 0.60);
+  --shadow-hard: 0 1px 3px rgba(0, 0, 0, 0.40), 0 14px 34px -20px rgba(0, 0, 0, 0.80);
+  --shadow-elevated: 0 1px 2px rgba(0, 0, 0, 0.20), 0 4px 12px rgba(0, 0, 0, 0.30), 0 14px 30px -22px rgba(0, 0, 0, 0.60);
 
   --radius-card: 20px;
   --radius-control: 12px;
@@ -46,4 +54,22 @@
   --duration-fast: 150ms;
   --duration-normal: 250ms;
   --duration-slow: 400ms;
+
+  /* ── Shell & page tokens ── */
+  --shell-bg: radial-gradient(circle at 14% 8%, rgba(217,174,63,0.10), transparent 42%),
+              radial-gradient(circle at 86% 10%, rgba(255,255,255,0.04), transparent 54%),
+              linear-gradient(180deg, #000a30 0%, #001258 48%, #001a6e 100%);
+  --page-text: #ffffff;
+  --page-text-secondary: rgba(255, 255, 255, 0.75);
+  --page-text-muted: rgba(255, 255, 255, 0.50);
+  --orb-gold: radial-gradient(circle, rgba(217,174,63,0.20), rgba(217,174,63,0));
+  --orb-navy: radial-gradient(circle, rgba(0,18,88,0.18), rgba(0,18,88,0));
+  --section-gradient: linear-gradient(136deg, rgba(0,20,80,0.98), rgba(0,30,110,0.92));
+  --section-border: rgba(217,174,63,0.25);
+  --surface-glass: rgba(255,255,255,0.05);
+  --surface-glass-strong: rgba(255,255,255,0.08);
+  --header-bg: linear-gradient(180deg, rgba(0,10,48,0.98), rgba(0,18,88,0.96));
+  --header-border: rgba(217,174,63,0.15);
+  --header-shadow: 0 10px 30px -24px rgba(0,0,0,0.85);
+  --logo-shell-bg: rgba(255,255,255,0.08);
 }

@@ -88,10 +88,10 @@ export function CategoryRail({
               key={section.id}
               href={`#${section.id}`}
               onClick={() => setActiveId(section.id)}
-              className={`whitespace-nowrap rounded-full border px-4 py-2 text-sm font-semibold transition-all duration-200 ${
+              className={`action-surface whitespace-nowrap rounded-full border px-4 py-2 text-sm font-semibold transition-all duration-200 ${
                 active
-                  ? "border-transparent bg-[var(--accent-action)] text-white shadow-[var(--shadow-soft)]"
-                  : "border-[var(--border-subtle)] surface-accent text-[var(--text-primary)] hover:-translate-y-px hover:shadow-[var(--shadow-soft)]"
+                  ? ""
+                  : "action-surface-muted hover:-translate-y-px"
               }`}
             >
               {section.label}

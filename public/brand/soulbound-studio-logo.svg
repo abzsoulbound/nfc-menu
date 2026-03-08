@@ -8,7 +8,7 @@
   <defs>
     <linearGradient id="gold" x1="0%" y1="0%" x2="100%" y2="100%">
       <stop offset="0%" stop-color="#f0d898" />
-      <stop offset="55%" stop-color="#e5aa14" />
+      <stop offset="55%" stop-color="#d9ae3f" />
       <stop offset="100%" stop-color="#9a7030" />
     </linearGradient>
     <filter id="glow" x="-40%" y="-40%" width="180%" height="180%">
@@ -61,7 +61,7 @@
       stroke-linejoin="miter"
       opacity="0.45"
     />
-    <circle cx="48" cy="30" r="3.2" fill="#e5aa14" filter="url(#glow)" />
+    <circle cx="48" cy="30" r="3.2" fill="#d9ae3f" filter="url(#glow)" />
   </g>
 
   <text

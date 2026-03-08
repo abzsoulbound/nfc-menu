@@ -877,37 +877,37 @@ export function OperationsControlCenter({
             <div className="grid grid-cols-2 gap-2">
               <Link
                 href="/staff"
-                className="focus-ring inline-flex min-h-[44px] items-center justify-center rounded-[var(--radius-control)] border border-[var(--border)] bg-[var(--accent-quiet)] px-3 text-sm font-semibold"
+                className="focus-ring action-surface action-button"
               >
                 Waiter
               </Link>
               <Link
                 href="/staff/tags"
-                className="focus-ring inline-flex min-h-[44px] items-center justify-center rounded-[var(--radius-control)] border border-[var(--border)] bg-[var(--accent-quiet)] px-3 text-sm font-semibold"
+                className="focus-ring action-surface action-button"
               >
                 Tags
               </Link>
               <Link
                 href="/kitchen"
-                className="focus-ring inline-flex min-h-[44px] items-center justify-center rounded-[var(--radius-control)] border border-[var(--border)] bg-[var(--accent-quiet)] px-3 text-sm font-semibold"
+                className="focus-ring action-surface action-button"
               >
                 Kitchen
               </Link>
               <Link
                 href="/bar"
-                className="focus-ring inline-flex min-h-[44px] items-center justify-center rounded-[var(--radius-control)] border border-[var(--border)] bg-[var(--accent-quiet)] px-3 text-sm font-semibold"
+                className="focus-ring action-surface action-button"
               >
                 Bar
               </Link>
               <Link
                 href="/manager/features"
-                className="focus-ring inline-flex min-h-[44px] items-center justify-center rounded-[var(--radius-control)] border border-[var(--border)] bg-[var(--accent-quiet)] px-3 text-sm font-semibold"
+                className="focus-ring action-surface action-button"
               >
                 Growth
               </Link>
               <Link
                 href="/manager/customize"
-                className="focus-ring inline-flex min-h-[44px] items-center justify-center rounded-[var(--radius-control)] border border-[var(--border)] bg-[var(--accent-quiet)] px-3 text-sm font-semibold"
+                className="focus-ring action-surface action-button"
               >
                 Customize
               </Link>

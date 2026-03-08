@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react"
 import { MenuItemCard } from "@/components/menu/MenuItemCard"
 import { MenuSection } from "@/components/menu/MenuSection"
+import { FeatureGate } from "@/components/ui/FeatureGate"
 import { isCustomerMinimalModeEnabled } from "@/lib/customerMode"
 import { getSectionPlaceholderUrl } from "@/lib/placeholders"
 import {
@@ -136,7 +137,7 @@ export function MinimalMenuBrowser({
 
   return (
     <div className="space-y-8">
-      <div className="rounded-2xl border border-[var(--border-subtle)] bg-[linear-gradient(152deg,rgba(250,246,239,0.96),rgba(229,170,20,0.06))] p-5 md:p-6">
+      <div className="rounded-2xl border border-[var(--border-subtle)] bg-[linear-gradient(152deg,rgba(250,246,239,0.96),rgba(217,174,63,0.06))] p-5 md:p-6">
         {showProgressAnchors && (
           <div className="mb-3 flex flex-wrap gap-2">
             <span className="status-chip status-chip-neutral inline-flex">
@@ -152,21 +153,23 @@ export function MinimalMenuBrowser({
         )}
 
         {discoveryFlow === "SEARCH_FIRST" && (
-          <div className="mb-4 grid gap-3 md:grid-cols-[minmax(0,1fr)_auto] md:items-center">
-            <label className="space-y-1.5 text-xs uppercase tracking-[0.12em] text-muted">
-              Search whole menu
-              <input
-                type="text"
-                value={searchTerm}
-                onChange={event => setSearchTerm(event.target.value)}
-                placeholder="Try burger, vegan, spicy, lager..."
-                className="input-premium w-full rounded-[var(--radius-control)] border border-[var(--border)] bg-[rgba(255,255,255,0.72)] px-4 py-2.5 text-base text-[var(--text-primary)]"
-              />
-            </label>
-            <div className="status-chip status-chip-neutral inline-flex">
-              {globalSearchCount} matches
+          <FeatureGate feature="menuSearch">
+            <div className="mb-4 grid gap-3 md:grid-cols-[minmax(0,1fr)_auto] md:items-center">
+              <label className="space-y-1.5 text-xs uppercase tracking-[0.12em] text-muted">
+                Search whole menu
+                <input
+                  type="text"
+                  value={searchTerm}
+                  onChange={event => setSearchTerm(event.target.value)}
+                  placeholder="Try burger, vegan, spicy, lager..."
+                  className="input-premium w-full rounded-[var(--radius-control)] border border-[var(--border)] bg-[var(--surface-glass-strong)] px-4 py-2.5 text-base text-[var(--text-primary)]"
+                />
+              </label>
+              <div className="status-chip status-chip-neutral inline-flex">
+                {globalSearchCount} matches
+              </div>
             </div>
-          </div>
+          </FeatureGate>
         )}
 
         <div className="scroll-fade-x flex gap-2.5 overflow-x-auto pb-2">
@@ -177,10 +180,10 @@ export function MinimalMenuBrowser({
                 key={section.id}
                 type="button"
                 onClick={() => setSelectedSectionId(section.id)}
-                className={`focus-ring shrink-0 whitespace-nowrap rounded-full border px-4 py-2 text-sm font-semibold transition-all duration-200 ${
+                className={`focus-ring action-surface shrink-0 whitespace-nowrap rounded-full border px-4 py-2 text-sm font-semibold transition-all duration-200 ${
                   active
-                    ? "border-transparent bg-[var(--accent-action)] text-white shadow-[var(--shadow-soft)]"
-                    : "border-[var(--border-subtle)] bg-[rgba(255,255,255,0.58)] text-[var(--text-primary)] hover:shadow-[var(--shadow-soft)]"
+                    ? ""
+                    : "action-surface-muted"
                 }`}
               >
                 {section.name}
@@ -190,28 +193,30 @@ export function MinimalMenuBrowser({
         </div>
 
         {discoveryFlow !== "SEARCH_FIRST" && (
-          <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_auto] md:items-center">
-            <label className="space-y-1.5 text-xs uppercase tracking-[0.12em] text-muted">
-              Search this section
-              <input
-                type="text"
-                value={searchTerm}
-                onChange={event => setSearchTerm(event.target.value)}
-                placeholder="Search dishes, drinks, or allergens"
-                className="input-premium w-full rounded-[var(--radius-control)] border border-[var(--border)] bg-[rgba(255,255,255,0.72)] px-4 py-2.5 text-base text-[var(--text-primary)]"
-              />
-            </label>
-            <div className="status-chip status-chip-neutral inline-flex">
-              {filteredItems.length} of {selectedSection.items.length} shown
+          <FeatureGate feature="menuSearch">
+            <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_auto] md:items-center">
+              <label className="space-y-1.5 text-xs uppercase tracking-[0.12em] text-muted">
+                Search this section
+                <input
+                  type="text"
+                  value={searchTerm}
+                  onChange={event => setSearchTerm(event.target.value)}
+                  placeholder="Search dishes, drinks, or allergens"
+                  className="input-premium w-full rounded-[var(--radius-control)] border border-[var(--border)] bg-[var(--surface-glass-strong)] px-4 py-2.5 text-base text-[var(--text-primary)]"
+                />
+              </label>
+              <div className="status-chip status-chip-neutral inline-flex">
+                {filteredItems.length} of {selectedSection.items.length} shown
+              </div>
             </div>
-          </div>
+          </FeatureGate>
         )}
       </div>
 
       {searchingAcrossMenu && (
         <div className="space-y-3">
           {searchResultsBySection.length === 0 && (
-            <div className="rounded-xl border border-[var(--border)] bg-[rgba(255,255,255,0.66)] px-4 py-6 text-center text-sm text-secondary">
+            <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-glass)] px-4 py-6 text-center text-sm text-secondary">
               No items match this search yet. Try a different keyword.
             </div>
           )}
@@ -254,7 +259,7 @@ export function MinimalMenuBrowser({
         imageUrl={sectionImageUrl}
       >
         {filteredItems.length === 0 && (
-          <div className="rounded-xl border border-[var(--border)] bg-[rgba(255,255,255,0.66)] px-4 py-6 text-center text-sm text-secondary">
+          <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-glass)] px-4 py-6 text-center text-sm text-secondary">
             No items match this search yet. Try a different keyword.
           </div>
         )}

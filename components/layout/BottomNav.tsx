@@ -118,14 +118,14 @@ export function BottomNav() {
               aria-current={item.active ? "page" : undefined}
               className={`focus-ring relative flex min-h-[52px] flex-col items-center justify-center rounded-[var(--radius-control)] px-1 text-[11px] font-semibold transition-colors ${
                 item.active
-                  ? "bg-[rgba(229,170,20,0.18)] text-[var(--text-primary)]"
-                  : "text-secondary hover:bg-[rgba(255,255,255,0.5)]"
+                  ? "bg-[var(--accent-metal-subtle)] text-[var(--page-text)]"
+                  : "text-[var(--page-text-secondary)] hover:bg-[var(--surface-glass)]"
               }`}
             >
               {item.icon}
               <span className="mt-0.5">{item.label}</span>
               {item.key === "cart" && cartCount > 0 ? (
-                <span className="cart-bounce absolute right-2 top-1 inline-flex min-h-[18px] min-w-[18px] items-center justify-center rounded-full bg-[var(--accent-action)] px-1 text-[10px] font-semibold text-white shadow-[0_0_8px_rgba(229,170,20,0.4)]">
+                <span className="cart-bounce absolute right-2 top-1 inline-flex min-h-[18px] min-w-[18px] items-center justify-center rounded-full bg-[var(--accent-action)] px-1 text-[10px] font-semibold text-black shadow-[0_0_8px_rgba(217,174,63,0.4)]">
                   {cartCount}
                 </span>
               ) : null}

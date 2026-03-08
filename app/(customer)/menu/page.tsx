@@ -74,19 +74,19 @@ export default async function PublicMenuPage() {
         : "Fast sheet ordering"
 
   return (
-    <div className="relative px-4 py-14 md:px-8 md:py-20">
+    <div className="page-container">
       <UxPageTracker page="menu" step="discover" />
       <div
         aria-hidden="true"
-        className="menu-orbit pointer-events-none absolute -left-20 top-20 h-48 w-48 rounded-full bg-[radial-gradient(circle,rgba(229,170,20,0.24),rgba(229,170,20,0))] blur-3xl"
+        className="menu-orbit decor-orb -left-20 top-20 h-48 w-48 decor-orb-gold"
       />
       <div
         aria-hidden="true"
-        className="menu-orbit pointer-events-none absolute -right-16 top-52 h-52 w-52 rounded-full bg-[radial-gradient(circle,rgba(0,18,88,0.18),rgba(0,18,88,0))] blur-3xl [animation-delay:260ms]"
+        className="menu-orbit decor-orb -right-16 top-52 h-52 w-52 decor-orb-navy [animation-delay:260ms]"
       />
 
-      <div className="mx-auto max-w-[1120px] space-y-14">
-        <section className="menu-reveal overflow-hidden rounded-3xl border border-[rgba(229,170,20,0.38)] bg-[linear-gradient(128deg,rgba(250,246,239,0.94),rgba(229,170,20,0.08))] shadow-[var(--shadow-soft)]">
+      <div className="page-container-inner space-y-14">
+        <section className="menu-reveal section-hero">
           <div className="grid gap-4 p-6 md:grid-cols-[1.2fr_0.8fr] md:p-8">
             <div className="space-y-5">
               <div className="text-xs uppercase tracking-[0.3em] text-muted">
@@ -132,7 +132,7 @@ export default async function PublicMenuPage() {
               </div>
 
               {!customerMinimalMode && (
-                <div className="rounded-xl border border-[var(--border-subtle)] bg-[rgba(255,255,255,0.58)] px-4 py-3 text-sm leading-relaxed text-secondary">
+                <div className="rounded-xl surface-glass-light px-4 py-3 text-sm leading-relaxed text-secondary">
                   {trustLabel}
                 </div>
               )}
@@ -140,33 +140,33 @@ export default async function PublicMenuPage() {
               <div className="flex flex-wrap gap-2">
                 <Link
                   href={menuConfig.primaryCtaHref}
-                  className="btn-press focus-ring inline-flex min-h-[44px] items-center justify-center rounded-[var(--radius-control)] border border-[var(--accent-action)] bg-[var(--accent-action)] px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[var(--accent-action-strong)]"
+                  className="focus-ring action-surface action-button px-5"
                 >
                   {menuConfig.primaryCtaLabel}
                 </Link>
                 <Link
                   href={menuConfig.secondaryCtaHref}
-                  className="btn-press focus-ring inline-flex min-h-[44px] items-center justify-center rounded-[var(--radius-control)] border border-[var(--border)] bg-[rgba(255,255,255,0.56)] px-5 py-2.5 text-sm font-semibold transition-colors hover:bg-[rgba(255,255,255,0.78)]"
+                  className="focus-ring action-surface action-button px-5"
                 >
                   {menuConfig.secondaryCtaLabel}
                 </Link>
                 <Link
                   href="/order/takeaway"
-                  className="btn-press focus-ring inline-flex min-h-[44px] items-center justify-center rounded-[var(--radius-control)] border border-[var(--border)] bg-[rgba(255,255,255,0.56)] px-5 py-2.5 text-sm font-semibold transition-colors hover:bg-[rgba(255,255,255,0.78)]"
+                  className="focus-ring action-surface action-button px-5"
                 >
                   Start takeaway
                 </Link>
               </div>
             </div>
 
-            <div className="relative min-h-[300px] overflow-hidden rounded-2xl border border-[rgba(229,170,20,0.25)] shadow-[var(--shadow-soft)]">
+              <div className="relative min-h-[300px] overflow-hidden rounded-2xl border border-[var(--section-border)] shadow-[var(--shadow-soft)]">
               <div
                 aria-label={`${restaurant.name} hero image`}
                 className="parallax-hero h-full w-full bg-cover bg-center"
                 style={{ backgroundImage: `url("${heroImageUrl}")` }}
               />
 
-              <div className="pointer-events-none absolute inset-x-0 top-0 bg-[linear-gradient(180deg,rgba(20,12,5,0.6),rgba(20,12,5,0))] px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.2em] text-[rgba(242,232,214,0.94)]">
+              <div className="pointer-events-none absolute inset-x-0 top-0 bg-[linear-gradient(180deg,rgba(20,12,5,0.6),rgba(20,12,5,0))] px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.2em] text-[rgba(255,255,255,0.94)]">
                 Guest ordering ready
               </div>
 
@@ -179,9 +179,9 @@ export default async function PublicMenuPage() {
           </div>
         </section>
 
-        <section className="menu-reveal menu-delay-1 rounded-2xl border border-[var(--border-subtle)] bg-[linear-gradient(160deg,rgba(250,246,239,0.96),rgba(229,170,20,0.06))] p-6 md:p-8">
+        <section className="menu-reveal menu-delay-1 section-card p-6 md:p-8">
           <div className="grid gap-4 md:grid-cols-3">
-            <div className="rounded-xl border border-[var(--border-subtle)] bg-[rgba(255,255,255,0.56)] px-5 py-4 card-gradient">
+            <div className="rounded-xl surface-glass-light px-5 py-4 card-gradient">
               <div className="text-[11px] uppercase tracking-[0.25em] text-muted">
                 1. Discover
               </div>
@@ -191,7 +191,7 @@ export default async function PublicMenuPage() {
                   : "Jump between sections quickly with clear category rails."}
               </div>
             </div>
-            <div className="rounded-xl border border-[var(--border-subtle)] bg-[rgba(255,255,255,0.56)] px-5 py-4 card-gradient">
+            <div className="rounded-xl surface-glass-light px-5 py-4 card-gradient">
               <div className="text-[11px] uppercase tracking-[0.25em] text-muted">
                 2. Configure
               </div>
@@ -203,7 +203,7 @@ export default async function PublicMenuPage() {
                     : "Customize with a focused bottom-sheet flow."}
               </div>
             </div>
-            <div className="rounded-xl border border-[var(--border-subtle)] bg-[rgba(255,255,255,0.56)] px-5 py-4 card-gradient">
+            <div className="rounded-xl surface-glass-light px-5 py-4 card-gradient">
               <div className="text-[11px] uppercase tracking-[0.25em] text-muted">
                 3. Complete
               </div>

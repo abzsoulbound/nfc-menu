@@ -239,7 +239,7 @@ export function AdminSystemControls() {
         <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
           <Link
             href="/manager"
-            className="focus-ring inline-flex min-h-[52px] items-center justify-center rounded-[var(--radius-control)] border border-[var(--border)] bg-[var(--accent-quiet)] px-4 py-2 text-sm font-semibold"
+            className="focus-ring action-surface action-button min-h-[52px]"
           >
             Open manager console
           </Link>

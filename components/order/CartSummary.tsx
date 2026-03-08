@@ -1,5 +1,6 @@
 import { calculateCartTotals } from "@/lib/pricing"
 import { Card } from "@/components/ui/Card"
+import { FeatureGate } from "@/components/ui/FeatureGate"
 
 export function CartSummary({
   items,
@@ -67,21 +68,25 @@ export function CartSummary({
             </div>
           )}
 
-          {discount > 0 && (
-            <div className="flex justify-between text-base text-[var(--success-fg)]">
-              <span>Discount</span>
-              <span className="tabular-nums">-£{discount.toFixed(2)}</span>
-            </div>
-          )}
+          <FeatureGate feature="promoCodeRedemption">
+            {discount > 0 && (
+              <div className="flex justify-between text-base text-[var(--success-fg)]">
+                <span>Discount</span>
+                <span className="tabular-nums">-£{discount.toFixed(2)}</span>
+              </div>
+            )}
+          </FeatureGate>
 
-          {tip > 0 && (
-            <div className="flex justify-between text-base">
-              <span className="accent-metal">Tip</span>
-              <span className="font-semibold accent-metal tabular-nums tip-count-up">
-                £{tip.toFixed(2)}
-              </span>
-            </div>
-          )}
+          <FeatureGate feature="tipping">
+            {tip > 0 && (
+              <div className="flex justify-between text-base">
+                <span className="accent-metal">Tip</span>
+                <span className="font-semibold accent-metal tabular-nums tip-count-up">
+                  £{tip.toFixed(2)}
+                </span>
+              </div>
+            )}
+          </FeatureGate>
         </div>
 
         <div className="h-px bg-[var(--accent-metal-subtle)]" />

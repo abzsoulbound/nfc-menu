@@ -1,89 +1,18 @@
+/* Customer mode: inherits :root defaults from tokens.css.
+   Only overrides that differ from :root belong here. */
 .ui-customer {
-  --bg-primary: #f5f0e8;
-  --bg-secondary: #faf6ef;
-  --bg-accent: #ebe3d3;
-
-  --surface-primary: #faf6ef;
-  --surface-secondary: #fdf9f3;
-  --surface-accent: #f0e8d8;
-  --surface-elevated: #fffcf6;
-
-  --text-primary: #001258;
-  --text-heading: #001258;
-  --text-secondary: #2a3a6b;
-  --text-muted: #5a6589;
-
-  --accent-action: #e5aa14;
-  --accent-action-strong: #c99410;
-  --accent-quiet: #faf3e0;
-  --accent-metal: #e5aa14;
-  --accent-metal-subtle: rgba(229, 170, 20, 0.18);
-
-  --success-bg: #e4f3e8;
-  --success-fg: #1a6b42;
-  --warning-bg: #fff4d9;
-  --warning-fg: #8a6115;
-  --danger-bg: #ffe3df;
-  --danger-fg: #8f2e2e;
-  --neutral-bg: #e8e2d6;
-  --neutral-fg: #3a3f54;
-
-  --border: #c9bda6;
-  --border-subtle: rgba(229, 170, 20, 0.2);
-  --focus: #e5aa14;
-
-  --shadow-soft: 0 1px 2px rgba(0, 18, 88, 0.06), 0 24px 60px -12px rgba(0, 18, 88, 0.12);
-  --shadow-hard: 0 1px 3px rgba(0, 18, 88, 0.1), 0 18px 36px -26px rgba(0, 18, 88, 0.6);
-  --shadow-elevated: 0 1px 2px rgba(0, 18, 88, 0.04), 0 4px 12px rgba(0, 18, 88, 0.06), 0 24px 60px -12px rgba(0, 18, 88, 0.12);
-
-  --radius-card: 20px;
-  --radius-control: 12px;
-
   --shell-max-width: 1120px;
 }
 
+/* Staff mode: wider layout, tighter radius, subtler orbs */
 .ui-staff {
-  --bg-primary: #000e42;
-  --bg-secondary: #001258;
-  --bg-accent: #001a6e;
-
-  --surface-primary: #001258;
-  --surface-secondary: #001a6e;
-  --surface-accent: #002080;
-  --surface-elevated: #001e78;
-
-  --text-primary: #f0f2fa;
-  --text-heading: #ffffff;
-  --text-secondary: #b8c5e8;
-  --text-muted: #8090bf;
-
-  --accent-action: #e5aa14;
-  --accent-action-strong: #c99410;
-  --accent-quiet: #0a1e5a;
-  --accent-metal: #e5aa14;
-  --accent-metal-subtle: rgba(229, 170, 20, 0.15);
-
-  --success-bg: #0a2a1a;
-  --success-fg: #b7e9cc;
-  --warning-bg: #2a1e08;
-  --warning-fg: #f6d491;
-  --danger-bg: #3a1212;
-  --danger-fg: #f3b1b1;
-  --neutral-bg: #0a1e5a;
-  --neutral-fg: #d0d8f0;
-
-  --border: #1a3080;
-  --border-subtle: rgba(229, 170, 20, 0.2);
-  --focus: #e5aa14;
-
-  --shadow-soft: 0 1px 3px rgba(0, 8, 32, 0.3), 0 14px 30px -22px rgba(0, 8, 32, 0.95);
-  --shadow-hard: 0 1px 3px rgba(0, 8, 32, 0.4), 0 14px 34px -20px rgba(0, 8, 32, 0.98);
-  --shadow-elevated: 0 1px 2px rgba(0, 8, 32, 0.2), 0 4px 12px rgba(0, 8, 32, 0.3), 0 14px 30px -22px rgba(0, 8, 32, 0.95);
-
+  --shell-max-width: 1440px;
   --radius-card: 12px;
   --radius-control: 10px;
 
-  --shell-max-width: 1440px;
+  --orb-gold: radial-gradient(circle, rgba(217,174,63,0.12), rgba(217,174,63,0));
+  --orb-navy: radial-gradient(circle, rgba(0,18,88,0.22), rgba(0,18,88,0));
+  --section-gradient: linear-gradient(132deg, rgba(0,16,60,0.98), rgba(0,24,90,0.94));
 }
 
 .surface-primary {

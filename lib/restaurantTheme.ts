@@ -92,16 +92,19 @@ export function buildThemeVars(input: {
     vars["--surface-accent"] = shift(theme.customerSurface, 16)
     vars["--surface-elevated"] = shift(theme.customerSurface, 20)
     vars["--text-primary"] = theme.customerText
-    vars["--text-secondary"] = mixHex(theme.customerText, "#FFFFFF", 0.35)
-    vars["--text-muted"] = mixHex(theme.customerText, "#FFFFFF", 0.5)
+    vars["--text-secondary"] = mixHex(theme.customerText, theme.customerSurface, 0.22)
+    vars["--text-muted"] = mixHex(theme.customerText, theme.customerSurface, 0.48)
     vars["--accent-action"] = theme.customerPrimary
     vars["--accent-action-strong"] = shift(theme.customerPrimary, -24)
+    vars["--button-accent"] = theme.customerPrimary
+    vars["--button-accent-strong"] = shift(theme.customerPrimary, -24)
     vars["--focus"] = theme.customerFocus
-    vars["--border"] = mixHex(theme.customerPrimary, theme.customerSurface, 0.6)
-    vars["--border-subtle"] = `rgba(${parseHex(theme.customerPrimary).r}, ${parseHex(theme.customerPrimary).g}, ${parseHex(theme.customerPrimary).b}, 0.2)`
+    const pp = parseHex(theme.customerPrimary)
+    vars["--border"] = `rgba(${pp.r}, ${pp.g}, ${pp.b}, 0.22)`
+    vars["--border-subtle"] = `rgba(${pp.r}, ${pp.g}, ${pp.b}, 0.12)`
     vars["--text-heading"] = theme.customerText
     vars["--accent-metal"] = mixHex(theme.customerPrimary, "#E8D5A8", 0.5)
-    vars["--accent-metal-subtle"] = `rgba(${parseHex(theme.customerPrimary).r}, ${parseHex(theme.customerPrimary).g}, ${parseHex(theme.customerPrimary).b}, 0.18)`
+    vars["--accent-metal-subtle"] = `rgba(${pp.r}, ${pp.g}, ${pp.b}, 0.18)`
   } else {
     vars["--accent-action"] = theme.staffPrimary
     vars["--accent-action-strong"] = shift(theme.staffPrimary, -18)

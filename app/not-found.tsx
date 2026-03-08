@@ -4,27 +4,31 @@ import { Divider } from "@/components/ui/Divider"
 
 export default function NotFound() {
   return (
-    <div className="min-h-screen flex items-center justify-center p-6 surface-primary">
-      <Card className="w-full max-w-md space-y-4">
-        <div className="text-lg font-semibold">
+    <div className="ui-staff min-h-screen bg-[image:var(--shell-bg)] p-6 text-[var(--page-text)]">
+      <Card className="mx-auto w-full max-w-md space-y-4 section-hero">
+        <div className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--page-text-secondary)]">
+          Route Missing
+        </div>
+
+        <div className="text-lg font-semibold text-[var(--page-text)]">
           Page not found
         </div>
 
-        <div className="text-sm text-secondary">
+        <div className="text-sm text-[var(--page-text-secondary)]">
           The page you are looking for does not exist or is no longer available.
         </div>
 
         <Divider />
 
-        <div className="text-sm text-secondary">
+        <div className="text-sm text-[var(--page-text-secondary)]">
           If you reached this page during service, return to a valid screen or contact staff.
         </div>
 
         <Link
           href="/menu"
-          className="focus-ring inline-flex min-h-[44px] w-full items-center justify-center rounded-[var(--radius-control)] border border-[var(--border)] bg-[var(--surface-accent)] px-4 py-2 text-sm font-semibold"
+          className="focus-ring action-surface action-button w-full"
         >
-          Go back
+          Back to menu
         </Link>
       </Card>
     </div>

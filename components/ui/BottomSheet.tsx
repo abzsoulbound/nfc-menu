@@ -3,6 +3,8 @@
 import { ReactNode, useEffect, useRef } from "react"
 import { Button } from "@/components/ui/Button"
 
+type DesktopPlacement = "bottom" | "sticky"
+
 function focusableElements(container: HTMLElement) {
   return Array.from(
     container.querySelectorAll<HTMLElement>(
@@ -19,6 +21,7 @@ export function BottomSheet({
   children,
   onClose,
   primaryAction,
+  desktopPlacement = "bottom",
 }: {
   title: string
   children: ReactNode
@@ -28,6 +31,7 @@ export function BottomSheet({
     onClick: () => void
     disabled?: boolean
   }
+  desktopPlacement?: DesktopPlacement
 }) {
   const sheetRef = useRef<HTMLDivElement | null>(null)
 
@@ -89,8 +93,19 @@ export function BottomSheet({
     }
   }, [onClose])
 
+  const stickyDesktop = desktopPlacement === "sticky"
+  const overlayClass = stickyDesktop
+    ? "fixed inset-0 z-50 flex items-end bg-[rgba(7,14,26,0.45)] backdrop-blur-[1px] md:items-start md:overflow-y-auto md:px-6 md:py-6"
+    : "fixed inset-0 z-50 flex items-end bg-[rgba(7,14,26,0.45)] backdrop-blur-[1px]"
+  const sheetClass = stickyDesktop
+    ? "relative w-full rounded-t-[24px] border border-[var(--border-subtle)] glass-surface p-5 shadow-[var(--shadow-elevated)] md:mx-auto md:flex md:max-h-[calc(100vh-3rem)] md:max-w-2xl md:flex-col md:rounded-[var(--radius-card)] md:sticky md:top-6"
+    : "relative w-full rounded-t-[24px] border border-[var(--border-subtle)] glass-surface p-5 shadow-[var(--shadow-elevated)] md:mx-auto md:mb-6 md:max-w-2xl md:rounded-[var(--radius-card)]"
+  const contentClass = stickyDesktop
+    ? "max-h-[65vh] overflow-y-auto pb-2 md:min-h-0 md:max-h-[calc(100vh-11rem)]"
+    : "max-h-[65vh] overflow-y-auto pb-2"
+
   return (
-    <div className="fixed inset-0 z-50 flex items-end bg-[rgba(7,14,26,0.45)] backdrop-blur-[1px]">
+    <div className={overlayClass}>
       <button
         aria-label="Close sheet"
         className="absolute inset-0 h-full w-full cursor-default"
@@ -103,7 +118,7 @@ export function BottomSheet({
         aria-modal="true"
         aria-label={title}
         tabIndex={-1}
-        className="relative w-full rounded-t-[24px] border border-[var(--border-subtle)] glass-surface p-5 shadow-[var(--shadow-elevated)] md:mx-auto md:mb-6 md:max-w-2xl md:rounded-[var(--radius-card)]"
+        className={sheetClass}
       >
         <div className="mx-auto mb-3 h-1.5 w-12 rounded-full bg-[var(--border)] md:hidden" />
         <div className="mb-3 flex items-center justify-between gap-3">
@@ -112,7 +127,7 @@ export function BottomSheet({
             Close
           </Button>
         </div>
-        <div className="max-h-[65vh] overflow-y-auto pb-2">{children}</div>
+        <div className={contentClass}>{children}</div>
         {primaryAction && (
           <div className="mt-4">
             <Button

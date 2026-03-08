@@ -19,14 +19,18 @@ export default function GlobalError({
   return (
     <div
       role="alert"
-      className="min-h-screen flex items-center justify-center p-6"
+      className="ui-staff min-h-screen bg-[image:var(--shell-bg)] p-6 text-[var(--page-text)]"
     >
-      <Card className="max-w-md w-full space-y-4">
-        <div className="text-lg font-semibold">
+      <Card className="mx-auto w-full max-w-md space-y-4 section-hero">
+        <div className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--page-text-secondary)]">
+          Runtime Recovery
+        </div>
+
+        <div className="text-lg font-semibold text-[var(--page-text)]">
           Something went wrong
         </div>
 
-        <div className="text-sm opacity-70">
+        <div className="text-sm text-[var(--page-text-secondary)]">
           An unexpected error occurred. Your session data
           has not been lost.
         </div>
@@ -38,7 +42,7 @@ export default function GlobalError({
         <div className="pt-2">
           <Button
             onClick={() => reset()}
-            className="w-full"
+            className="w-full !text-black"
           >
             Try again
           </Button>

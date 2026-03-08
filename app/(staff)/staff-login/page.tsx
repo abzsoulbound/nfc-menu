@@ -149,7 +149,7 @@ export default function StaffLoginPage() {
                 key={key}
                 type="button"
                 onClick={() => appendDigit(key)}
-                className="focus-ring min-h-[52px] rounded-xl border border-[var(--border)] surface-secondary text-lg font-semibold transition-all hover:-translate-y-px"
+                className="focus-ring action-surface min-h-[52px] rounded-xl border text-lg font-semibold transition-all hover:-translate-y-px"
               >
                 {key}
               </button>
@@ -158,14 +158,14 @@ export default function StaffLoginPage() {
             <button
               type="button"
               onClick={backspace}
-              className="focus-ring min-h-[52px] rounded-xl border border-[var(--border)] surface-secondary text-base font-semibold"
+              className="focus-ring action-surface min-h-[52px] rounded-xl border text-base font-semibold"
             >
               Back
             </button>
             <button
               type="button"
               onClick={() => appendDigit("0")}
-              className="focus-ring min-h-[52px] rounded-xl border border-[var(--border)] surface-secondary text-lg font-semibold"
+              className="focus-ring action-surface min-h-[52px] rounded-xl border text-lg font-semibold"
             >
               0
             </button>
@@ -173,7 +173,7 @@ export default function StaffLoginPage() {
               type="button"
               onClick={submit}
               disabled={passcode.length !== 4 || loading}
-              className="focus-ring min-h-[52px] rounded-xl border border-transparent bg-[var(--accent-action)] text-base font-semibold text-white disabled:opacity-50"
+              className="focus-ring action-surface min-h-[52px] rounded-xl border text-base font-semibold disabled:opacity-50"
             >
               {loading ? "..." : "Go"}
             </button>

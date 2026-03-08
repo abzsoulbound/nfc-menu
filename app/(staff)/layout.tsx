@@ -9,7 +9,11 @@ export default function StaffLayout({
 }) {
   return (
     <Providers>
-      <AppShell>{children}</AppShell>
+      <AppShell>
+        <div className="page-enter">
+          {children}
+        </div>
+      </AppShell>
     </Providers>
   )
 }

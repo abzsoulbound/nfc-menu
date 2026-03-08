@@ -34,9 +34,7 @@ export function Footer() {
         ? restaurantName
         : "Editorial warm"
 
-  const footerClass = publicSite
-    ? "border-t border-[rgba(229,170,20,0.32)] bg-[linear-gradient(110deg,#000a30,#001258_44%,#001a6e)] text-[rgba(240,242,250,0.82)]"
-    : "border-t border-[var(--border)] surface-primary"
+  const footerClass = "shell-footer"
   const supportEmail = PUBLIC_SITE_SUPPORT_EMAIL.trim()
   const supportPhone = PUBLIC_SITE_SUPPORT_PHONE.trim()
   const supportEmailHref = supportEmail.includes("@")
@@ -49,11 +47,11 @@ export function Footer() {
 
   return (
     <footer className={footerClass}>
-      <div className={`mx-auto grid w-full max-w-[var(--shell-max-width)] gap-3 px-4 py-4 text-xs md:grid-cols-[1fr_auto_1fr] md:items-center md:px-6 ${publicSite ? "text-[rgba(240,242,250,0.78)]" : "text-muted"}`}>
+      <div className={`mx-auto grid w-full max-w-[var(--shell-max-width)] gap-3 px-4 py-4 text-xs text-[var(--page-text-secondary)] md:grid-cols-[1fr_auto_1fr] md:items-center md:px-6`}>
         <div className="space-y-1">
           <Link
             href="/"
-            className={`focus-ring inline-flex rounded-[var(--radius-control)] font-semibold ${publicSite ? "text-white" : "text-[var(--text-primary)]"}`}
+            className="focus-ring inline-flex rounded-[var(--radius-control)] font-semibold text-[var(--page-text)]"
           >
             {footerLabel}
           </Link>
@@ -69,7 +67,7 @@ export function Footer() {
             <Link
               key={link.href}
               href={link.href}
-              className={`focus-ring font-medium underline decoration-transparent underline-offset-4 transition-colors ${publicSite ? "hover:text-[#e5aa14] hover:decoration-[#e5aa14]" : "hover:decoration-current"}`}
+              className="focus-ring font-medium underline decoration-transparent underline-offset-4 transition-colors hover:text-[var(--page-text)] hover:decoration-current"
             >
               {link.label}
             </Link>
@@ -81,7 +79,7 @@ export function Footer() {
             {supportEmailHref ? (
               <a
                 href={supportEmailHref}
-                className={`focus-ring underline decoration-transparent underline-offset-4 transition-colors ${publicSite ? "hover:text-[#e5aa14] hover:decoration-[#e5aa14]" : "hover:decoration-current"}`}
+                className="focus-ring underline decoration-transparent underline-offset-4 transition-colors hover:text-[var(--page-text)] hover:decoration-current"
               >
                 {supportEmail}
               </a>
@@ -93,7 +91,7 @@ export function Footer() {
             {supportPhoneHref ? (
               <a
                 href={supportPhoneHref}
-                className={`focus-ring underline decoration-transparent underline-offset-4 transition-colors ${publicSite ? "hover:text-[#e5aa14] hover:decoration-[#e5aa14]" : "hover:decoration-current"}`}
+                className="focus-ring underline decoration-transparent underline-offset-4 transition-colors hover:text-[var(--page-text)] hover:decoration-current"
               >
                 {supportPhone}
               </a>

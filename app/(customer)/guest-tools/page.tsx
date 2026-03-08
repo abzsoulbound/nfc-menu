@@ -262,8 +262,8 @@ export default function GuestToolsPage() {
   }
 
   return (
-    <div className="px-4 py-10 md:px-8 md:py-14">
-      <div className="mx-auto max-w-[980px] space-y-6">
+    <div className="page-container">
+      <div className="page-container-inner space-y-6">
         <Card variant="elevated">
           <div className="space-y-2">
             <h1 className="display-font text-4xl font-semibold tracking-tight">Guest Tools</h1>
@@ -284,7 +284,7 @@ export default function GuestToolsPage() {
             </div>
             <Link
               href="/menu"
-              className="focus-ring btn-press inline-flex min-h-[44px] items-center justify-center rounded-[var(--radius-control)] border border-[var(--border-subtle)] px-5 py-2.5 text-sm font-semibold transition-all duration-200 hover:shadow-[var(--shadow-soft)]"
+              className="focus-ring action-surface action-button px-5"
             >
               Back to menu
             </Link>
@@ -294,7 +294,7 @@ export default function GuestToolsPage() {
         {error && <div className="status-chip status-chip-danger inline-flex">{error}</div>}
 
         {postPurchaseMode && (
-          <Card className="space-y-2 border-[rgba(229,170,20,0.34)] bg-[rgba(255,255,255,0.72)]">
+          <Card className="space-y-2 surface-glass-strong">
             <div className="text-xs font-semibold uppercase tracking-[0.14em] text-muted">
               Recommended Next Actions
             </div>
@@ -321,17 +321,17 @@ export default function GuestToolsPage() {
         )}
 
         {tabMode && (
-          <div className="scroll-fade-x rounded-2xl border border-[var(--border-subtle)] bg-[rgba(255,255,255,0.62)] p-2">
+          <div className="scroll-fade-x rounded-2xl surface-glass-light p-2">
             <div className="flex gap-2.5 overflow-x-auto pb-1">
               {tabs.map(tab => (
                 <button
                   key={tab.id}
                   type="button"
                   onClick={() => setActiveTab(tab.id)}
-                  className={`focus-ring shrink-0 whitespace-nowrap rounded-full border px-4 py-2 text-sm font-semibold transition-all duration-200 ${
+                  className={`focus-ring action-surface shrink-0 whitespace-nowrap rounded-full border px-4 py-2 text-sm font-semibold transition-all duration-200 ${
                     activeTab === tab.id
-                      ? "border-transparent bg-[var(--accent-action)] text-white shadow-[var(--shadow-soft)]"
-                      : "border-[var(--border-subtle)] bg-[rgba(255,255,255,0.68)] text-[var(--text-primary)] hover:shadow-[var(--shadow-soft)]"
+                      ? ""
+                      : "action-surface-muted"
                   }`}
                 >
                   {tab.label}

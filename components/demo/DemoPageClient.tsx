@@ -32,10 +32,10 @@ const roleLabels: Record<string, string> = {
 function SectionLabel({ children }: { children: ReactNode }) {
   return (
     <div className="flex items-center gap-3 pb-1">
-      <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[rgba(229,170,20,0.7)]">
+      <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-white/80">
         {children}
       </span>
-      <span className="h-px flex-1 bg-[rgba(229,170,20,0.2)]" />
+      <span className="h-px flex-1 bg-[rgba(217,174,63,0.2)]" />
     </div>
   )
 }
@@ -52,14 +52,14 @@ export function DemoPageClient({
       <DemoDisableGuidedMode />
       <div
         aria-hidden="true"
-        className="pointer-events-none absolute inset-0 -z-10 bg-[radial-gradient(circle_at_10%_6%,rgba(0,18,88,0.9),transparent_38%),radial-gradient(circle_at_86%_12%,rgba(229,170,20,0.12),transparent_50%),linear-gradient(180deg,rgba(0,8,36,1)_0%,rgba(0,14,58,1)_45%,rgba(0,18,88,1)_100%)]"
+        className="pointer-events-none absolute inset-0 -z-10 bg-[radial-gradient(circle_at_10%_6%,rgba(0,18,88,0.9),transparent_38%),radial-gradient(circle_at_86%_12%,rgba(217,174,63,0.12),transparent_50%),linear-gradient(180deg,rgba(0,8,36,1)_0%,rgba(0,14,58,1)_45%,rgba(0,18,88,1)_100%)]"
       />
 
       <div className="mx-auto max-w-[1260px] space-y-6">
         <header className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
           <div className="space-y-3">
             <div className="flex flex-wrap gap-2">
-              <span className="rounded-full border border-[rgba(229,170,20,0.3)] bg-[rgba(229,170,20,0.08)] px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-[#e5aa14]">
+              <span className="rounded-full border border-[rgba(217,174,63,0.3)] bg-[rgba(217,174,63,0.36)] px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-black">
                 {config.companyName}
               </span>
               <span className="rounded-full border border-[rgba(255,255,255,0.15)] bg-[rgba(255,255,255,0.06)] px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-[rgba(255,255,255,0.72)]">
@@ -79,13 +79,13 @@ export function DemoPageClient({
           <div className="flex flex-wrap gap-2 lg:justify-end">
             <Link
               href="/demo-setup"
-              className="focus-ring inline-flex min-h-[42px] items-center justify-center rounded-[16px] border border-[rgba(229,170,20,0.45)] bg-[rgba(6,12,24,0.7)] px-4 text-sm font-semibold text-[#e5aa14] transition-colors hover:bg-[rgba(6,12,24,0.85)]"
+              className="focus-ring action-surface action-button rounded-[16px]"
             >
               Setup pitch
             </Link>
             <Link
               href={customerRouteHrefs.menu}
-              className="focus-ring inline-flex min-h-[42px] items-center justify-center rounded-[16px] border border-[rgba(255,255,255,0.16)] bg-[rgba(255,255,255,0.06)] px-4 text-sm font-semibold text-white transition-colors hover:bg-[rgba(255,255,255,0.1)]"
+              className="focus-ring action-surface action-button rounded-[16px]"
             >
               Open live menu
             </Link>
@@ -93,8 +93,8 @@ export function DemoPageClient({
         </header>
 
         <section className="grid gap-3 xl:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)]">
-          <div className="rounded-[24px] border border-[rgba(229,170,20,0.3)] bg-[linear-gradient(160deg,rgba(0,8,36,0.96),rgba(0,18,88,0.93))] p-5">
-            <div className="text-[10px] uppercase tracking-[0.18em] text-[rgba(229,170,20,0.72)]">
+          <div className="rounded-[24px] border border-[rgba(217,174,63,0.3)] bg-[linear-gradient(160deg,rgba(0,8,36,0.96),rgba(0,18,88,0.93))] p-5">
+            <div className="text-[10px] uppercase tracking-[0.18em] text-white/80">
               Pitch Focus
             </div>
             <h2 className="mt-2 text-2xl font-semibold tracking-tight text-white">
@@ -115,7 +115,7 @@ export function DemoPageClient({
                   key={item}
                   className="rounded-[16px] border border-[rgba(232,220,198,0.18)] bg-[rgba(6,12,24,0.55)] px-4 py-3"
                 >
-                  <div className="text-[10px] uppercase tracking-[0.16em] text-[rgba(229,170,20,0.6)]">
+                  <div className="text-[10px] uppercase tracking-[0.16em] text-white/80">
                     Priority
                   </div>
                   <div className="mt-1 text-sm leading-6 text-white">
@@ -133,9 +133,9 @@ export function DemoPageClient({
             {passcodes.map(item => (
               <div
                 key={item.role}
-                className="group rounded-[16px] border border-[rgba(232,220,198,0.18)] bg-[rgba(6,12,24,0.55)] px-4 py-3 text-center transition-all duration-200 hover:border-[rgba(229,170,20,0.4)] hover:bg-[rgba(6,12,24,0.7)]"
+                className="group rounded-[16px] border border-[rgba(232,220,198,0.18)] bg-[rgba(6,12,24,0.55)] px-4 py-3 text-center transition-all duration-200 hover:border-[rgba(217,174,63,0.4)] hover:bg-[rgba(6,12,24,0.7)]"
               >
-                <div className="text-[11px] font-medium uppercase tracking-[0.16em] text-[rgba(229,170,20,0.7)]">
+                <div className="text-[11px] font-medium uppercase tracking-[0.16em] text-white/80">
                   {roleLabels[item.role] ?? item.role}
                 </div>
                 <div className="mono-font mt-1.5 text-base font-semibold tabular-nums text-white">
@@ -153,12 +153,12 @@ export function DemoPageClient({
               <Link
                 key={route.key}
                 href={customerRouteHrefs[route.key]}
-                className="focus-ring group flex flex-col items-center justify-center gap-1 rounded-[16px] border border-[rgba(232,220,198,0.18)] bg-[rgba(6,12,24,0.55)] px-4 py-4 text-center transition-all duration-200 hover:border-[rgba(229,170,20,0.5)] hover:bg-[rgba(6,12,24,0.7)] hover:shadow-[0_2px_16px_rgba(229,170,20,0.1)]"
+                className="focus-ring action-surface action-card action-card-center group gap-1 rounded-[16px] px-4 py-4 transition-all duration-200"
               >
-                <span className="text-sm font-semibold tracking-wide text-[#e5aa14]">
+                <span className="text-sm font-semibold tracking-wide">
                   {config.customerRoutes[route.key].label}
                 </span>
-                <span className="text-[11px] text-[rgba(255,255,255,0.5)]">
+                <span className="action-subtle-text text-[11px]">
                   {config.customerRoutes[route.key].desc}
                 </span>
               </Link>
@@ -173,12 +173,12 @@ export function DemoPageClient({
               <Link
                 key={route.key}
                 href={staffRouteHrefs[route.key]}
-                className="focus-ring group flex flex-col items-center justify-center gap-1 rounded-[16px] border border-[rgba(232,220,198,0.18)] bg-[rgba(6,12,24,0.55)] px-4 py-4 text-center transition-all duration-200 hover:border-[rgba(255,255,255,0.25)] hover:bg-[rgba(6,12,24,0.7)] hover:shadow-[0_2px_16px_rgba(0,18,88,0.2)]"
+                className="focus-ring action-surface action-card action-card-center group gap-1 rounded-[16px] px-4 py-4 transition-all duration-200"
               >
-                <span className="text-sm font-semibold tracking-wide text-white">
+                <span className="text-sm font-semibold tracking-wide">
                   {config.staffRoutes[route.key].label}
                 </span>
-                <span className="text-[11px] text-[rgba(255,255,255,0.45)]">
+                <span className="action-subtle-text text-[11px]">
                   {config.staffRoutes[route.key].desc}
                 </span>
               </Link>

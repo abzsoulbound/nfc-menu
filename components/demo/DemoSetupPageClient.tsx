@@ -173,14 +173,14 @@ export function DemoSetupPageClient() {
     <div className="isolate relative min-h-screen overflow-hidden px-4 py-8 md:px-8 md:py-12">
       <div
         aria-hidden="true"
-        className="pointer-events-none absolute inset-0 -z-10 bg-[radial-gradient(circle_at_14%_8%,rgba(0,18,88,0.85),transparent_40%),radial-gradient(circle_at_88%_12%,rgba(229,170,20,0.12),transparent_48%),linear-gradient(180deg,rgba(0,8,36,1)_0%,rgba(0,14,58,1)_42%,rgba(0,18,88,1)_100%)]"
+        className="pointer-events-none absolute inset-0 -z-10 bg-[radial-gradient(circle_at_14%_8%,rgba(0,18,88,0.85),transparent_40%),radial-gradient(circle_at_88%_12%,rgba(217,174,63,0.12),transparent_48%),linear-gradient(180deg,rgba(0,8,36,1)_0%,rgba(0,14,58,1)_42%,rgba(0,18,88,1)_100%)]"
       />
 
       <div className="mx-auto max-w-[1380px] space-y-5">
-        <div className="rounded-[24px] border border-[rgba(229,170,20,0.3)] bg-[linear-gradient(160deg,rgba(0,8,36,0.96),rgba(0,18,88,0.93))] p-6 text-white">
+        <div className="rounded-[24px] border border-[rgba(217,174,63,0.3)] bg-[linear-gradient(160deg,rgba(0,8,36,0.96),rgba(0,18,88,0.93))] p-6 text-white">
           <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-end">
             <div className="space-y-2">
-              <div className="text-[10px] uppercase tracking-[0.18em] text-[rgba(229,170,20,0.72)]">
+              <div className="text-[10px] uppercase tracking-[0.18em] text-white/80">
                 Demo Setup
               </div>
               <h1 className="display-font text-3xl font-semibold tracking-tight md:text-4xl">
@@ -197,7 +197,7 @@ export function DemoSetupPageClient() {
             <div className="flex flex-wrap gap-2">
               <Link
                 href="/demo"
-                className="focus-ring inline-flex min-h-[42px] items-center justify-center rounded-xl border border-[rgba(255,255,255,0.16)] bg-[rgba(255,255,255,0.08)] px-4 text-sm font-semibold text-white transition-colors hover:bg-[rgba(255,255,255,0.14)]"
+                className="focus-ring action-surface action-button rounded-xl"
               >
                 Open demo
               </Link>
@@ -213,7 +213,7 @@ export function DemoSetupPageClient() {
           <div className="space-y-4">
             <div className="space-y-4 rounded-[24px] border border-[rgba(232,220,198,0.18)] bg-[rgba(6,12,24,0.55)] p-6 text-white">
               <div className="space-y-1">
-                <div className="text-[10px] uppercase tracking-[0.16em] text-[rgba(229,170,20,0.72)]">
+                <div className="text-[10px] uppercase tracking-[0.16em] text-white/80">
                   Buyer Frame
                 </div>
                 <h2 className="text-xl font-semibold tracking-tight">
@@ -250,7 +250,7 @@ export function DemoSetupPageClient() {
 
             <div className="space-y-4 rounded-[24px] border border-[rgba(232,220,198,0.18)] bg-[rgba(6,12,24,0.55)] p-6 text-white">
               <div className="space-y-1">
-                <div className="text-[10px] uppercase tracking-[0.16em] text-[rgba(229,170,20,0.72)]">
+                <div className="text-[10px] uppercase tracking-[0.16em] text-white/80">
                   Demo Hub Copy
                 </div>
                 <h2 className="text-xl font-semibold tracking-tight">
@@ -292,7 +292,7 @@ export function DemoSetupPageClient() {
 
             <div className="space-y-4 rounded-[24px] border border-[rgba(232,220,198,0.18)] bg-[rgba(6,12,24,0.55)] p-6 text-white">
               <div className="space-y-1">
-                <div className="text-[10px] uppercase tracking-[0.16em] text-[rgba(229,170,20,0.72)]">
+                <div className="text-[10px] uppercase tracking-[0.16em] text-white/80">
                   Talking Points
                 </div>
                 <h2 className="text-xl font-semibold tracking-tight">
@@ -327,7 +327,7 @@ export function DemoSetupPageClient() {
 
             <div className="space-y-4 rounded-[24px] border border-[rgba(232,220,198,0.18)] bg-[rgba(6,12,24,0.55)] p-6 text-white">
               <div className="space-y-1">
-                <div className="text-[10px] uppercase tracking-[0.16em] text-[rgba(229,170,20,0.72)]">
+                <div className="text-[10px] uppercase tracking-[0.16em] text-white/80">
                   Section Labels
                 </div>
                 <h2 className="text-xl font-semibold tracking-tight">
@@ -378,7 +378,7 @@ export function DemoSetupPageClient() {
 
             <div className="space-y-4 rounded-[24px] border border-[rgba(232,220,198,0.18)] bg-[rgba(6,12,24,0.55)] p-6 text-white">
               <div className="space-y-1">
-                <div className="text-[10px] uppercase tracking-[0.16em] text-[rgba(229,170,20,0.72)]">
+                <div className="text-[10px] uppercase tracking-[0.16em] text-white/80">
                   Customer Route Copy
                 </div>
                 <h2 className="text-xl font-semibold tracking-tight">
@@ -401,7 +401,7 @@ export function DemoSetupPageClient() {
 
             <div className="space-y-4 rounded-[24px] border border-[rgba(232,220,198,0.18)] bg-[rgba(6,12,24,0.55)] p-6 text-white">
               <div className="space-y-1">
-                <div className="text-[10px] uppercase tracking-[0.16em] text-[rgba(229,170,20,0.72)]">
+                <div className="text-[10px] uppercase tracking-[0.16em] text-white/80">
                   Staff Route Copy
                 </div>
                 <h2 className="text-xl font-semibold tracking-tight">
@@ -424,9 +424,9 @@ export function DemoSetupPageClient() {
           </div>
 
           <div className="space-y-4 xl:sticky xl:top-5 xl:self-start">
-            <div className="space-y-4 rounded-[24px] border border-[rgba(229,170,20,0.3)] bg-[rgba(6,12,24,0.55)] p-6 text-white">
+            <div className="space-y-4 rounded-[24px] border border-[rgba(217,174,63,0.3)] bg-[rgba(6,12,24,0.55)] p-6 text-white">
               <div className="space-y-1">
-                <div className="text-[10px] uppercase tracking-[0.16em] text-[rgba(229,170,20,0.72)]">
+                <div className="text-[10px] uppercase tracking-[0.16em] text-white/80">
                   Live Preview
                 </div>
                 <h2 className="text-xl font-semibold tracking-tight">
@@ -436,7 +436,7 @@ export function DemoSetupPageClient() {
 
               <div className="rounded-2xl border border-[rgba(255,255,255,0.12)] bg-[rgba(255,255,255,0.04)] p-4">
                 <div className="flex flex-wrap gap-2">
-                  <span className="rounded-full border border-[rgba(229,170,20,0.34)] bg-[rgba(229,170,20,0.1)] px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-[#e5aa14]">
+                  <span className="rounded-full border border-[rgba(217,174,63,0.34)] bg-[rgba(217,174,63,0.36)] px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-black">
                     {preview.companyName}
                   </span>
                   <span className="rounded-full border border-[rgba(255,255,255,0.16)] px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-[rgba(255,255,255,0.72)]">
@@ -449,7 +449,7 @@ export function DemoSetupPageClient() {
                 <p className="mt-2 text-sm leading-6 text-[rgba(255,255,255,0.72)]">
                   {preview.heroSubtitle}
                 </p>
-                <div className="mt-4 rounded-xl border border-[rgba(229,170,20,0.18)] bg-[rgba(0,0,0,0.12)] p-3">
+                <div className="mt-4 rounded-xl border border-[rgba(217,174,63,0.18)] bg-[rgba(0,0,0,0.12)] p-3">
                   <div className="text-sm font-semibold text-white">
                     {preview.spotlightTitle}
                   </div>
@@ -457,7 +457,7 @@ export function DemoSetupPageClient() {
                     {preview.spotlightBody}
                   </p>
                 </div>
-                <div className="mt-3 text-xs uppercase tracking-[0.14em] text-[rgba(229,170,20,0.7)]">
+                <div className="mt-3 text-xs uppercase tracking-[0.14em] text-white/80">
                   {preview.pitchGoal}
                 </div>
               </div>
@@ -492,7 +492,7 @@ export function DemoSetupPageClient() {
                 </Button>
                 <Link
                   href="/demo"
-                  className="focus-ring inline-flex min-h-[44px] flex-1 items-center justify-center rounded-[var(--radius-control)] border border-[var(--border)] bg-[rgba(255,255,255,0.06)] px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[rgba(255,255,255,0.12)]"
+                  className="focus-ring action-surface action-button flex-1"
                 >
                   Preview demo
                 </Link>

@@ -177,7 +177,7 @@ export function DemoNarrationOverlay() {
         <button
           type="button"
           onClick={() => setDismissed(true)}
-          className="focus-ring rounded-md px-2 py-1 text-xs text-muted"
+          className="focus-ring action-surface action-button action-button-sm rounded-md"
         >
           Hide
         </button>

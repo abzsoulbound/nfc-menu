@@ -336,6 +336,7 @@ model Restaurant {
   logoUrl     String?
   heroUrl     String?
   experienceConfig Json?
+  featureConfig Json?
   stripeAccountId String?
   stripeAccountStatus String @default("DISCONNECTED")
   stripeChargesEnabled Boolean @default(false)

@@ -6,6 +6,7 @@ import { useCartStore } from "@/store/useCartStore"
 import { useStaffStore } from "@/store/useStaffStore"
 import { useUIStore } from "@/store/useUIStore"
 import { useRestaurantStore } from "@/store/useRestaurantStore"
+import { useFeatureStore } from "@/store/useFeatureStore"
 import { ToastProvider } from "@/components/ui/Toast"
 import { ModalProvider } from "@/components/ui/Modal"
 import { DemoNarrationOverlay } from "@/components/demo/DemoNarrationOverlay"
@@ -28,6 +29,7 @@ export function Providers({ children }: { children: ReactNode }) {
   const hydrateStaff = useStaffStore(s => s.hydrate)
   const hydrateUI = useUIStore(s => s.hydrate)
   const setRestaurant = useRestaurantStore(s => s.setRestaurant)
+  const setFeatures = useFeatureStore(s => s.setFeatures)
 
   useEffect(() => {
     /*
@@ -124,6 +126,7 @@ export function Providers({ children }: { children: ReactNode }) {
         }
         isDemo: boolean
       }
+      resolvedFeatures?: Record<string, boolean>
     }>("/api/tenant/bootstrap", { cache: "no-store" })
       .then(payload => {
         setRestaurant({
@@ -135,6 +138,12 @@ export function Providers({ children }: { children: ReactNode }) {
           experienceConfig: payload.restaurant.experienceConfig,
           isDemo: payload.restaurant.isDemo,
         })
+        if (payload.resolvedFeatures) {
+          setFeatures(
+            payload.resolvedFeatures,
+            (payload.restaurant as { planTier?: string }).planTier
+          )
+        }
       })
       .catch(() => {
         // Preserve default local brand state if tenant endpoint is unavailable.
@@ -145,6 +154,7 @@ export function Providers({ children }: { children: ReactNode }) {
     hydrateStaff,
     hydrateUI,
     setRestaurant,
+    setFeatures,
   ])
 
   return (

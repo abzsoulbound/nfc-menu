@@ -69,7 +69,7 @@ const MODE_CONFIG: Record<
     burstTicks: 1,
     cadenceMs: 2800,
     toneClass:
-      "status-chip-neutral border-[rgba(126,170,240,0.44)] bg-[rgba(30,50,82,0.64)] text-[#dbe9ff]",
+      "status-chip-neutral border-[rgba(217,174,63,0.3)] bg-[rgba(0,18,88,0.7)] text-white",
   },
   RUSH_HOUR: {
     label: "Rush Hour",
@@ -77,7 +77,7 @@ const MODE_CONFIG: Record<
     burstTicks: 2,
     cadenceMs: 1400,
     toneClass:
-      "border-[rgba(214,181,112,0.54)] bg-[rgba(88,66,29,0.64)] text-[#f0ddb4]",
+      "border-[rgba(217,174,63,0.6)] bg-[rgba(217,174,63,0.35)] text-black",
   },
   FULL_SERVICE: {
     label: "Full Service Peak",
@@ -85,7 +85,7 @@ const MODE_CONFIG: Record<
     burstTicks: 4,
     cadenceMs: 900,
     toneClass:
-      "border-[rgba(228,130,124,0.54)] bg-[rgba(92,38,38,0.62)] text-[#ffd9d4]",
+      "border-[rgba(217,174,63,0.3)] bg-[rgba(0,18,88,0.82)] text-white",
   },
 }
 

@@ -17,8 +17,6 @@ atlas-launch-handoff.zip
 .env.*
 .env.*.local
 !.env.example
-!.env.ci.production
-!.env.neoncheck.production
 
 .vercel
 .vscode/
@@ -33,3 +31,4 @@ smoke-*.json
 
 # local scripts
 esbuild-smoke.js
+image.png

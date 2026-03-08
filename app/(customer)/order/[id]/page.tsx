@@ -745,20 +745,20 @@ export default function TagOrderingPage({
   }
 
   return (
-    <div className="relative px-4 py-8 md:px-8 md:py-12">
+    <div className="page-container overflow-hidden">
       <div
         aria-hidden="true"
-        className="menu-orbit pointer-events-none absolute -left-16 top-14 h-44 w-44 rounded-full bg-[radial-gradient(circle,rgba(229,170,20,0.22),rgba(229,170,20,0))] blur-3xl"
+        className="menu-orbit decor-orb -left-16 top-14 h-44 w-44 decor-orb-gold"
       />
       <div
         aria-hidden="true"
-        className="menu-orbit pointer-events-none absolute -right-12 top-48 h-48 w-48 rounded-full bg-[radial-gradient(circle,rgba(0,18,88,0.18),rgba(0,18,88,0))] blur-3xl [animation-delay:240ms]"
+        className="menu-orbit decor-orb -right-12 top-48 h-48 w-48 decor-orb-navy [animation-delay:240ms]"
       />
 
-      <div className="mx-auto max-w-[1120px] space-y-8 pb-24">
+      <div className="page-container-inner space-y-8 pb-24">
         <Card
           variant="elevated"
-          className="menu-reveal border-[rgba(229,170,20,0.36)] bg-[linear-gradient(136deg,rgba(250,246,239,0.96),rgba(229,170,20,0.08))]"
+          className="menu-reveal section-hero"
         >
           <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_auto] md:items-end">
             <div className="space-y-3">
@@ -773,7 +773,7 @@ export default function TagOrderingPage({
               </p>
             </div>
 
-            <div className="rounded-xl border border-[var(--border-subtle)] bg-[rgba(255,255,255,0.62)] px-5 py-4 text-right">
+            <div className="rounded-xl surface-glass-light px-5 py-4 text-right">
               <div className="text-[11px] uppercase tracking-[0.2em] text-muted">
                 Basket
               </div>
@@ -830,7 +830,7 @@ export default function TagOrderingPage({
           </div>
 
           {strictOrderSafety && (
-            <div className="mt-3 rounded-xl border border-[var(--border)] bg-[rgba(255,255,255,0.58)] px-3 py-2 text-xs text-secondary">
+            <div className="mt-3 rounded-xl surface-glass-light px-3 py-2 text-xs text-secondary">
               Double-check item choices before reviewing. Need help? Ask a
               staff member at your table.
             </div>
@@ -838,7 +838,7 @@ export default function TagOrderingPage({
         </Card>
 
         {menuSections.length > 0 && (
-          <div className="menu-reveal menu-delay-1 rounded-2xl border border-[var(--border)] bg-[linear-gradient(160deg,rgba(250,246,239,0.96),rgba(229,170,20,0.06))] p-3">
+          <div className="menu-reveal menu-delay-1 section-card p-3">
             {uxConfig.showProgressAnchors && (
               <div className="mb-2 flex flex-wrap gap-2">
                 <span className="status-chip status-chip-neutral inline-flex">
@@ -861,10 +861,10 @@ export default function TagOrderingPage({
                     key={section.id}
                     type="button"
                     onClick={() => setSelectedSectionId(section.id)}
-                    className={`focus-ring shrink-0 whitespace-nowrap rounded-full border px-3 py-1.5 text-xs font-semibold transition-all duration-150 ${
+                    className={`focus-ring action-surface shrink-0 whitespace-nowrap rounded-full border px-3 py-1.5 text-xs font-semibold transition-all duration-150 ${
                       active
-                        ? "border-transparent bg-[var(--accent-action)] text-white shadow-[var(--shadow-soft)]"
-                        : "border-[var(--border)] bg-[rgba(255,255,255,0.58)] text-[var(--text-primary)]"
+                        ? ""
+                        : "action-surface-muted"
                     }`}
                   >
                     {section.name}
@@ -1052,9 +1052,9 @@ export default function TagOrderingPage({
       {!viewOnly && basketCount > 0 && (
         <div className="fixed inset-x-0 bottom-4 z-30 px-4 md:px-6">
           <div className="mx-auto max-w-[1120px]">
-            <div className="rounded-2xl border border-[rgba(229,170,20,0.45)] bg-[rgba(0,18,88,0.92)] px-3 py-3 shadow-[var(--shadow-hard)] backdrop-blur">
+            <div className="rounded-2xl border border-[rgba(217,174,63,0.45)] bg-[rgba(0,18,88,0.92)] px-3 py-3 shadow-[var(--shadow-hard)] backdrop-blur">
               <div className="flex flex-wrap items-center justify-between gap-3">
-                <div className="text-[13px] text-[rgba(238,227,207,0.92)]">
+                <div className="text-[13px] text-[rgba(255,255,255,0.92)]">
                   <span className="font-semibold">
                     {basketCount} item{basketCount === 1 ? "" : "s"}
                   </span>{" "}
@@ -1082,6 +1082,7 @@ export default function TagOrderingPage({
         <BottomSheet
           title={`Configure ${configItem.name}`}
           onClose={resetConfiguratorState}
+          desktopPlacement="sticky"
           primaryAction={{
             label: editingLineId ? "Save changes" : "Add to basket",
             onClick: addConfiguredItemToBasket,

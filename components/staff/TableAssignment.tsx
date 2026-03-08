@@ -1,6 +1,5 @@
 "use client"
 
-import { Badge } from "@/components/ui/Badge"
 import { Button } from "@/components/ui/Button"
 import { Card } from "@/components/ui/Card"
 import { fetchJson } from "@/lib/fetchJson"
@@ -91,11 +90,13 @@ export function TableAssignment({
           <button
             key={tag.id}
             type="button"
-            className="focus-ring flex w-full items-center justify-between rounded-[var(--radius-control)] border border-[var(--border)] surface-secondary px-3 py-2 text-left"
+            className="focus-ring action-surface flex w-full items-center justify-between rounded-[var(--radius-control)] border px-3 py-2 text-left"
             onClick={() => assign(tag.id).catch(() => {})}
           >
             <span className="mono-font text-sm">{tag.id}</span>
-            <Badge variant="neutral">Assign</Badge>
+            <span className="text-xs font-semibold uppercase tracking-[0.14em]">
+              Assign
+            </span>
           </button>
         ))}
       </Card>

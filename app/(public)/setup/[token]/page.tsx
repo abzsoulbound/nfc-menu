@@ -139,13 +139,13 @@ export default function SetupPage({
             <div className="mt-4 flex flex-wrap gap-2">
               <Link
                 href={result.launchUrl}
-                className="focus-ring inline-flex min-h-[40px] items-center rounded-[var(--radius-control)] border border-[var(--border)] bg-[var(--accent-action)] px-3 text-sm font-semibold text-white"
+                className="focus-ring action-surface action-button"
               >
                 Open Customer Menu
               </Link>
               <Link
                 href={result.staffLoginUrl}
-                className="focus-ring inline-flex min-h-[40px] items-center rounded-[var(--radius-control)] border border-[var(--border)] bg-[var(--accent-quiet)] px-3 text-sm font-semibold"
+                className="focus-ring action-surface action-button"
               >
                 Open Staff Login
               </Link>
@@ -197,7 +197,7 @@ export default function SetupPage({
                 <Link
                   key={`${action.role}:${action.href}`}
                   href={action.href}
-                  className="focus-ring inline-flex min-h-[38px] items-center rounded-[var(--radius-control)] border border-[var(--border)] bg-white/70 px-3 text-sm font-medium"
+                  className="focus-ring action-surface action-button action-button-sm"
                 >
                   {action.label}
                 </Link>
@@ -275,7 +275,7 @@ export default function SetupPage({
               loadingStatus ||
               setupStatus?.state !== "READY"
             }
-            className="focus-ring inline-flex min-h-[40px] items-center rounded-[var(--radius-control)] border border-[var(--border)] bg-[var(--accent-action)] px-3 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
+            className="focus-ring action-surface action-button disabled:cursor-not-allowed disabled:opacity-60"
           >
             {submitting ? "Provisioning..." : "Complete Setup"}
           </button>

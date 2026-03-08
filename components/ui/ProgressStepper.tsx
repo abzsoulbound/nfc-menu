@@ -32,7 +32,7 @@ export function ProgressStepper({
               <span
                 className={`inline-flex h-6 w-6 items-center justify-center rounded-full text-xs font-semibold ${
                   completed || current
-                    ? "bg-[var(--accent-action)] text-white"
+                    ? "bg-[var(--accent-action)] text-black"
                     : "bg-[var(--surface-accent)] text-secondary"
                 }`}
               >

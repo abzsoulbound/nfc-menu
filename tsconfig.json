@@ -39,7 +39,8 @@
     ".next-build-proof/types/**/*.ts",
     ".next-build/types/**/*.ts",
     ".next-e2e/types/**/*.ts",
-    ".next-build-release/types/**/*.ts"
+    ".next-build-release/types/**/*.ts",
+    ".next/types/**/*.ts"
   ],
   "exclude": [
     "node_modules",

@@ -1,5 +1,6 @@
 import { AllergenList } from "@/components/menu/AllergenList"
 import { Card } from "@/components/ui/Card"
+import { FeatureGate } from "@/components/ui/FeatureGate"
 
 export function CartLineItem({
   name,
@@ -28,7 +29,9 @@ export function CartLineItem({
             </div>
           )}
 
-          <AllergenList allergens={allergens} />
+          <FeatureGate feature="allergenDisplay">
+            <AllergenList allergens={allergens} />
+          </FeatureGate>
         </div>
 
         <div className="text-sm">

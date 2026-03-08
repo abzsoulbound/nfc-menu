@@ -1,7 +1,7 @@
 import { rm } from "node:fs/promises"
 import { pathToFileURL } from "node:url"
 
-const DEFAULT_NEXT_DIST_DIR = ".next-build"
+const DEFAULT_NEXT_DIST_DIR = ".next"
 
 export async function cleanNextDistDir(
   distDir = process.env.NEXT_DIST_DIR?.trim() || DEFAULT_NEXT_DIST_DIR

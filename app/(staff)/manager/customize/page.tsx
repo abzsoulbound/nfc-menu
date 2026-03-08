@@ -29,7 +29,7 @@ type RestaurantCustomizationPayload = {
 }
 
 const fieldClass =
-  "w-full rounded-[var(--radius-control)] border border-[rgba(120,161,234,0.36)] bg-[rgba(20,34,58,0.54)] px-3 py-2 text-sm text-[var(--text-primary)] outline-none transition-colors focus:border-[rgba(138,180,255,0.72)]"
+  "w-full rounded-[var(--radius-control)] border border-[rgba(0,18,88,0.36)] bg-[rgba(0,18,88,0.54)] px-3 py-2 text-sm text-[var(--text-primary)] outline-none transition-colors focus:border-[rgba(0,18,88,0.72)]"
 const textareaClass = `${fieldClass} min-h-[80px]`
 
 const presetDescriptions: Record<CustomerExperiencePresetId, string> = {
@@ -194,19 +194,19 @@ export default function ManagerCustomizePage() {
       <div className="relative px-4 py-5 md:px-6 md:py-6">
         <div
           aria-hidden="true"
-          className="pointer-events-none absolute -left-12 top-14 h-44 w-44 rounded-full bg-[radial-gradient(circle,rgba(96,138,214,0.22),rgba(96,138,214,0))] blur-3xl"
+          className="pointer-events-none absolute -left-12 top-14 h-44 w-44 rounded-full bg-[radial-gradient(circle,rgba(0,18,88,0.22),rgba(0,18,88,0))] blur-3xl"
         />
         <div
           aria-hidden="true"
-          className="pointer-events-none absolute -right-10 top-52 h-48 w-48 rounded-full bg-[radial-gradient(circle,rgba(103,162,236,0.2),rgba(103,162,236,0))] blur-3xl"
+          className="pointer-events-none absolute -right-10 top-52 h-48 w-48 rounded-full bg-[radial-gradient(circle,rgba(0,18,88,0.2),rgba(0,18,88,0))] blur-3xl"
         />
 
         <div className="mx-auto max-w-[1180px]">
           <Card
             variant="elevated"
-            className="border-[rgba(111,147,213,0.4)] bg-[linear-gradient(132deg,rgba(15,28,50,0.96),rgba(21,39,66,0.94),rgba(29,52,85,0.92))]"
+            className="border-[rgba(0,18,88,0.4)] bg-[linear-gradient(132deg,rgba(15,28,50,0.96),rgba(21,39,66,0.94),rgba(29,52,85,0.92))]"
           >
-            <div className="text-sm text-[rgba(197,214,244,0.9)]">
+            <div className="text-sm text-[rgba(255,255,255,0.9)]">
               Loading customization settings...
             </div>
           </Card>
@@ -223,27 +223,27 @@ export default function ManagerCustomizePage() {
     <div className="relative px-4 py-5 md:px-6 md:py-6">
       <div
         aria-hidden="true"
-        className="pointer-events-none absolute -left-12 top-14 h-44 w-44 rounded-full bg-[radial-gradient(circle,rgba(96,138,214,0.22),rgba(96,138,214,0))] blur-3xl"
+        className="pointer-events-none absolute -left-12 top-14 h-44 w-44 rounded-full bg-[radial-gradient(circle,rgba(0,18,88,0.22),rgba(0,18,88,0))] blur-3xl"
       />
       <div
         aria-hidden="true"
-        className="pointer-events-none absolute -right-10 top-52 h-48 w-48 rounded-full bg-[radial-gradient(circle,rgba(103,162,236,0.2),rgba(103,162,236,0))] blur-3xl"
+        className="pointer-events-none absolute -right-10 top-52 h-48 w-48 rounded-full bg-[radial-gradient(circle,rgba(0,18,88,0.2),rgba(0,18,88,0))] blur-3xl"
       />
 
       <div className="mx-auto max-w-[1180px] space-y-4">
         <Card
           variant="elevated"
-          className="border-[rgba(111,147,213,0.4)] bg-[linear-gradient(132deg,rgba(15,28,50,0.96),rgba(21,39,66,0.94),rgba(29,52,85,0.92))]"
+          className="border-[rgba(0,18,88,0.4)] bg-[linear-gradient(132deg,rgba(15,28,50,0.96),rgba(21,39,66,0.94),rgba(29,52,85,0.92))]"
         >
           <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
             <div className="space-y-2">
-              <div className="text-[10px] uppercase tracking-[0.18em] text-[rgba(184,205,244,0.82)]">
+              <div className="text-[10px] uppercase tracking-[0.18em] text-[rgba(255,255,255,0.82)]">
                 Experience Customization
               </div>
-              <h1 className="text-3xl font-semibold tracking-tight text-[#eef4ff] md:text-4xl">
+              <h1 className="text-3xl font-semibold tracking-tight text-white md:text-4xl">
                 Customer page customization
               </h1>
-              <p className="max-w-3xl text-sm leading-6 text-[rgba(197,214,244,0.86)]">
+              <p className="max-w-3xl text-sm leading-6 text-[rgba(255,255,255,0.86)]">
                 Configure guest-facing menu and review pages for{" "}
                 <span className="mono-font">{slug}</span>.
               </p>
@@ -251,19 +251,19 @@ export default function ManagerCustomizePage() {
             <div className="flex flex-wrap gap-2">
               <Link
                 href="/manager"
-                className="focus-ring inline-flex min-h-[38px] items-center justify-center rounded-[var(--radius-control)] border border-[rgba(114,153,225,0.56)] bg-[rgba(29,50,81,0.76)] px-3 text-xs font-semibold text-[#dce9ff] transition-colors hover:bg-[rgba(41,67,108,0.92)]"
+                className="focus-ring action-surface action-button action-button-sm"
               >
                 Back to manager
               </Link>
               <Link
                 href="/menu"
-                className="focus-ring inline-flex min-h-[38px] items-center justify-center rounded-[var(--radius-control)] border border-[rgba(114,153,225,0.56)] bg-[rgba(29,50,81,0.76)] px-3 text-xs font-semibold text-[#dce9ff] transition-colors hover:bg-[rgba(41,67,108,0.92)]"
+                className="focus-ring action-surface action-button action-button-sm"
               >
                 Menu preview
               </Link>
               <Link
                 href="/order/takeaway"
-                className="focus-ring inline-flex min-h-[38px] items-center justify-center rounded-[var(--radius-control)] border border-[rgba(114,153,225,0.56)] bg-[rgba(29,50,81,0.76)] px-3 text-xs font-semibold text-[#dce9ff] transition-colors hover:bg-[rgba(41,67,108,0.92)]"
+                className="focus-ring action-surface action-button action-button-sm"
               >
                 Review preview
               </Link>
@@ -284,15 +284,15 @@ export default function ManagerCustomizePage() {
               </div>
             ) : null}
 
-            <Card className="space-y-4 border-[rgba(114,153,225,0.34)] bg-[rgba(16,27,47,0.72)]">
+            <Card className="space-y-4 border-[rgba(0,18,88,0.34)] bg-[rgba(0,18,88,0.72)]">
               <div className="space-y-1">
                 <div className="text-[10px] uppercase tracking-[0.16em] text-[rgba(160,189,237,0.86)]">
                   Brand Setup
                 </div>
-                <h2 className="text-lg font-semibold tracking-tight text-[#e8f1ff]">
+                <h2 className="text-lg font-semibold tracking-tight text-[#faf6ef]">
                   Restaurant identity
                 </h2>
-                <p className="text-sm text-[rgba(183,205,239,0.78)]">
+                <p className="text-sm text-[rgba(255,255,255,0.78)]">
                   These values appear across customer menu and order review pages.
                 </p>
               </div>
@@ -335,15 +335,15 @@ export default function ManagerCustomizePage() {
               </div>
             </Card>
 
-            <Card className="space-y-4 border-[rgba(114,153,225,0.34)] bg-[rgba(16,27,47,0.72)]">
+            <Card className="space-y-4 border-[rgba(0,18,88,0.34)] bg-[rgba(0,18,88,0.72)]">
               <div className="space-y-1">
                 <div className="text-[10px] uppercase tracking-[0.16em] text-[rgba(160,189,237,0.86)]">
                   Theme
                 </div>
-                <h2 className="text-lg font-semibold tracking-tight text-[#e8f1ff]">
+                <h2 className="text-lg font-semibold tracking-tight text-[#faf6ef]">
                   Customizable UX tokens
                 </h2>
-                <p className="text-sm text-[rgba(183,205,239,0.78)]">
+                <p className="text-sm text-[rgba(255,255,255,0.78)]">
                   Configure colors, radius style, and font tone per restaurant.
                 </p>
               </div>
@@ -507,20 +507,20 @@ export default function ManagerCustomizePage() {
               </div>
             </Card>
 
-            <Card className="space-y-4 border-[rgba(114,153,225,0.34)] bg-[rgba(16,27,47,0.72)]">
+            <Card className="space-y-4 border-[rgba(0,18,88,0.34)] bg-[rgba(0,18,88,0.72)]">
               <div className="space-y-1">
                 <div className="text-[10px] uppercase tracking-[0.16em] text-[rgba(160,189,237,0.86)]">
                   UX Flow
                 </div>
-                <h2 className="text-lg font-semibold tracking-tight text-[#e8f1ff]">
+                <h2 className="text-lg font-semibold tracking-tight text-[#faf6ef]">
                   Behavioral journey controls
                 </h2>
-                <p className="text-sm text-[rgba(183,205,239,0.78)]">
+                <p className="text-sm text-[rgba(255,255,255,0.78)]">
                   Choose the flow architecture per restaurant to match guest behavior and service style.
                 </p>
               </div>
 
-              <div className="space-y-2 rounded-[var(--radius-control)] border border-[rgba(120,161,234,0.3)] bg-[rgba(20,34,58,0.45)] p-3">
+              <div className="space-y-2 rounded-[var(--radius-control)] border border-[rgba(0,18,88,0.3)] bg-[rgba(0,18,88,0.45)] p-3">
                 <div className="grid gap-2 md:grid-cols-[minmax(0,1fr)_auto] md:items-end">
                   <label className="space-y-1 text-sm">
                     <span className="font-medium">Preset pack</span>
@@ -546,10 +546,10 @@ export default function ManagerCustomizePage() {
                     Apply preset
                   </Button>
                 </div>
-                <div className="text-xs text-[rgba(183,205,239,0.78)]">
+                <div className="text-xs text-[rgba(255,255,255,0.78)]">
                   {presetDescriptions[presetDraftId]}
                 </div>
-                <div className="grid gap-1 text-xs text-[rgba(183,205,239,0.72)] md:grid-cols-2">
+                <div className="grid gap-1 text-xs text-[rgba(255,255,255,0.72)] md:grid-cols-2">
                   <div>
                     Preset flow: {CUSTOMER_EXPERIENCE_PRESETS[presetDraftId].menuDiscovery}
                     {" -> "}
@@ -863,7 +863,7 @@ export default function ManagerCustomizePage() {
               </div>
 
               <div className="grid gap-2 sm:grid-cols-2">
-                <label className="inline-flex items-center gap-2 rounded-[var(--radius-control)] border border-[rgba(120,161,234,0.3)] bg-[rgba(20,34,58,0.45)] px-3 py-2 text-sm">
+                <label className="inline-flex items-center gap-2 rounded-[var(--radius-control)] border border-[rgba(0,18,88,0.3)] bg-[rgba(0,18,88,0.45)] px-3 py-2 text-sm">
                   <input
                     type="checkbox"
                     checked={config.ux.showProgressAnchors}
@@ -883,7 +883,7 @@ export default function ManagerCustomizePage() {
                   />
                   Show progress anchors
                 </label>
-                <label className="inline-flex items-center gap-2 rounded-[var(--radius-control)] border border-[rgba(120,161,234,0.3)] bg-[rgba(20,34,58,0.45)] px-3 py-2 text-sm">
+                <label className="inline-flex items-center gap-2 rounded-[var(--radius-control)] border border-[rgba(0,18,88,0.3)] bg-[rgba(0,18,88,0.45)] px-3 py-2 text-sm">
                   <input
                     type="checkbox"
                     checked={config.ux.emphasizeSocialProof}
@@ -911,12 +911,12 @@ export default function ManagerCustomizePage() {
               </div>
             </Card>
 
-            <Card className="space-y-4 border-[rgba(114,153,225,0.34)] bg-[rgba(16,27,47,0.72)]">
+            <Card className="space-y-4 border-[rgba(0,18,88,0.34)] bg-[rgba(0,18,88,0.72)]">
               <div className="space-y-1">
                 <div className="text-[10px] uppercase tracking-[0.16em] text-[rgba(160,189,237,0.86)]">
                   Menu Page
                 </div>
-                <h2 className="text-lg font-semibold tracking-tight text-[#e8f1ff]">
+                <h2 className="text-lg font-semibold tracking-tight text-[#faf6ef]">
                   Hero and call-to-actions
                 </h2>
               </div>
@@ -1046,7 +1046,7 @@ export default function ManagerCustomizePage() {
                 </label>
               </div>
               <div className="grid gap-2 sm:grid-cols-2">
-                <label className="inline-flex items-center gap-2 rounded-[var(--radius-control)] border border-[rgba(120,161,234,0.3)] bg-[rgba(20,34,58,0.45)] px-3 py-2 text-sm">
+                <label className="inline-flex items-center gap-2 rounded-[var(--radius-control)] border border-[rgba(0,18,88,0.3)] bg-[rgba(0,18,88,0.45)] px-3 py-2 text-sm">
                   <input
                     type="checkbox"
                     checked={config.menu.showMetaStats}
@@ -1066,7 +1066,7 @@ export default function ManagerCustomizePage() {
                   />
                   Show section/item stats
                 </label>
-                <label className="inline-flex items-center gap-2 rounded-[var(--radius-control)] border border-[rgba(120,161,234,0.3)] bg-[rgba(20,34,58,0.45)] px-3 py-2 text-sm">
+                <label className="inline-flex items-center gap-2 rounded-[var(--radius-control)] border border-[rgba(0,18,88,0.3)] bg-[rgba(0,18,88,0.45)] px-3 py-2 text-sm">
                   <input
                     type="checkbox"
                     checked={config.menu.showPlaceholderNote}
@@ -1089,12 +1089,12 @@ export default function ManagerCustomizePage() {
               </div>
             </Card>
 
-            <Card className="space-y-4 border-[rgba(114,153,225,0.34)] bg-[rgba(16,27,47,0.72)]">
+            <Card className="space-y-4 border-[rgba(0,18,88,0.34)] bg-[rgba(0,18,88,0.72)]">
               <div className="space-y-1">
                 <div className="text-[10px] uppercase tracking-[0.16em] text-[rgba(160,189,237,0.86)]">
                   Review Page
                 </div>
-                <h2 className="text-lg font-semibold tracking-tight text-[#e8f1ff]">
+                <h2 className="text-lg font-semibold tracking-tight text-[#faf6ef]">
                   Checkout confirmation messaging
                 </h2>
               </div>
@@ -1241,7 +1241,7 @@ export default function ManagerCustomizePage() {
                   />
                 </label>
               </div>
-              <label className="inline-flex items-center gap-2 rounded-[var(--radius-control)] border border-[rgba(120,161,234,0.3)] bg-[rgba(20,34,58,0.45)] px-3 py-2 text-sm">
+              <label className="inline-flex items-center gap-2 rounded-[var(--radius-control)] border border-[rgba(0,18,88,0.3)] bg-[rgba(0,18,88,0.45)] px-3 py-2 text-sm">
                 <input
                   type="checkbox"
                   checked={config.review.showAllergens}
@@ -1265,20 +1265,20 @@ export default function ManagerCustomizePage() {
           </div>
 
           <div className="space-y-4">
-            <Card className="space-y-3 border-[rgba(114,153,225,0.38)] bg-[rgba(16,27,47,0.8)] xl:sticky xl:top-4">
+            <Card className="space-y-3 border-[rgba(0,18,88,0.38)] bg-[rgba(0,18,88,0.8)] xl:sticky xl:top-4">
               <div className="space-y-1">
                 <div className="text-[10px] uppercase tracking-[0.16em] text-[rgba(160,189,237,0.86)]">
                   Publish
                 </div>
-                <h2 className="text-lg font-semibold tracking-tight text-[#e8f1ff]">
+                <h2 className="text-lg font-semibold tracking-tight text-[#faf6ef]">
                   Apply customization
                 </h2>
-                <p className="text-sm text-[rgba(183,205,239,0.78)]">
+                <p className="text-sm text-[rgba(255,255,255,0.78)]">
                   Changes apply immediately to guest pages for this restaurant.
                 </p>
-                <div className="text-xs text-[rgba(183,205,239,0.74)]">
+                <div className="text-xs text-[rgba(255,255,255,0.74)]">
                   Public launch status:{" "}
-                  <span className="font-semibold text-[#dce9ff]">
+                  <span className="font-semibold text-white">
                     {config.launch.isPublished ? "Published" : "Setup mode"}
                   </span>
                 </div>
@@ -1312,7 +1312,7 @@ export default function ManagerCustomizePage() {
             </Card>
 
             {launchReadiness ? (
-              <Card className="space-y-3 border-[rgba(114,153,225,0.34)] bg-[rgba(16,27,47,0.72)]">
+              <Card className="space-y-3 border-[rgba(0,18,88,0.34)] bg-[rgba(0,18,88,0.72)]">
                 <div className="flex items-center justify-between gap-2">
                   <div className="text-[10px] uppercase tracking-[0.16em] text-[rgba(160,189,237,0.86)]">
                     Go-Live Checklist
@@ -1331,10 +1331,10 @@ export default function ManagerCustomizePage() {
                   {launchReadiness.items.map(item => (
                     <div
                       key={item.id}
-                      className="rounded-[var(--radius-control)] border border-[rgba(120,161,234,0.32)] bg-[rgba(20,34,58,0.46)] px-3 py-2"
+                      className="rounded-[var(--radius-control)] border border-[rgba(0,18,88,0.32)] bg-[rgba(0,18,88,0.46)] px-3 py-2"
                     >
                       <div className="flex items-center justify-between gap-2 text-sm">
-                        <span className="font-medium text-[#e8f1ff]">
+                        <span className="font-medium text-[#faf6ef]">
                           {item.label}
                         </span>
                         <span
@@ -1347,7 +1347,7 @@ export default function ManagerCustomizePage() {
                           {item.done ? "DONE" : "ACTION"}
                         </span>
                       </div>
-                      <p className="mt-1 text-xs text-[rgba(183,205,239,0.74)]">
+                      <p className="mt-1 text-xs text-[rgba(255,255,255,0.74)]">
                         {item.detail}
                       </p>
                     </div>
@@ -1356,33 +1356,33 @@ export default function ManagerCustomizePage() {
               </Card>
             ) : null}
 
-            <Card className="space-y-3 border-[rgba(114,153,225,0.34)] bg-[rgba(16,27,47,0.72)]">
+            <Card className="space-y-3 border-[rgba(0,18,88,0.34)] bg-[rgba(0,18,88,0.72)]">
               <div className="text-[10px] uppercase tracking-[0.16em] text-[rgba(160,189,237,0.86)]">
                 Menu Snapshot
               </div>
-              <div className="rounded-[var(--radius-control)] border border-[rgba(120,161,234,0.3)] bg-[rgba(20,34,58,0.5)] p-3">
-                <div className="text-sm font-semibold text-[#e8f1ff]">
+              <div className="rounded-[var(--radius-control)] border border-[rgba(0,18,88,0.3)] bg-[rgba(0,18,88,0.5)] p-3">
+                <div className="text-sm font-semibold text-[#faf6ef]">
                   {config.menu.heroTitle || "Hero title"}
                 </div>
-                <p className="mt-1 text-xs text-[rgba(183,205,239,0.76)]">
+                <p className="mt-1 text-xs text-[rgba(255,255,255,0.76)]">
                   {config.menu.heroSubtitle || "Hero subtitle"}
                 </p>
                 <div className="mt-3 flex flex-wrap gap-2 text-xs">
-                  <span className="rounded-full border border-[rgba(120,161,234,0.38)] px-2 py-1 text-[rgba(202,220,247,0.9)]">
+                  <span className="rounded-full border border-[rgba(0,18,88,0.38)] px-2 py-1 text-[rgba(255,255,255,0.9)]">
                     {menuPrimaryLabel}
                   </span>
-                  <span className="rounded-full border border-[rgba(120,161,234,0.38)] px-2 py-1 text-[rgba(202,220,247,0.9)]">
+                  <span className="rounded-full border border-[rgba(0,18,88,0.38)] px-2 py-1 text-[rgba(255,255,255,0.9)]">
                     {menuSecondaryLabel}
                   </span>
                 </div>
               </div>
             </Card>
 
-            <Card className="space-y-3 border-[rgba(114,153,225,0.34)] bg-[rgba(16,27,47,0.72)]">
+            <Card className="space-y-3 border-[rgba(0,18,88,0.34)] bg-[rgba(0,18,88,0.72)]">
               <div className="text-[10px] uppercase tracking-[0.16em] text-[rgba(160,189,237,0.86)]">
                 UX Snapshot
               </div>
-              <div className="rounded-[var(--radius-control)] border border-[rgba(120,161,234,0.3)] bg-[rgba(20,34,58,0.5)] p-3 text-xs text-[rgba(202,220,247,0.92)]">
+              <div className="rounded-[var(--radius-control)] border border-[rgba(0,18,88,0.3)] bg-[rgba(0,18,88,0.5)] p-3 text-xs text-[rgba(255,255,255,0.92)]">
                 <div>Preset: {config.ux.presetId}</div>
                 <div>Discovery: {config.ux.menuDiscovery}</div>
                 <div>Ordering: {config.ux.ordering}</div>
@@ -1404,18 +1404,18 @@ export default function ManagerCustomizePage() {
               </div>
             </Card>
 
-            <Card className="space-y-3 border-[rgba(114,153,225,0.34)] bg-[rgba(16,27,47,0.72)]">
+            <Card className="space-y-3 border-[rgba(0,18,88,0.34)] bg-[rgba(0,18,88,0.72)]">
               <div className="text-[10px] uppercase tracking-[0.16em] text-[rgba(160,189,237,0.86)]">
                 Review Snapshot
               </div>
-              <div className="rounded-[var(--radius-control)] border border-[rgba(120,161,234,0.3)] bg-[rgba(20,34,58,0.5)] p-3">
-                <div className="text-sm font-semibold text-[#e8f1ff]">
+              <div className="rounded-[var(--radius-control)] border border-[rgba(0,18,88,0.3)] bg-[rgba(0,18,88,0.5)] p-3">
+                <div className="text-sm font-semibold text-[#faf6ef]">
                   {config.review.title || "Review title"}
                 </div>
-                <p className="mt-1 text-xs text-[rgba(183,205,239,0.76)]">
+                <p className="mt-1 text-xs text-[rgba(255,255,255,0.76)]">
                   {config.review.subtitleDineIn || "Dine-in subtitle"}
                 </p>
-                <p className="mt-2 text-xs text-[rgba(183,205,239,0.7)]">
+                <p className="mt-2 text-xs text-[rgba(255,255,255,0.7)]">
                   Button pair: {config.review.backLabel || "Back"} /{" "}
                   {config.review.placeOrderLabel || "Place order"}
                 </p>

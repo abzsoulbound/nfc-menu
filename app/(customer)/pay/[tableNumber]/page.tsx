@@ -729,20 +729,20 @@ export default function CustomerCheckoutPage({
   }
 
   return (
-    <div className="relative px-4 py-10 md:px-8 md:py-14">
+    <div className="page-container overflow-hidden">
       <div
         aria-hidden="true"
-        className="menu-orbit pointer-events-none absolute -left-16 top-12 h-40 w-40 rounded-full bg-[radial-gradient(circle,rgba(229,170,20,0.22),rgba(229,170,20,0))] blur-3xl"
+        className="menu-orbit decor-orb -left-16 top-12 h-40 w-40 decor-orb-gold"
       />
       <div
         aria-hidden="true"
-        className="menu-orbit pointer-events-none absolute -right-10 top-44 h-44 w-44 rounded-full bg-[radial-gradient(circle,rgba(0,18,88,0.18),rgba(0,18,88,0))] blur-3xl [animation-delay:240ms]"
+        className="menu-orbit decor-orb -right-10 top-44 h-44 w-44 decor-orb-navy [animation-delay:240ms]"
       />
 
-      <div className="mx-auto max-w-[920px] space-y-8">
+      <div className="page-container-inner space-y-8">
         <Card
           variant="elevated"
-          className="menu-reveal border-[rgba(229,170,20,0.36)] bg-[linear-gradient(135deg,rgba(250,246,239,0.96),rgba(229,170,20,0.08))]"
+          className="menu-reveal section-hero"
         >
           <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_auto] md:items-end">
             <div className="space-y-3">
@@ -758,7 +758,7 @@ export default function CustomerCheckoutPage({
               </p>
             </div>
 
-            <div className="rounded-xl border border-[var(--border-subtle)] bg-[rgba(255,255,255,0.64)] px-5 py-4 text-right">
+            <div className="rounded-xl surface-glass-light px-5 py-4 text-right">
               <div className="text-[11px] uppercase tracking-[0.2em] text-muted">
                 Due now
               </div>
@@ -786,7 +786,7 @@ export default function CustomerCheckoutPage({
             </span>
           </div>
 
-          <div className="mt-3 rounded-xl border border-[var(--border)] bg-[rgba(255,255,255,0.58)] px-3 py-2 text-xs text-secondary">
+          <div className="mt-3 rounded-xl surface-glass-light px-3 py-2 text-xs text-secondary">
             {trustMessage}
           </div>
         </Card>
@@ -811,7 +811,7 @@ export default function CustomerCheckoutPage({
           </div>
         )}
 
-        <Card className="menu-reveal menu-delay-1 space-y-3 border-[rgba(229,170,20,0.36)] bg-[linear-gradient(160deg,rgba(250,246,239,0.97),rgba(229,170,20,0.08))]">
+        <Card className="menu-reveal menu-delay-1 space-y-3 section-hero">
           {guidedSplit && (
             <ProgressStepper
               steps={[
@@ -825,7 +825,7 @@ export default function CustomerCheckoutPage({
 
           <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
             {(!guidedSplit || guidedStep >= 1) && (
-            <section className="rounded-xl border border-[var(--border)] bg-[rgba(255,255,255,0.62)] p-3">
+            <section className="rounded-xl surface-glass-light p-3">
               <div className="text-xs font-semibold uppercase tracking-[0.14em] text-muted">
                 Payment setup
               </div>
@@ -882,10 +882,10 @@ export default function CustomerCheckoutPage({
                           tipPercent: undefined,
                         }))
                       }}
-                      className={`btn-press focus-ring rounded-full border px-3 py-1 text-xs font-semibold transition-all duration-200 ${
+                      className={`btn-press focus-ring action-surface rounded-full border px-3 py-1 text-xs font-semibold transition-all duration-200 ${
                         tipPercent === preset
-                          ? "border-[var(--accent-metal)] bg-[var(--accent-action)] text-white shadow-[0_0_12px_rgba(229,170,20,0.3)]"
-                          : "border-[var(--border)] bg-[rgba(255,255,255,0.68)] hover:border-[var(--accent-metal)]"
+                          ? "shadow-[0_0_12px_rgba(217,174,63,0.3)]"
+                          : "action-surface-muted"
                       }`}
                     >
                       {tipPresetLabel(preset)}
@@ -913,7 +913,7 @@ export default function CustomerCheckoutPage({
             )}
 
             {(!guidedSplit || guidedStep >= 2) && (
-            <section className="rounded-xl border border-[var(--border)] bg-[rgba(255,255,255,0.62)] p-3">
+            <section className="rounded-xl surface-glass-light p-3">
               <div className="text-xs font-semibold uppercase tracking-[0.14em] text-muted">
                 Customer details
               </div>
@@ -988,13 +988,13 @@ export default function CustomerCheckoutPage({
             }
           />
 
-          <div className="rounded-[var(--radius-control)] border border-[var(--border-subtle)] bg-[rgba(255,255,255,0.58)] px-4 py-3 text-base">
+          <div className="rounded-[var(--radius-control)] surface-glass-light px-4 py-3 text-base">
             Estimated charge:{" "}
             <span key={estimatedTotal} className="count-up inline-block font-semibold accent-metal">{money(estimatedTotal)}</span>
           </div>
 
           {strictCheckoutSafety && (
-            <div className="space-y-2 rounded-[var(--radius-control)] border border-[var(--border)] bg-[rgba(255,255,255,0.58)] px-3 py-3 text-sm">
+            <div className="space-y-2 rounded-[var(--radius-control)] surface-glass-light px-3 py-3 text-sm">
               <div className="text-xs font-semibold uppercase tracking-[0.12em] text-muted">
                 Strict checkout checklist
               </div>
@@ -1046,7 +1046,7 @@ export default function CustomerCheckoutPage({
           )}
 
           {externalIntent && (
-            <div className="space-y-2 rounded-[var(--radius-control)] border border-[var(--border)] bg-[rgba(255,255,255,0.56)] p-3">
+            <div className="space-y-2 rounded-[var(--radius-control)] surface-glass-light p-3">
               <div className="text-sm font-semibold">
                 Secure card form
               </div>

@@ -24,10 +24,10 @@ export function TagList({
         <button
           key={tag.id}
           type="button"
-          className={`focus-ring w-full rounded-[var(--radius-control)] border border-[var(--border)] p-3 text-left transition-all ${
+          className={`focus-ring action-surface action-card action-card-left w-full transition-all ${
             selectedTagId === tag.id
-              ? "surface-accent"
-              : "surface-secondary"
+              ? ""
+              : "action-surface-muted"
           }`}
           onClick={() => onSelect(tag)}
         >
@@ -36,7 +36,7 @@ export function TagList({
               <div className="mono-font text-sm font-semibold">
                 {tag.id}
               </div>
-              <div className="text-xs text-secondary">
+              <div className="action-subtle-text text-xs">
                 Table: {tag.tableNumber ?? "-"} | Sessions:{" "}
                 {tag.activeSessionCount}
               </div>

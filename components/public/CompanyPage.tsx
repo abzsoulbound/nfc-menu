@@ -163,27 +163,27 @@ const statusColour: Record<Project["status"], string> = {
 
 export function CompanyPage() {
   return (
-    <div className="relative overflow-hidden px-4 py-6 md:px-6 md:py-10">
+    <div className="page-container relative overflow-hidden">
       {/* ── background effects ── */}
       <div
         aria-hidden="true"
-        className="pointer-events-none absolute inset-0 -z-10 bg-[radial-gradient(circle_at_15%_10%,rgba(229,170,20,0.2),transparent_34%),radial-gradient(circle_at_85%_12%,rgba(0,18,88,0.26),transparent_42%),linear-gradient(180deg,#000a30_0%,#001258_40%,#001a6e_100%)]"
+        className="pointer-events-none absolute inset-0 -z-10 bg-[radial-gradient(circle_at_15%_10%,rgba(217,174,63,0.2),transparent_34%),radial-gradient(circle_at_85%_12%,rgba(0,18,88,0.26),transparent_42%),linear-gradient(180deg,#000a30_0%,#001258_40%,#001a6e_100%)]"
       />
       <div
         aria-hidden="true"
-        className="company-orbit pointer-events-none absolute -left-24 top-28 -z-10 h-64 w-64 rounded-full bg-[radial-gradient(circle,rgba(229,170,20,0.3),rgba(229,170,20,0))] blur-3xl"
+        className="company-orbit pointer-events-none absolute -left-24 top-28 -z-10 h-64 w-64 rounded-full bg-[radial-gradient(circle,rgba(217,174,63,0.3),rgba(217,174,63,0))] blur-3xl"
       />
       <div
         aria-hidden="true"
         className="company-orbit pointer-events-none absolute -right-28 top-64 -z-10 h-72 w-72 rounded-full bg-[radial-gradient(circle,rgba(0,18,88,0.32),rgba(0,18,88,0))] blur-3xl [animation-delay:320ms]"
       />
 
-      <div className="mx-auto max-w-[1200px] space-y-6">
+      <div className="page-container-inner space-y-6">
         {/* ── Hero ── */}
-        <section className="company-reveal relative overflow-hidden rounded-[30px] border border-[rgba(229,170,20,0.36)] bg-[linear-gradient(126deg,rgba(0,8,36,0.96),rgba(0,18,88,0.95)_44%,rgba(0,26,110,0.93))] px-5 py-6 shadow-[0_40px_100px_-52px_rgba(0,10,48,0.96)] md:px-8 md:py-8">
+        <section className="company-reveal relative overflow-hidden rounded-[30px] border border-[var(--section-border)] bg-[linear-gradient(126deg,rgba(0,8,36,0.96),rgba(0,18,88,0.95)_44%,rgba(0,26,110,0.93))] px-5 py-6 shadow-[0_40px_100px_-52px_rgba(0,10,48,0.96)] md:px-8 md:py-8">
           <div
             aria-hidden="true"
-            className="pointer-events-none absolute inset-y-0 right-0 w-[40%] bg-[radial-gradient(circle_at_28%_32%,rgba(229,170,20,0.24),transparent_68%)]"
+            className="pointer-events-none absolute inset-y-0 right-0 w-[40%] bg-[radial-gradient(circle_at_28%_32%,rgba(217,174,63,0.24),transparent_68%)]"
           />
           <div className="relative space-y-5">
             <Link
@@ -194,11 +194,11 @@ export function CompanyPage() {
               <SoulboundStudioLogo tone="light" className="items-start" />
             </Link>
 
-            <h1 className="max-w-4xl font-[family:var(--font-display)] text-4xl leading-tight tracking-tight text-white md:text-6xl">
+            <h1 className="max-w-4xl font-[family:var(--font-display)] text-4xl leading-tight tracking-tight text-[var(--page-text)] md:text-6xl">
               Creative technology studio building products people actually use.
             </h1>
 
-            <p className="max-w-3xl text-sm leading-7 text-[rgba(240,242,250,0.86)] md:text-base">
+            <p className="max-w-3xl text-sm leading-7 text-[var(--page-text-secondary)] md:text-base">
               {PUBLIC_SITE_NAME} designs and ships full-stack software — from
               hospitality platforms and operational tools to consumer-facing
               products. Every project is built to production standard with real
@@ -208,26 +208,26 @@ export function CompanyPage() {
             <div className="flex flex-wrap gap-2">
               <a
                 href="#projects"
-                className="focus-ring inline-flex min-h-[46px] items-center justify-center rounded-[var(--radius-control)] border border-[rgba(229,170,20,0.72)] bg-[linear-gradient(135deg,#f0c040,#e5aa14)] px-4 py-2 text-sm font-semibold text-[#001258] transition-[transform,filter] hover:translate-y-[-1px] hover:brightness-[1.05]"
+                className="focus-ring action-surface action-button action-button-lg"
               >
                 View projects
               </a>
               <Link
                 href="/contact"
-                className="focus-ring inline-flex min-h-[46px] items-center justify-center rounded-[var(--radius-control)] border border-[rgba(136,167,230,0.44)] bg-[rgba(26,43,72,0.76)] px-4 py-2 text-sm font-semibold text-[#d9e6ff] transition-colors hover:bg-[rgba(33,56,92,0.92)]"
+                className="focus-ring action-surface action-button action-button-lg"
               >
                 Get in touch
               </Link>
             </div>
 
             <div className="flex flex-wrap gap-2 text-xs">
-              <span className="inline-flex rounded-full border border-[rgba(229,170,20,0.34)] bg-[rgba(229,170,20,0.1)] px-3 py-1 text-[#e5aa14]">
+              <span className="inline-flex rounded-full border border-[var(--section-border)] bg-[rgba(217,174,63,0.36)] px-3 py-1 text-black">
                 {PUBLIC_SITE_SERVICE_AREA}
               </span>
-              <span className="inline-flex rounded-full border border-[rgba(149,175,225,0.34)] bg-[rgba(65,92,139,0.26)] px-3 py-1 text-[#d4e2ff]">
+              <span className="inline-flex rounded-full border border-[rgba(0,18,88,0.34)] bg-[rgba(0,18,88,0.26)] px-3 py-1 text-[var(--page-text)]">
                 {projects.length} {projects.length === 1 ? "project" : "projects"} live
               </span>
-              <span className="inline-flex rounded-full border border-[rgba(227,219,202,0.2)] bg-[rgba(227,219,202,0.08)] px-3 py-1 text-[rgba(236,229,216,0.9)]">
+              <span className="inline-flex rounded-full border border-[rgba(255,255,255,0.2)] bg-[rgba(255,255,255,0.08)] px-3 py-1 text-[var(--page-text-secondary)]">
                 Updated {PUBLIC_SITE_LAST_UPDATED}
               </span>
             </div>
@@ -235,11 +235,11 @@ export function CompanyPage() {
         </section>
 
         {/* ── What We Do ── */}
-        <section className="company-reveal company-delay-1 rounded-[24px] border border-[rgba(229,170,20,0.3)] bg-[linear-gradient(160deg,rgba(0,8,36,0.96),rgba(0,18,88,0.93))] p-5 md:p-6">
-          <div className="text-xs font-semibold uppercase tracking-[0.2em] text-[#e5aa14]">
+        <section className="company-reveal company-delay-1 rounded-[24px] border border-[var(--section-border)] bg-[linear-gradient(160deg,rgba(0,8,36,0.96),rgba(0,18,88,0.93))] p-5 md:p-6">
+          <div className="text-xs font-semibold uppercase tracking-[0.2em] text-[var(--page-text)]">
             What We Do
           </div>
-          <h2 className="mt-2 max-w-3xl font-[family:var(--font-display)] text-4xl leading-tight text-white">
+          <h2 className="mt-2 max-w-3xl font-[family:var(--font-display)] text-4xl leading-tight text-[var(--page-text)]">
             End-to-end product development — from idea to live revenue.
           </h2>
           <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
@@ -248,8 +248,8 @@ export function CompanyPage() {
                 key={d.label}
                 className="rounded-[16px] border border-[rgba(232,220,198,0.18)] bg-[rgba(6,12,24,0.55)] px-4 py-4"
               >
-                <h3 className="font-semibold text-white">{d.label}</h3>
-                <p className="mt-2 text-sm leading-6 text-[rgba(240,242,250,0.84)]">
+                <h3 className="font-semibold text-[var(--page-text)]">{d.label}</h3>
+                <p className="mt-2 text-sm leading-6 text-[var(--page-text-secondary)]">
                   {d.detail}
                 </p>
               </article>
@@ -262,8 +262,8 @@ export function CompanyPage() {
           id="projects"
           className="company-reveal company-delay-2 scroll-mt-6 space-y-4"
         >
-          <div className="rounded-[24px] border border-[rgba(229,170,20,0.32)] bg-[linear-gradient(158deg,rgba(0,8,36,0.97),rgba(0,18,88,0.94))] p-5 md:p-6">
-            <h2 className="text-xs font-semibold uppercase tracking-[0.2em] text-[#e5aa14]">
+          <div className="rounded-[24px] border border-[var(--section-border)] bg-[linear-gradient(158deg,rgba(0,8,36,0.97),rgba(0,18,88,0.94))] p-5 md:p-6">
+            <h2 className="text-xs font-semibold uppercase tracking-[0.2em] text-[var(--page-text)]">
               Projects
             </h2>
           </div>
@@ -279,13 +279,13 @@ export function CompanyPage() {
             return (
               <article
                 key={project.title}
-                className="rounded-[24px] border border-[rgba(229,170,20,0.28)] bg-[linear-gradient(158deg,rgba(0,8,36,0.97),rgba(0,18,88,0.94))] p-5 md:p-6"
+                className="rounded-[24px] border border-[var(--section-border)] bg-[linear-gradient(158deg,rgba(0,8,36,0.97),rgba(0,18,88,0.94))] p-5 md:p-6"
               >
                 <div className="grid gap-5 lg:grid-cols-[minmax(0,2fr)_minmax(280px,1fr)]">
                   {/* Left — project info */}
                   <div className="space-y-4">
                     <div className="flex flex-wrap items-center gap-2">
-                      <h3 className="font-[family:var(--font-display)] text-2xl leading-tight text-white md:text-3xl">
+                      <h3 className="font-[family:var(--font-display)] text-2xl leading-tight text-[var(--page-text)] md:text-3xl">
                         {project.title}
                       </h3>
                       <span
@@ -294,10 +294,10 @@ export function CompanyPage() {
                         {project.status}
                       </span>
                     </div>
-                    <p className="text-sm font-medium text-[#e5aa14]">
+                    <p className="text-sm font-medium text-[var(--page-text)]">
                       {project.tagline}
                     </p>
-                    <p className="max-w-2xl text-sm leading-7 text-[rgba(240,242,250,0.86)]">
+                    <p className="max-w-2xl text-sm leading-7 text-[var(--page-text-secondary)]">
                       {project.description}
                     </p>
 
@@ -305,7 +305,7 @@ export function CompanyPage() {
                       {project.highlights.map(h => (
                         <div
                           key={h}
-                          className="rounded-[10px] border border-[rgba(149,175,225,0.24)] bg-[rgba(11,19,34,0.52)] px-3 py-2 text-xs leading-5 text-[rgba(222,234,255,0.9)]"
+                          className="rounded-[10px] border border-[rgba(0,18,88,0.24)] bg-[rgba(11,19,34,0.52)] px-3 py-2 text-xs leading-5 text-[var(--page-text-secondary)]"
                         >
                           {h}
                         </div>
@@ -318,7 +318,7 @@ export function CompanyPage() {
                         {...(project.external
                           ? { target: "_blank", rel: "noopener noreferrer" }
                           : {})}
-                        className="focus-ring inline-flex min-h-[42px] items-center justify-center rounded-[var(--radius-control)] border border-[rgba(229,170,20,0.7)] bg-[linear-gradient(135deg,#f0c040,#e5aa14)] px-4 text-sm font-semibold text-[#001258] transition-[filter,transform] hover:brightness-[1.05]"
+                        className="focus-ring action-surface action-button"
                       >
                         {project.ctaLabel}
                       </Link>
@@ -326,15 +326,15 @@ export function CompanyPage() {
                   </div>
 
                   {/* Right — tech stack */}
-                  <aside className="rounded-[22px] border border-[rgba(229,170,20,0.32)] bg-[linear-gradient(165deg,rgba(255,255,255,0.05),rgba(255,255,255,0.01))] p-4 md:p-5">
-                    <div className="text-xs font-semibold uppercase tracking-[0.2em] text-[#e5aa14]">
+                  <aside className="rounded-[22px] border border-[var(--section-border)] bg-[linear-gradient(165deg,rgba(255,255,255,0.05),rgba(255,255,255,0.01))] p-4 md:p-5">
+                    <div className="text-xs font-semibold uppercase tracking-[0.2em] text-[var(--page-text)]">
                       Tech Stack
                     </div>
                     <div className="mt-3 space-y-2">
                       {project.stack.map(tech => (
                         <div
                           key={tech}
-                          className="rounded-[12px] border border-[rgba(150,176,225,0.28)] bg-[rgba(0,10,48,0.52)] px-3 py-2.5 text-sm text-[rgba(222,234,255,0.92)]"
+                          className="rounded-[12px] border border-[rgba(150,176,225,0.28)] bg-[rgba(0,10,48,0.52)] px-3 py-2.5 text-sm text-[var(--page-text-secondary)]"
                         >
                           {tech}
                         </div>
@@ -348,13 +348,13 @@ export function CompanyPage() {
         </section>
 
         {/* ── CTA ── */}
-        <section className="company-reveal company-delay-3 rounded-[24px] border border-[rgba(229,170,20,0.34)] bg-[linear-gradient(130deg,rgba(0,6,28,0.95),rgba(0,14,60,0.95),rgba(0,26,110,0.9))] px-5 py-5 md:px-6 md:py-6">
+        <section className="company-reveal company-delay-3 rounded-[24px] border border-[var(--section-border)] bg-[linear-gradient(130deg,rgba(0,6,28,0.95),rgba(0,14,60,0.95),rgba(0,26,110,0.9))] px-5 py-5 md:px-6 md:py-6">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
-              <div className="text-xs font-semibold uppercase tracking-[0.2em] text-[#e5aa14]">
+              <div className="text-xs font-semibold uppercase tracking-[0.2em] text-[var(--page-text)]">
                 Get Involved
               </div>
-              <p className="mt-1 max-w-xl text-sm leading-7 text-[rgba(240,242,250,0.86)] md:text-base">
+              <p className="mt-1 max-w-xl text-sm leading-7 text-[var(--page-text-secondary)] md:text-base">
                 Interested in working together, or just want to see what
                 we&apos;re building? Reach out — we&apos;d love to hear from
                 you.
@@ -363,13 +363,13 @@ export function CompanyPage() {
             <div className="flex flex-wrap gap-2">
               <Link
                 href="/contact"
-                className="focus-ring inline-flex min-h-[46px] items-center justify-center rounded-[var(--radius-control)] border border-[rgba(229,170,20,0.7)] bg-[linear-gradient(135deg,#f0c040,#e5aa14)] px-5 py-2 text-sm font-semibold text-[#001258] transition-[transform,filter] hover:translate-y-[-1px] hover:brightness-[1.06]"
+                className="focus-ring action-surface action-button action-button-lg"
               >
                 Contact {PUBLIC_SITE_NAME}
               </Link>
               <Link
                 href="/demo"
-                className="focus-ring inline-flex min-h-[46px] items-center justify-center rounded-[var(--radius-control)] border border-[rgba(150,176,225,0.42)] bg-[rgba(56,83,129,0.32)] px-5 py-2 text-sm font-semibold text-[#d9e6ff] transition-colors hover:bg-[rgba(67,97,148,0.4)]"
+                className="focus-ring action-surface action-button action-button-lg"
               >
                 Explore demos
               </Link>

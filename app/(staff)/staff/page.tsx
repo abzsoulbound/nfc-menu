@@ -132,30 +132,30 @@ export default function StaffDashboard() {
   }
 
   return (
-    <div className="relative px-4 py-5 md:px-6 md:py-6">
+    <div className="page-container">
       <div
         aria-hidden="true"
-        className="pointer-events-none absolute -left-10 top-12 h-44 w-44 rounded-full bg-[radial-gradient(circle,rgba(96,138,214,0.22),rgba(96,138,214,0))] blur-3xl"
+        className="decor-orb -left-10 top-12 h-44 w-44 decor-orb-navy"
       />
       <div
         aria-hidden="true"
-        className="pointer-events-none absolute -right-10 top-56 h-52 w-52 rounded-full bg-[radial-gradient(circle,rgba(103,162,236,0.2),rgba(103,162,236,0))] blur-3xl"
+        className="decor-orb -right-10 top-56 h-52 w-52 decor-orb-navy"
       />
 
-      <div className="mx-auto max-w-[1440px] space-y-4">
+      <div className="page-container-inner space-y-4">
         <Card
           variant="elevated"
-          className="border-[rgba(111,147,213,0.4)] bg-[linear-gradient(132deg,rgba(15,28,50,0.96),rgba(21,39,66,0.94),rgba(29,52,85,0.92))]"
+          className="section-hero"
         >
           <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
             <div className="space-y-2">
-              <div className="text-[10px] uppercase tracking-[0.18em] text-[rgba(184,205,244,0.82)]">
+              <div className="text-[10px] uppercase tracking-[0.18em] text-[var(--page-text-secondary)]">
                 Waiter Operations
               </div>
-              <h1 className="text-3xl font-semibold tracking-tight text-[#eef4ff] md:text-4xl">
+              <h1 className="text-3xl font-semibold tracking-tight text-[var(--page-text)] md:text-4xl">
                 Service command center
               </h1>
-              <p className="max-w-3xl text-sm leading-6 text-[rgba(197,214,244,0.86)]">
+              <p className="max-w-3xl text-sm leading-6 text-[var(--page-text-secondary)]">
                 Prioritize ready deliveries, resolve stale sessions, and keep
                 table state clean during peak service.
               </p>
@@ -175,25 +175,25 @@ export default function StaffDashboard() {
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-2">
               <Link
                 href="/staff/tables"
-                className="focus-ring inline-flex min-h-[46px] items-center justify-center rounded-[var(--radius-control)] border border-[rgba(114,153,225,0.56)] bg-[rgba(29,50,81,0.76)] px-3 text-sm font-semibold text-[#dce9ff] transition-colors hover:bg-[rgba(41,67,108,0.92)]"
+                className="focus-ring action-surface action-button action-button-lg"
               >
                 Tables
               </Link>
               <Link
                 href="/staff/tags"
-                className="focus-ring inline-flex min-h-[46px] items-center justify-center rounded-[var(--radius-control)] border border-[rgba(114,153,225,0.56)] bg-[rgba(29,50,81,0.76)] px-3 text-sm font-semibold text-[#dce9ff] transition-colors hover:bg-[rgba(41,67,108,0.92)]"
+                className="focus-ring action-surface action-button action-button-lg"
               >
                 Tags
               </Link>
               <Link
                 href="/staff/sessions"
-                className="focus-ring inline-flex min-h-[46px] items-center justify-center rounded-[var(--radius-control)] border border-[rgba(114,153,225,0.56)] bg-[rgba(29,50,81,0.76)] px-3 text-sm font-semibold text-[#dce9ff] transition-colors hover:bg-[rgba(41,67,108,0.92)]"
+                className="focus-ring action-surface action-button action-button-lg"
               >
                 Sessions
               </Link>
               <Button
                 variant="quiet"
-                className="min-h-[46px] border-[rgba(114,153,225,0.56)] bg-[rgba(29,50,81,0.76)] text-[#dce9ff] hover:bg-[rgba(41,67,108,0.92)]"
+                className="min-h-[46px]"
                 onClick={() => fetchAll().catch(() => {})}
               >
                 Refresh
@@ -203,7 +203,7 @@ export default function StaffDashboard() {
         </Card>
 
         <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
-          <Card variant="elevated" className="border-[rgba(114,153,225,0.34)]">
+          <Card variant="elevated">
             <div className="text-xs uppercase tracking-[0.14em] text-muted">
               Active tables
             </div>
@@ -211,7 +211,7 @@ export default function StaffDashboard() {
               {activeTables.length}
             </div>
           </Card>
-          <Card variant="elevated" className="border-[rgba(114,153,225,0.34)]">
+          <Card variant="elevated">
             <div className="text-xs uppercase tracking-[0.14em] text-muted">
               Ready queue groups
             </div>
@@ -219,7 +219,7 @@ export default function StaffDashboard() {
               {readyByTable.length}
             </div>
           </Card>
-          <Card variant="elevated" className="border-[rgba(114,153,225,0.34)]">
+          <Card variant="elevated">
             <div className="text-xs uppercase tracking-[0.14em] text-muted">
               Unassigned tags
             </div>
@@ -227,7 +227,7 @@ export default function StaffDashboard() {
               {unassignedTags.length}
             </div>
           </Card>
-          <Card variant="elevated" className="border-[rgba(114,153,225,0.34)]">
+          <Card variant="elevated">
             <div className="text-xs uppercase tracking-[0.14em] text-muted">
               Sessions
             </div>
@@ -238,7 +238,7 @@ export default function StaffDashboard() {
         </div>
 
         <div className="grid gap-4 lg:grid-cols-[1.7fr_1fr]">
-          <Card className="space-y-3 border-[rgba(114,153,225,0.34)]">
+          <Card className="space-y-3 border-[rgba(0,18,88,0.34)]">
             <div className="flex items-center justify-between">
               <h2 className="text-lg font-semibold tracking-tight">
                 Ready to deliver
@@ -257,7 +257,6 @@ export default function StaffDashboard() {
                   <Card
                     key={table.tableNumber}
                     variant="accent"
-                    className="border-[rgba(114,153,225,0.3)]"
                   >
                     <div className="flex flex-wrap items-center justify-between gap-3">
                       <div>
@@ -307,7 +306,7 @@ export default function StaffDashboard() {
             </div>
           </Card>
 
-          <Card className="space-y-3 border-[rgba(114,153,225,0.34)]">
+          <Card className="space-y-3">
             <h2 className="text-lg font-semibold tracking-tight">
               Unassigned tags
             </h2>
@@ -316,7 +315,6 @@ export default function StaffDashboard() {
                 <Card
                   key={tag.id}
                   variant="accent"
-                  className="border-[rgba(114,153,225,0.3)]"
                 >
                   <div className="flex items-center justify-between gap-2">
                     <div>
